@@ -29,15 +29,17 @@ public class SettingsCommand extends SubCommand {
 
     public SettingsCommand() {
         super(PermissionChecker.ADMIN_RELOAD, "/oa settings [set <key> <value>]", "Open clickable plugin settings");
+        ConfigSchemaService tmpSchema = null;
+        List<SettingDefinition> tmpSettings = new ArrayList<>();
         try {
-            this.schema = new ConfigSchemaService(com.omniarena.OmniArena.getInstance());
-            this.settings = new ArrayList<>(schema.settings());
-            this.settings.forEach(setting -> byKey.put(setting.key().toLowerCase(Locale.ROOT), setting));
+            tmpSchema = new ConfigSchemaService(com.omniarena.OmniArena.getInstance());
+            tmpSettings = new ArrayList<>(tmpSchema.settings());
+            tmpSettings.forEach(setting -> byKey.put(setting.key().toLowerCase(Locale.ROOT), setting));
         } catch (Exception e) {
             com.omniarena.OmniArena.getInstance().getLogger().severe("Failed to initialize SettingsCommand: " + e.getMessage());
-            this.schema = null;
-            this.settings = new ArrayList<>();
         }
+        this.schema = tmpSchema;
+        this.settings = tmpSettings;
     }
 
     @Override

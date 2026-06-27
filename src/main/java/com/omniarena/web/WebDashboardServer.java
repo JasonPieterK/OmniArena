@@ -179,9 +179,7 @@ public class WebDashboardServer {
             }
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to send resource " + resourcePath + ": " + e.getMessage());
-            if (!exchange.isResponseSent()) {
-                send(exchange, 500, "Internal Server Error", "text/plain; charset=utf-8");
-            }
+            try { send(exchange, 500, "Internal Server Error", "text/plain; charset=utf-8"); } catch (Exception ignored) {}
         } finally {
             exchange.close();
         }
