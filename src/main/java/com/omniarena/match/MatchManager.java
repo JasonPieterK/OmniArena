@@ -225,6 +225,7 @@ public class MatchManager {
         arena.setState(ArenaState.RUNNING);
         match.setState(MatchState.RUNNING);
         match.setStartTime(System.currentTimeMillis());
+        plugin.getBettingManager().onMatchStart(arena.getName());
 
         // Assign teams
         if (arena.getTeamConfig().isEnabled()) assignTeams(match);
@@ -302,6 +303,10 @@ public class MatchManager {
                     winnerName != null ? winnerName : "Unknown", 
                     loserName != null ? loserName : "Unknown");
         }
+
+        // Betting payout
+        plugin.getBettingManager().processMatchResults(
+                match.getArena().getName(), result.getWinnerId(), result.getLoserId());
 
         plugin.getVisual().getTitleManager().sendMatchEndTitle(match, result);
         plugin.getVisual().getSoundManager().playMatchEnd(match, result);
@@ -400,6 +405,7 @@ public class MatchManager {
         match.cancelTasks();
         activeMatches.remove(match.getArena().getName());
         match.getArena().setState(ArenaState.WAITING);
+        plugin.getBettingManager().onMatchCleanup(match.getArena().getName());
     }
 
     // ── Inventory save / restore ──────────────────────────────────
