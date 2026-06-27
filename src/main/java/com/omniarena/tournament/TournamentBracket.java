@@ -62,7 +62,12 @@ public class TournamentBracket {
         match.setWinner(winner);
     }
 
+    /**
+     * Advances to the next round. Call only after {@link #isRoundComplete()} returns true.
+     * If the bracket is finished ({@link #isFinished()}), this is a no-op.
+     */
     public void advanceRound() {
+        if (!isRoundComplete()) return; // don't advance until all matches done
         List<UUID> winners = getWinners();
         if (winners.size() <= 1) return;
         currentRoundIndex++;
