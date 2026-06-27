@@ -74,7 +74,7 @@ public class OverrideCommand extends SubCommand {
             return;
         }
         MatchManager.getInstance().endMatch(match.get(), new com.omniarena.match.MatchResult(
-                arena.getName(), null, null,
+                arena.getName(), null, null, null,
                 com.omniarena.match.MatchResult.Outcome.FORFEIT,
                 match.get().getDurationSeconds(),
                 new ArrayList<>(match.get().getPlayers())));

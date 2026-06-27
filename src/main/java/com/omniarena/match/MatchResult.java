@@ -9,15 +9,17 @@ public class MatchResult {
 
     private final String arenaName;
     private final UUID winnerId;          // null if draw/team win
+    private final UUID loserId;           // null if draw/team match/timeout
     private final String winnerTeamName;  // null if solo win
     private final Outcome outcome;
     private final long durationSeconds;
     private final List<UUID> participants;
 
-    public MatchResult(String arenaName, UUID winnerId, String winnerTeamName,
+    public MatchResult(String arenaName, UUID winnerId, UUID loserId, String winnerTeamName,
                        Outcome outcome, long durationSeconds, List<UUID> participants) {
         this.arenaName = arenaName;
         this.winnerId = winnerId;
+        this.loserId = loserId;
         this.winnerTeamName = winnerTeamName;
         this.outcome = outcome;
         this.durationSeconds = durationSeconds;
@@ -26,6 +28,7 @@ public class MatchResult {
 
     public String getArenaName() { return arenaName; }
     public UUID getWinnerId() { return winnerId; }
+    public UUID getLoserId() { return loserId; }
     public String getWinnerTeamName() { return winnerTeamName; }
     public Outcome getOutcome() { return outcome; }
     public long getDurationSeconds() { return durationSeconds; }

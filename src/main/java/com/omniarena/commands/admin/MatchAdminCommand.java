@@ -55,7 +55,7 @@ public class MatchAdminCommand extends SubCommand {
                     return;
                 }
                 mm.endMatch(match.get(), new com.omniarena.match.MatchResult(
-                        arena.getName(), null, null,
+                        arena.getName(), null, null, null,
                         com.omniarena.match.MatchResult.Outcome.FORFEIT,
                         match.get().getDurationSeconds(),
                         new java.util.ArrayList<>(match.get().getPlayers())));

@@ -324,7 +324,7 @@ public class MatchManager {
 
     public void forceWin(Match match, UUID winnerId) {
         MatchResult result = new MatchResult(
-                match.getArena().getName(), winnerId, null,
+                match.getArena().getName(), winnerId, null, null,
                 MatchResult.Outcome.WIN, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
         endMatch(match, result);
@@ -332,7 +332,7 @@ public class MatchManager {
 
     public void forceWinTeam(Match match, String teamName) {
         MatchResult result = new MatchResult(
-                match.getArena().getName(), null, teamName,
+                match.getArena().getName(), null, null, teamName,
                 MatchResult.Outcome.WIN, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
         endMatch(match, result);
@@ -352,7 +352,9 @@ public class MatchManager {
             case KILLS -> {
                 UUID leader = match.getLeader();
                 if (leader != null && match.getKills(leader) >= goalValue) {
-                    MatchResult result = new MatchResult(arena.getName(), leader, null,
+                    UUID loserUuid = match.getPlayers().stream()
+                            .filter(u -> !u.equals(leader)).findFirst().orElse(null);
+                    MatchResult result = new MatchResult(arena.getName(), leader, loserUuid, null,
                             MatchResult.Outcome.WIN, match.getDurationSeconds(),
                             new ArrayList<>(match.getPlayers()));
                     endMatch(match, result);
@@ -360,7 +362,10 @@ public class MatchManager {
             }
             case LAST_ALIVE -> {
                 if (alive.size() == 1) {
-                    MatchResult result = new MatchResult(arena.getName(), alive.get(0), null,
+                    UUID winnerUuid = alive.get(0);
+                    UUID loserUuid = match.getPlayers().stream()
+                            .filter(u -> !u.equals(winnerUuid)).findFirst().orElse(null);
+                    MatchResult result = new MatchResult(arena.getName(), winnerUuid, loserUuid, null,
                             MatchResult.Outcome.WIN, match.getDurationSeconds(),
                             new ArrayList<>(match.getPlayers()));
                     endMatch(match, result);
@@ -445,13 +450,13 @@ public class MatchManager {
     }
 
     private MatchResult buildTimeoutResult(Match match) {
-        return new MatchResult(match.getArena().getName(), null, null,
+        return new MatchResult(match.getArena().getName(), null, null, null,
                 MatchResult.Outcome.TIMEOUT, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
     }
 
     private MatchResult buildDrawResult(Match match) {
-        return new MatchResult(match.getArena().getName(), null, null,
+        return new MatchResult(match.getArena().getName(), null, null, null,
                 MatchResult.Outcome.DRAW, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
     }
