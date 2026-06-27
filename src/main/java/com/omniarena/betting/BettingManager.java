@@ -206,17 +206,14 @@ public class BettingManager {
             if (player == null || !player.isOnline()) {
                 // Offline player - refund their bet
                 economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
-                continue;
-            }
-
-            if (bet.getPredictedWinner().equals(winnerId)) {
+            } else if (bet.getPredictedWinner().equals(winnerId)) {
                 // Winner - calculate payout based on pool share
                 double share = bet.getAmount() / winnerPool;
                 double winnings = totalPool * share;
                 double profit = winnings - bet.getAmount();
 
                 economy.depositPlayer(player, winnings);
-                MessageUtil.send(player, "<green>You won your bet! <yellow>" + economy.format(winnings) + 
+                MessageUtil.send(player, "<green>You won your bet! <yellow>" + economy.format(winnings) +
                         "</yellow> (profit: <yellow>" + economy.format(profit) + "</yellow>)");
             } else {
                 // Loser - already deducted, no refund
