@@ -23,6 +23,7 @@ public class BettingManager {
     private Economy economy;
     private final Map<UUID, Bet> activeBets = new ConcurrentHashMap<>();
     private final Map<String, List<Bet>> matchBets = new ConcurrentHashMap<>(); // arenaName -> List<Bet>
+    private final Map<String, Long> matchStartTimes = new ConcurrentHashMap<>();
     private boolean enabled = false;
 
     public BettingManager(OmniArena plugin) {
@@ -55,12 +56,38 @@ public class BettingManager {
     public boolean isEnabled() { return enabled; }
     public Economy getEconomy() { return economy; }
 
+    public void onMatchStart(String arenaName) {
+        matchStartTimes.put(arenaName, System.currentTimeMillis());
+    }
+
+    public void onMatchCleanup(String arenaName) {
+        matchStartTimes.remove(arenaName);
+    }
+
+    private boolean isBettingWindowOpen(String arenaName) {
+        Long startTime = matchStartTimes.get(arenaName);
+        if (startTime == null) return true; // match not started yet
+        int windowSeconds = plugin.getConfigManager().getConfig()
+                .getInt("betting.bet-window-seconds", 30);
+        return System.currentTimeMillis() - startTime < windowSeconds * 1000L;
+    }
+
     /**
      * Place a bet on a match
      */
     public boolean placeBet(Player player, String arenaName, UUID predictedWinner, double amount) {
         if (!enabled) {
             MessageUtil.send(player, "<red>Betting is not available (no economy plugin).");
+            return false;
+        }
+
+        if (!plugin.getConfigManager().getConfig().getBoolean("betting.enabled", true)) {
+            MessageUtil.send(player, "<red>Betting is disabled on this server.");
+            return false;
+        }
+
+        if (!isBettingWindowOpen(arenaName)) {
+            MessageUtil.send(player, "<red>Betting window closed for this match.");
             return false;
         }
 
@@ -178,7 +205,7 @@ public class BettingManager {
             Player player = Bukkit.getPlayer(bet.getPlayerUuid());
             if (player == null || !player.isOnline()) {
                 // Offline player - refund their bet
-                economy.depositPlayer(bet.getPlayerUuid(), bet.getAmount());
+                economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
                 continue;
             }
 
@@ -226,11 +253,27 @@ public class BettingManager {
     }
 
     /**
+     * Refund all active bets on server shutdown
+     */
+    public void refundAll() {
+        if (economy == null) return;
+        for (Bet bet : activeBets.values()) {
+            economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
+            Player p = Bukkit.getPlayer(bet.getPlayerUuid());
+            if (p != null) MessageUtil.send(p, "<yellow>Server shutting down — bet refunded: <green>" +
+                    economy.format(bet.getAmount()));
+        }
+        activeBets.clear();
+        matchBets.clear();
+        matchStartTimes.clear();
+    }
+
+    /**
      * Clear all bets (for admin use)
      */
     public void clearAllBets() {
         for (Bet bet : activeBets.values()) {
-            economy.depositPlayer(bet.getPlayerUuid(), bet.getAmount());
+            economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
         }
         activeBets.clear();
         matchBets.clear();
