@@ -114,6 +114,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 return java.util.List.of();
             }
         });
+        reg(playerCommands, "bet",      new BetCommand(plugin));
         reg(playerCommands, "help",     new HelpCommand(plugin, adminCommands, playerCommands));
 
         // ── PvP / combat commands (PvPManager-style; /pmr is now /oa) ──
