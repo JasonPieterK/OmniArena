@@ -144,11 +144,14 @@ public class TournamentManager {
             if (t.getState() != TournamentState.IN_PROGRESS) continue;
             TournamentBracket bracket = t.getBracket();
 
-            Optional<TournamentMatch> matchOpt = bracket.getActiveMatchForArena(result.getArenaName());
+            Optional<TournamentMatch> matchOpt = bracket.getCurrentRound().stream()
+                    .filter(m -> !m.isCompleted() && !m.isBye()
+                            && (m.involves(result.getWinnerId())
+                            || (result.getLoserId() != null && m.involves(result.getLoserId()))))
+                    .findFirst();
             if (matchOpt.isEmpty()) continue;
 
             TournamentMatch tm = matchOpt.get();
-            if (!tm.involves(result.getWinnerId()) && (result.getLoserId() == null || !tm.involves(result.getLoserId()))) continue;
 
             bracket.recordWinner(tm, result.getWinnerId());
             String winnerName = Bukkit.getOfflinePlayer(result.getWinnerId()).getName();
@@ -197,6 +200,18 @@ public class TournamentManager {
 
             MessageUtil.send(p1, "<gold>[Tournament] <yellow>Your match vs <white>" + p2.getName() + " <yellow>begins!");
             MessageUtil.send(p2, "<gold>[Tournament] <yellow>Your match vs <white>" + p1.getName() + " <yellow>begins!");
+        }
+
+        if (t.getBracket().isRoundComplete()) {
+            if (t.getBracket().isFinished()) {
+                finishTournament(t);
+            } else {
+                t.getBracket().advanceRound();
+                Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+                        "<gold>[Tournament] <white>" + t.getName() +
+                        " <yellow>Round " + t.getBracket().getCurrentRoundNumber() + " begins!"));
+                launchPendingMatches(t);
+            }
         }
     }
 
@@ -286,7 +301,7 @@ public class TournamentManager {
         YamlConfiguration cfg = new YamlConfiguration();
         for (Tournament t : tournaments.values()) {
             if (t.getState() != TournamentState.REGISTRATION) continue; // only persist open ones
-            String key = "tournaments." + t.getName();
+            String key = "tournaments." + t.getName().replace(".", "_");
             cfg.set(key + ".arena", t.getArenaName());
             cfg.set(key + ".maxPlayers", t.getMaxPlayers());
             cfg.set(key + ".creator", t.getCreatorUuid().toString());
