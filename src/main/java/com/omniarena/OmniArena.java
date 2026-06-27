@@ -182,6 +182,7 @@ public final class OmniArena extends JavaPlugin {
         // Save all data
         if (statsManager != null) statsManager.saveAll();
         if (arenaManager != null) arenaManager.saveAll();
+        if (bettingManager != null) bettingManager.refundAll();
 
         // End all active matches cleanly
         if (matchManager != null) {
