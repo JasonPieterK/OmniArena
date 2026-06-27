@@ -1,0 +1,583 @@
+/* OmniArena Control — MMM-styled dashboard, talks to Java WebDashboardServer */
+(function () {
+  'use strict';
+
+  const S = {
+    token: new URLSearchParams(location.search).get('token') || '',
+    snapshot: null,
+    selectedArena: null,
+    draftGlobals: {},
+    draftArena: {},
+    docsRaw: '',
+    dirty: false,
+    cfgQuery: '',
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  // ── API ──────────────────────────────────────────────────────────────
+  async function api(path, opts = {}) {
+    const sep = path.includes('?') ? '&' : '?';
+    const res = await fetch(path + sep + 'token=' + encodeURIComponent(S.token), {
+      headers: { 'Content-Type': 'application/json' }, ...opts,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const txt = await res.text();
+    return txt ? JSON.parse(txt) : {};
+  }
+
+  // ── Toast + confetti ───────────────────────────────────────────────────
+  function toast(msg, type = 'success') {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span class="toast-ico">${type === 'success' ? '✓' : '✕'}</span><span>${esc(msg)}</span>`;
+    $('toastContainer').appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, 3000);
+  }
+
+  function confettiBurst() {
+    const wrap = $('confettiWrap');
+    const colors = ['var(--mean)','var(--median)','var(--mode)','var(--sun)','var(--coral)','var(--plum)'];
+    for (let i = 0; i < 34; i++) {
+      const c = document.createElement('span');
+      c.className = 'confetti';
+      const size = 8 + Math.random() * 9;
+      const sq = i % 3 === 0;
+      const startX = 40 + Math.random() * 20;
+      c.style.cssText = `left:${startX}%;top:108%;width:${size}px;height:${size}px;background:${colors[i % colors.length]};border-radius:${sq ? '2px' : '50%'};`;
+      const dx = (Math.random() - 0.5) * 60;
+      const dy = -(60 + Math.random() * 50);
+      const rot = Math.random() * 720 - 360;
+      c.animate([
+        { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+        { transform: `translate(${dx}vw, ${dy}vh) rotate(${rot}deg)`, opacity: 0 },
+      ], { duration: 1100 + Math.random() * 400, easing: 'cubic-bezier(0.2,0.8,0.2,1)' });
+      wrap.appendChild(c);
+      setTimeout(() => c.remove(), 1600);
+    }
+  }
+
+  function countUp(el, target, dur = 800) {
+    const start = performance.now();
+    function tick(now) {
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setStatus(ok, text) {
+    $('statusDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
+    $('sessionText').textContent = text;
+  }
+
+  function markDirty() { S.dirty = true; $('applyBtn').disabled = false; }
+
+  // ── Tabs ─────────────────────────────────────────────────────────────
+  function initTabs() {
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', () => {
+        const tab = link.dataset.tab;
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        $('tab-' + tab).classList.add('active');
+        if (tab === 'docs' && !S.docsRaw) loadDocs();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  }
+
+  // ── Load ─────────────────────────────────────────────────────────────
+  async function load() {
+    if (!S.token) { setStatus(false, 'No token in URL'); renderAll(); return; }
+    setStatus(false, 'Loading…');
+    try {
+      S.snapshot = await api('/api/state');
+      S.draftGlobals = { ...S.snapshot.globals };
+      if (!S.selectedArena && S.snapshot.arenas.length)
+        S.selectedArena = S.snapshot.arenas[0].name;
+      const arena = S.snapshot.arenas.find(a => a.name === S.selectedArena);
+      S.draftArena = arena ? cloneArena(arena) : {};
+      setStatus(true, `${S.snapshot.arenas.length} arena${S.snapshot.arenas.length === 1 ? '' : 's'}`);
+      renderAll();
+    } catch (e) {
+      setStatus(false, 'Error');
+      toast('Failed to load: ' + e.message, 'error');
+    }
+  }
+
+  async function loadDocs() {
+    try {
+      const res = await fetch('/api/docs?token=' + encodeURIComponent(S.token));
+      S.docsRaw = await res.text();
+      renderDocs();
+    } catch (e) {
+      $('docsBody').innerHTML = '<p>Couldn\'t load docs.</p>';
+    }
+  }
+
+  function renderAll() {
+    renderStats();
+    renderDashboardGrid();
+    renderArenaList();
+    renderArenaEditor();
+    renderConfig();
+  }
+
+  // ── Stats ────────────────────────────────────────────────────────────
+  function renderStats() {
+    const sn = S.snapshot;
+    const arenas = sn?.arenas || [];
+    const live = arenas.filter(a => a.state === 'in_game').length;
+    const players = arenas.reduce((n, a) => n + (a.players ?? 0), 0);
+    const cfgCount = sn ? Object.keys(sn.globals || {}).length : 0;
+    const cards = [
+      { cls: 's-mean',   label: 'Arenas',      val: arenas.length, foot: 'configured' },
+      { cls: 's-median', label: 'Live now',    val: live,          foot: 'matches running' },
+      { cls: 's-mode',   label: 'Players',     val: players,       foot: 'in arenas' },
+      { cls: 's-sun',    label: 'Settings',    val: cfgCount,      foot: 'config keys' },
+    ];
+    $('statGrid').innerHTML = cards.map(c => `
+      <div class="stat ${c.cls}">
+        <div class="eyebrow">${c.label}</div>
+        <div class="num" data-count="${c.val}">0</div>
+        <div class="foot">${c.foot}</div>
+      </div>`).join('');
+    $('statGrid').querySelectorAll('.num').forEach(el => countUp(el, Number(el.dataset.count) || 0));
+  }
+
+  // ── Dashboard grid ───────────────────────────────────────────────────
+  function renderDashboardGrid() {
+    const sn = S.snapshot;
+    const grid = $('arenaGrid');
+    const arenas = sn?.arenas || [];
+    if (!arenas.length) {
+      grid.innerHTML = emptyState('ph-stack', 'No arenas yet', 'Create one in the Arenas tab.');
+      return;
+    }
+    grid.innerHTML = arenas.map(a => {
+      const enabled = a.enabled !== false;
+      const state = enabled ? (a.state || 'idle') : 'disabled';
+      const badgeCls = { in_game:'badge-live', starting:'badge-starting', waiting:'badge-waiting', idle:'badge-idle', disabled:'badge-disabled' }[state] || 'badge-idle';
+      const badgeLabel = { in_game:'LIVE', starting:'STARTING', waiting:'WAITING', idle:'IDLE', disabled:'OFF' }[state] || state.toUpperCase();
+      const dot = state === 'in_game' ? '<span class="live-dot"></span>' : '';
+      const cardCls = state === 'in_game' ? 'arena-card live' : state === 'starting' ? 'arena-card starting' : 'arena-card';
+      const players = a.players ?? 0;
+      const maxP = a.maxPlayers ?? '?';
+      const pct = (a.maxPlayers ? Math.round(players / a.maxPlayers * 100) : 0);
+      return `<div class="${cardCls}">
+        <div class="arena-card-top">
+          <div>
+            <div class="arena-card-name">${esc(a.name)}</div>
+            <div class="arena-card-world">${esc(a.regionWorld || a.world || '—')}</div>
+          </div>
+          <span class="badge ${badgeCls}">${dot}${esc(badgeLabel)}</span>
+        </div>
+        <div class="arena-card-info">
+          <span><i class="ph-bold ph-users"></i> ${players}/${maxP}</span>
+          <span><i class="ph-bold ph-game-controller"></i> ${esc(a.gameMode || '—')}</span>
+        </div>
+        <div class="pbar"><div style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Arena list ───────────────────────────────────────────────────────
+  function renderArenaList() {
+    const sn = S.snapshot;
+    const list = $('arenaList');
+    const arenas = sn?.arenas || [];
+    if (!arenas.length) { list.innerHTML = '<div class="card">No arenas.</div>'; return; }
+    list.innerHTML = arenas.map(a => {
+      const sel = a.name === S.selectedArena ? ' selected' : '';
+      return `<div class="arena-list-item${sel}" data-arena="${esc(a.name)}">
+        <div class="arena-list-item-name">${esc(a.name)}</div>
+        <div class="arena-list-item-meta">
+          <span>${esc(a.gameMode || '—')}</span>
+          <span>${a.enabled !== false ? '● on' : '○ off'}</span>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.arena-list-item').forEach(item => {
+      item.addEventListener('click', () => {
+        S.selectedArena = item.dataset.arena;
+        const arena = S.snapshot.arenas.find(a => a.name === S.selectedArena);
+        S.draftArena = arena ? cloneArena(arena) : {};
+        renderArenaList();
+        renderArenaEditor();
+      });
+    });
+  }
+
+  // ── Arena editor ─────────────────────────────────────────────────────
+  function renderArenaEditor() {
+    const editor = $('arenaEditor');
+    const arena = S.snapshot?.arenas.find(a => a.name === S.selectedArena);
+    if (!arena) {
+      editor.innerHTML = `<div class="card">${emptyState('ph-cursor-click', 'Pick an arena', 'Select one from the list to edit it.')}</div>`;
+      return;
+    }
+    const d = S.draftArena;
+
+    editor.innerHTML = `
+      <div class="editor-header">
+        <div class="editor-title">${esc(arena.name)}</div>
+        <div class="editor-actions">
+          <button class="btn btn-danger btn-sm" id="deleteArenaBtn"><i class="ph-bold ph-trash"></i> Delete</button>
+          <button class="btn btn-sm" id="saveArenaBtn"><i class="ph-bold ph-floppy-disk"></i> Save arena</button>
+        </div>
+      </div>
+
+      ${section('General', 'ph-sliders', true, `
+        <div class="form-grid">
+          ${field('Game type', select('gameMode', d.gameMode, ['DEATHMATCH','TEAM_DEATHMATCH','LAST_ONE_STANDING','SUMO','CLASSIC_PVP','CRYSTAL_PVP','MACE','SWORD_DUEL','AXE_SHIELD','UHC','POTION_PVP','NODEBUFF','ARCHER','NETHERITE_OP','SPLEEF','GLADIATOR']))}
+          ${field('Min players', numInput('minPlayers', d.minPlayers))}
+          ${field('Max players', numInput('maxPlayers', d.maxPlayers))}
+          ${field('Match duration (s)', numInput('matchDuration', d.matchDuration))}
+          ${field('Countdown (s)', numInput('countdown', d.countdown))}
+          ${field('Respawn delay (s)', numInput('respawnDelay', d.respawnDelay))}
+        </div>
+        ${cfgToggle('enabled', 'Enabled', d.enabled)}
+        ${cfgToggle('midMatchJoin', 'Mid-match join', d.midMatchJoin)}
+        ${cfgToggle('spectatorAllowed', 'Spectators allowed', d.spectatorAllowed)}
+        ${cfgToggle('whitelistEnabled', 'Whitelist', d.whitelistEnabled)}
+      `)}
+
+      ${section('Rules', 'ph-shield', false, `
+        ${cfgToggle('rules.fallDamage', 'Fall damage', d.rules?.fallDamage)}
+        ${cfgToggle('rules.fireDamage', 'Fire damage', d.rules?.fireDamage)}
+        ${cfgToggle('rules.friendlyFire', 'Friendly fire', d.rules?.friendlyFire)}
+        ${cfgToggle('rules.blockBreak', 'Block break', d.rules?.blockBreak)}
+        ${cfgToggle('rules.blockPlace', 'Block place', d.rules?.blockPlace)}
+        ${cfgToggle('rules.itemDrop', 'Item drop', d.rules?.itemDrop)}
+        ${cfgToggle('rules.hungerDrain', 'Hunger drain', d.rules?.hungerDrain)}
+      `)}
+
+      ${section('Visual', 'ph-sparkle', false, `
+        ${cfgToggle('visual.titles', 'Titles', d.visual?.titles)}
+        ${cfgToggle('visual.sounds', 'Sounds', d.visual?.sounds)}
+        ${cfgToggle('visual.particles', 'Particles', d.visual?.particles)}
+        ${cfgToggle('visual.scoreboard', 'Scoreboard', d.visual?.scoreboard)}
+        ${cfgToggle('visual.bossBar', 'Boss bar', d.visual?.bossBar)}
+        ${cfgToggle('visual.actionBar', 'Action bar', d.visual?.actionBar)}
+        ${cfgToggle('visual.holograms', 'Holograms', d.visual?.holograms)}
+      `)}
+
+      ${section('Region', 'ph-cube', false, `
+        ${field('World', textInput('region.worldName', d.region?.worldName))}
+        <div class="form-grid">
+          ${field('Min X', numInput('region.minX', d.region?.minX))}
+          ${field('Min Y', numInput('region.minY', d.region?.minY))}
+          ${field('Min Z', numInput('region.minZ', d.region?.minZ))}
+          ${field('Max X', numInput('region.maxX', d.region?.maxX))}
+          ${field('Max Y', numInput('region.maxY', d.region?.maxY))}
+          ${field('Max Z', numInput('region.maxZ', d.region?.maxZ))}
+        </div>
+      `)}
+    `;
+
+    wireSections(editor);
+    editor.querySelectorAll('[data-key]').forEach(el => {
+      el.addEventListener('change', () => {
+        const key = el.dataset.key;
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        setNested(S.draftArena, key, val);
+        markDirty();
+      });
+    });
+    $('saveArenaBtn').addEventListener('click', saveArena);
+    $('deleteArenaBtn').addEventListener('click', deleteArena);
+  }
+
+  // ── Config (categorized + hover descriptions) ──────────────────────────
+  function renderConfig() {
+    const sn = S.snapshot;
+    const container = $('configGroups');
+    if (!sn) { container.innerHTML = ''; return; }
+
+    // Group rich SettingDefinitions by their .group category.
+    const settings = sn.settings || [];
+    const byGroup = {};
+    const q = S.cfgQuery.toLowerCase();
+    settings.forEach(def => {
+      if (def.key && def.key.startsWith('messages.')) return; // skip raw message strings
+      if (q && !(def.label + ' ' + def.key).toLowerCase().includes(q)) return;
+      (byGroup[def.group || 'General'] ||= []).push(def);
+    });
+
+    const groups = Object.keys(byGroup).sort();
+    if (!groups.length) { container.innerHTML = `<div class="card">${emptyState('ph-magnifying-glass','No matches','Try a different search.')}</div>`; return; }
+
+    const ICONS = {
+      Config:'ph-gear', Arena:'ph-flag', Match:'ph-timer', Regen:'ph-arrows-clockwise',
+      Web:'ph-globe', Modules:'ph-puzzle-piece', Integrations:'ph-plugs', Kits:'ph-sword',
+      Visual:'ph-sparkle', Performance:'ph-gauge', Database:'ph-database', Rewards:'ph-coins',
+      Killstreak:'ph-fire', Signs:'ph-sign-posts', Quality:'ph-heart', Plugin:'ph-cube',
+      'Boss Bar':'ph-minus-square', Scoreboard:'ph-list-numbers',
+    };
+
+    container.innerHTML = groups.map((g, idx) => {
+      const rows = byGroup[g].map(def => configRow(def)).join('');
+      const icon = ICONS[g] || 'ph-gear';
+      return sectionRaw(g, icon, idx < 2, byGroup[g].length, rows);
+    }).join('');
+
+    wireSections(container);
+    container.querySelectorAll('[data-key]').forEach(el => {
+      el.addEventListener('change', () => {
+        const rawKey = el.dataset.key.replace(/^cfg\./, '');
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        S.draftGlobals[rawKey] = val;
+        markDirty();
+      });
+    });
+  }
+
+  function configRow(def) {
+    const val = S.draftGlobals[def.key];
+    const type = (def.type || 'STRING').toUpperCase();
+    const key = 'cfg.' + def.key;
+    let control;
+    if (type === 'BOOLEAN') {
+      control = `<label class="toggle"><input type="checkbox" data-key="${esc(key)}"${val ? ' checked' : ''}><span class="slider"></span></label>`;
+    } else if (type === 'INTEGER' || type === 'DECIMAL') {
+      control = `<input class="input" type="number" step="${type === 'DECIMAL' ? 'any' : '1'}" data-key="${esc(key)}" value="${esc(val ?? '')}">`;
+    } else {
+      control = `<input class="input" type="text" data-key="${esc(key)}" value="${esc(val ?? '')}">`;
+    }
+    const tip = def.description ? `<span class="info">?<span class="tip">${esc(def.description)}</span></span>` : '';
+    return `<div class="cfg-row">
+      <div class="cfg-grow">
+        <div class="field-label">${esc(def.label || def.key)} ${tip}</div>
+        <div class="key-chip">${esc(def.key)}</div>
+      </div>
+      <div class="cfg-control">${control}</div>
+    </div>`;
+  }
+
+  // ── Docs ─────────────────────────────────────────────────────────────
+  function renderDocs() {
+    const body = $('docsBody'), toc = $('docsToc');
+    if (!S.docsRaw) { body.innerHTML = '<p>Docs not loaded.</p>'; return; }
+    body.innerHTML = markdownToHtml(S.docsRaw);
+    let tocHtml = '';
+    body.querySelectorAll('h1,h2,h3').forEach((h, i) => {
+      const id = 'doc-h-' + i; h.id = id;
+      tocHtml += `<a href="#${id}" class="docs-toc-item ${h.tagName.toLowerCase()}">${esc(h.textContent)}</a>`;
+    });
+    toc.innerHTML = tocHtml;
+  }
+
+  // Build <table> blocks from GitHub pipe tables. Runs on already-escaped text,
+  // emits each table as a single line so later passes leave it alone. Inline
+  // **bold** / `code` inside cells is applied here.
+  function mdTables(escaped) {
+    const inline = (s) => s
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    const lines = escaped.split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const row = lines[i].trim();
+      const next = (lines[i + 1] || '').trim();
+      const isRow = (s) => s.startsWith('|') && s.endsWith('|');
+      const isSep = (s) => /^\|[\s:|-]+\|$/.test(s);
+      if (isRow(row) && isSep(next)) {
+        const cells = (s) => s.slice(1, -1).split('|').map(c => c.trim());
+        let html = '<table><thead><tr>' + cells(row).map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>';
+        i += 2;
+        while (i < lines.length && isRow(lines[i].trim())) {
+          html += '<tr>' + cells(lines[i].trim()).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
+          i++;
+        }
+        i--;
+        out.push(html + '</tbody></table>');
+      } else {
+        out.push(lines[i]);
+      }
+    }
+    return out.join('\n');
+  }
+
+  function markdownToHtml(md) {
+    let html = md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html = mdTables(html); // tables first, on escaped text
+    return html
+      .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) => `<pre><code>${c}</code></pre>`)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+      .replace(/^---+$/gm, '<hr>')
+      .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>[\s\S]+?<\/li>)/g, '<ul>$1</ul>')
+      .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+      .replace(/^(?!<[hbupliot]|<pre|<hr|<blockquote)(.+)$/gm, (_, l) => l.trim() ? `<p>${l}</p>` : '');
+  }
+
+  // ── Apply / save / create / delete ─────────────────────────────────────
+  async function applyAll() {
+    const btn = $('applyBtn');
+    btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch"></i> Applying…';
+    try {
+      await api('/api/apply', { method: 'POST',
+        body: JSON.stringify({ globals: S.draftGlobals, arena: S.selectedArena, arenaSettings: S.draftArena }) });
+      confettiBurst();
+      toast('Changes applied!');
+      S.dirty = false;
+      await load();
+    } catch (e) {
+      toast('Apply failed: ' + e.message, 'error');
+      btn.disabled = false;
+    }
+    btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Apply';
+  }
+
+  async function saveArena() {
+    try {
+      await api('/api/apply', { method: 'POST',
+        body: JSON.stringify({ arena: S.selectedArena, arenaSettings: S.draftArena }) });
+      toast('Arena saved');
+      await load();
+    } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+  }
+
+  async function createArena() {
+    const name = prompt('New arena name:');
+    if (!name?.trim()) return;
+    try {
+      await api('/api/create-arena', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+      toast('Arena "' + name.trim() + '" created');
+      S.selectedArena = name.trim();
+      await load();
+    } catch (e) { toast('Create failed: ' + e.message, 'error'); }
+  }
+
+  async function deleteArena() {
+    if (!S.selectedArena) return;
+    if (!confirm('Delete arena "' + S.selectedArena + '"? This cannot be undone.')) return;
+    try {
+      await api('/api/delete-arena', { method: 'POST', body: JSON.stringify({ name: S.selectedArena }) });
+      toast('Arena deleted');
+      S.selectedArena = null;
+      await load();
+    } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+  }
+
+  // ── Arena draft helpers (matches Java ArenaView json) ──────────────────
+  function cloneArena(a) {
+    return {
+      enabled: a.enabled, gameMode: a.gameMode,
+      minPlayers: a.minPlayers, maxPlayers: a.maxPlayers,
+      matchDuration: a.matchDuration, countdown: a.countdown, respawnDelay: a.respawnDelay,
+      midMatchJoin: a.midMatchJoin, spectatorAllowed: a.spectatorAllowed, whitelistEnabled: a.whitelistEnabled,
+      region: {
+        worldName: a.regionWorld || '',
+        minX: a.regionMinX ?? '', minY: a.regionMinY ?? '', minZ: a.regionMinZ ?? '',
+        maxX: a.regionMaxX ?? '', maxY: a.regionMaxY ?? '', maxZ: a.regionMaxZ ?? '',
+      },
+      rules: {
+        fallDamage: a.fallDamage, fireDamage: a.fireDamage, friendlyFire: a.friendlyFire,
+        blockBreak: a.blockBreak, blockPlace: a.blockPlace, itemDrop: a.itemDrop, hungerDrain: a.hungerDrain,
+      },
+      visual: {
+        titles: a.titles, sounds: a.sounds, particles: a.particles,
+        scoreboard: a.scoreboard, bossBar: a.bossBar, actionBar: a.actionBar, holograms: a.holograms,
+      },
+    };
+  }
+
+  function setNested(obj, key, val) {
+    const parts = key.split('.');
+    let cur = obj;
+    for (let i = 0; i < parts.length - 1; i++) { if (!cur[parts[i]]) cur[parts[i]] = {}; cur = cur[parts[i]]; }
+    cur[parts[parts.length - 1]] = val;
+  }
+
+  // ── HTML builders ──────────────────────────────────────────────────────
+  function section(title, icon, open, body) { return sectionRaw(title, icon, open, null, body); }
+  function sectionRaw(title, icon, open, count, body) {
+    const badge = count != null ? `<span class="section-count">${count}</span>` : '';
+    return `<div class="section${open ? '' : ' collapsed'}">
+      <div class="section-head">
+        <span class="section-title"><i class="ph-bold ${icon}"></i> ${esc(title)} ${badge}</span>
+        <i class="ph-bold ph-caret-down chevron"></i>
+      </div>
+      <div class="section-body">${body}</div>
+    </div>`;
+  }
+  function field(label, inputHtml) { return `<div class="field"><label class="field-label">${esc(label)}</label>${inputHtml}</div>`; }
+  function textInput(key, val) { return `<input class="input" data-key="${esc(key)}" value="${esc(val ?? '')}" type="text">`; }
+  function numInput(key, val) { return `<input class="input" data-key="${esc(key)}" value="${esc(val ?? '')}" type="number">`; }
+  function select(key, val, opts) {
+    if (val && !opts.includes(val)) opts = [val, ...opts];
+    return `<select class="input" data-key="${esc(key)}">${opts.map(o => `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  }
+  function cfgToggle(key, label, val) {
+    return `<div class="cfg-row"><div class="cfg-grow"><div class="field-label">${esc(label)}</div></div>
+      <div class="cfg-control"><label class="toggle"><input type="checkbox" data-key="${esc(key)}"${val ? ' checked' : ''}><span class="slider"></span></label></div></div>`;
+  }
+  function emptyState(icon, title, sub) {
+    return `<div class="empty"><i class="ph-bold ${icon}"></i><div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink)">${esc(title)}</div><div>${esc(sub)}</div></div>`;
+  }
+
+  function wireSections(root) {
+    root.querySelectorAll('.section-head').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+    });
+  }
+
+  // ── Theme Toggle ─────────────────────────────────────────────────────────
+  function initTheme() {
+    const saved = localStorage.getItem('omniarena-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    updateThemeIcon(saved);
+    $('themeToggle').addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('omniarena-theme', next);
+      updateThemeIcon(next);
+    });
+  }
+
+  function updateThemeIcon(theme) {
+    const icon = $('themeToggle').querySelector('i');
+    icon.className = theme === 'light' ? 'ph-bold ph-moon' : 'ph-bold ph-sun';
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  function init() {
+    initTabs();
+    initTheme();
+    $('refreshBtn').addEventListener('click', load);
+    $('applyBtn').addEventListener('click', applyAll);
+    $('createArenaBtn').addEventListener('click', createArena);
+
+    $('cfgSearch').addEventListener('input', (e) => { S.cfgQuery = e.target.value; renderConfig(); });
+    $('cfgExpand').addEventListener('click', () => document.querySelectorAll('#configGroups .section').forEach(s => s.classList.remove('collapsed')));
+    $('cfgCollapse').addEventListener('click', () => document.querySelectorAll('#configGroups .section').forEach(s => s.classList.add('collapsed')));
+
+    const topbar = $('topbar'), toTop = $('toTop');
+    window.addEventListener('scroll', () => {
+      topbar.classList.toggle('scrolled', window.scrollY > 8);
+      toTop.classList.toggle('show', window.scrollY > 500);
+    }, { passive: true });
+    toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+    load();
+  }
+
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', init)
+    : init();
+})();

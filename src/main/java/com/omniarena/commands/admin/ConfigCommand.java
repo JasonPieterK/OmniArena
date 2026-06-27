@@ -1,0 +1,277 @@
+package com.omniarena.commands.admin;
+
+import com.omniarena.OmniArena;
+import com.omniarena.arena.Arena;
+import com.omniarena.arena.ArenaManager;
+import com.omniarena.arena.ArenaRegion;
+import com.omniarena.arena.ArenaRules;
+import com.omniarena.arena.ArenaTeamConfig;
+import com.omniarena.arena.ArenaVisualConfig;
+import com.omniarena.arena.ChatMode;
+import com.omniarena.commands.SubCommand;
+import com.omniarena.config.ConfigManager;
+import com.omniarena.gamemode.GameModeType;
+import com.omniarena.match.GoalType;
+import com.omniarena.match.RespawnType;
+import com.omniarena.permission.PermissionChecker;
+import com.omniarena.util.MessageUtil;
+import com.omniarena.web.ConfigSchemaService;
+import com.omniarena.web.model.SettingDefinition;
+import org.bukkit.command.CommandSender;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+/**
+ * /oa config set <key> <value>  - edit global config live
+ * /oa config get <key>          - view value
+ * /oa config set <arena> <key> <value> - edit per-arena config
+ */
+public class ConfigCommand extends SubCommand {
+
+    private final OmniArena plugin;
+    private final ConfigSchemaService schema;
+
+    public ConfigCommand(OmniArena plugin) {
+        super(PermissionChecker.ADMIN_ARENA, "/oa config <set|get> [arena] <key> [value]", "Edit config live");
+        this.plugin = plugin;
+        this.schema = new ConfigSchemaService(plugin);
+    }
+
+    @Override
+    public void execute(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+
+        String action = args[0].toLowerCase(Locale.ROOT);
+        switch (action) {
+            case "get" -> handleGet(sender, args);
+            case "set" -> handleSet(sender, args);
+            default -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+        }
+    }
+
+    private void handleGet(CommandSender sender, String[] args) {
+        String key = args[1];
+        Optional<Arena> arena = ArenaManager.getInstance().get(key);
+        if (arena.isPresent() && args.length >= 3) {
+            String arenaKey = args[2];
+            Object value = getArenaValue(arena.get(), arenaKey);
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-get")
+                    .replace("{key}", key + "." + arenaKey)
+                    .replace("{value}", value != null ? value.toString() : "null"));
+            return;
+        }
+        Object value = ConfigManager.getInstance().getValue(key);
+        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-get")
+                .replace("{key}", key)
+                .replace("{value}", value != null ? value.toString() : "null"));
+    }
+
+    private void handleSet(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+
+        Optional<Arena> arena = ArenaManager.getInstance().get(args[1]);
+        if (arena.isPresent() && args.length >= 4) {
+            String key = args[2];
+            String value = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
+            setArenaConfig(sender, arena.get(), key, value);
+            return;
+        }
+
+        String key = args[1];
+        String value = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
+        Object parsed = parseGlobalValue(key, value);
+        ConfigManager.getInstance().setValue(key, parsed);
+        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-set")
+                .replace("{key}", key)
+                .replace("{value}", String.valueOf(parsed))
+                .replace("{arena}", "global"));
+    }
+
+    private void setArenaConfig(CommandSender sender, Arena arena, String key, String value) {
+        switch (key.toLowerCase(Locale.ROOT)) {
+            case "enabled" -> arena.setState(parseBoolean(value) ? com.omniarena.arena.ArenaState.WAITING : com.omniarena.arena.ArenaState.DISABLED);
+            case "game-mode", "gamemode" -> arena.setGameMode(GameModeType.fromString(value));
+            case "min-players" -> arena.setMinPlayers(parseInt(value, arena.getMinPlayers()));
+            case "max-players" -> arena.setMaxPlayers(parseInt(value, arena.getMaxPlayers()));
+            case "match-duration" -> arena.setMatchDuration(parseInt(value, arena.getMatchDuration()));
+            case "countdown" -> arena.setCountdown(parseInt(value, arena.getCountdown()));
+            case "goal-type" -> arena.setGoalType(GoalType.fromString(value));
+            case "goal-value" -> arena.setGoalValue(parseInt(value, arena.getGoalValue()));
+            case "respawn-type" -> arena.setRespawnType(RespawnType.fromString(value));
+            case "respawn-delay" -> arena.setRespawnDelay(parseInt(value, arena.getRespawnDelay()));
+            case "spawn-protection" -> arena.setSpawnProtection(parseInt(value, arena.getSpawnProtection()));
+            case "chat-mode" -> arena.setChatMode(ChatMode.fromString(value));
+            case "announcements" -> arena.setAnnouncements(parseBoolean(value));
+            case "mid-match-join" -> arena.setMidMatchJoin(parseBoolean(value));
+            case "spectator-allowed" -> arena.setSpectatorAllowed(parseBoolean(value));
+            case "whitelist-enabled" -> arena.setWhitelistEnabled(parseBoolean(value));
+            case "team-enabled" -> arena.getTeamConfig().setEnabled(parseBoolean(value));
+            case "team-count" -> arena.getTeamConfig().setTeamCount(parseInt(value, arena.getTeamConfig().getTeamCount()));
+            case "fall-damage" -> arena.getRules().setFallDamage(parseBoolean(value));
+            case "fire-damage" -> arena.getRules().setFireDamage(parseBoolean(value));
+            case "drowning" -> arena.getRules().setDrowning(parseBoolean(value));
+            case "suffocation" -> arena.getRules().setSuffocation(parseBoolean(value));
+            case "friendly-fire" -> arena.getRules().setFriendlyFire(parseBoolean(value));
+            case "block-break" -> arena.getRules().setBlockBreak(parseBoolean(value));
+            case "block-place" -> arena.getRules().setBlockPlace(parseBoolean(value));
+            case "item-drop" -> arena.getRules().setItemDrop(parseBoolean(value));
+            case "hunger-drain" -> arena.getRules().setHungerDrain(parseBoolean(value));
+            case "visual-titles" -> arena.getVisual().setTitles(parseBoolean(value));
+            case "visual-sounds" -> arena.getVisual().setSounds(parseBoolean(value));
+            case "visual-particles" -> arena.getVisual().setParticles(parseBoolean(value));
+            case "visual-scoreboard" -> arena.getVisual().setScoreboard(parseBoolean(value));
+            case "visual-boss-bar" -> arena.getVisual().setBossBar(parseBoolean(value));
+            case "visual-action-bar" -> arena.getVisual().setActionBar(parseBoolean(value));
+            case "visual-holograms" -> arena.getVisual().setHolograms(parseBoolean(value));
+            case "region-world" -> arena.getRegion().setWorldName(value);
+            case "region-min-x" -> arena.getRegion().setMinX(parseInt(value, arena.getRegion().getMinX()));
+            case "region-min-y" -> arena.getRegion().setMinY(parseInt(value, arena.getRegion().getMinY()));
+            case "region-min-z" -> arena.getRegion().setMinZ(parseInt(value, arena.getRegion().getMinZ()));
+            case "region-max-x" -> arena.getRegion().setMaxX(parseInt(value, arena.getRegion().getMaxX()));
+            case "region-max-y" -> arena.getRegion().setMaxY(parseInt(value, arena.getRegion().getMaxY()));
+            case "region-max-z" -> arena.getRegion().setMaxZ(parseInt(value, arena.getRegion().getMaxZ()));
+            default -> {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-invalid-key").replace("{key}", key));
+                return;
+            }
+        }
+        ArenaManager.getInstance().save(arena);
+        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-set")
+                .replace("{key}", key)
+                .replace("{value}", value)
+                .replace("{arena}", arena.getName()));
+    }
+
+    private Object getArenaValue(Arena arena, String key) {
+        return switch (key.toLowerCase(Locale.ROOT)) {
+            case "enabled" -> arena.isEnabled();
+            case "game-mode", "gamemode" -> arena.getGameMode().name();
+            case "min-players" -> arena.getMinPlayers();
+            case "max-players" -> arena.getMaxPlayers();
+            case "match-duration" -> arena.getMatchDuration();
+            case "countdown" -> arena.getCountdown();
+            case "goal-type" -> arena.getGoalType().name();
+            case "goal-value" -> arena.getGoalValue();
+            case "respawn-type" -> arena.getRespawnType().name();
+            case "respawn-delay" -> arena.getRespawnDelay();
+            case "spawn-protection" -> arena.getSpawnProtection();
+            case "chat-mode" -> arena.getChatMode().name();
+            case "announcements" -> arena.isAnnouncements();
+            case "mid-match-join" -> arena.isMidMatchJoin();
+            case "spectator-allowed" -> arena.isSpectatorAllowed();
+            case "whitelist-enabled" -> arena.isWhitelistEnabled();
+            case "team-enabled" -> arena.getTeamConfig().isEnabled();
+            case "team-count" -> arena.getTeamConfig().getTeamCount();
+            case "fall-damage" -> arena.getRules().isFallDamage();
+            case "fire-damage" -> arena.getRules().isFireDamage();
+            case "drowning" -> arena.getRules().isDrowning();
+            case "suffocation" -> arena.getRules().isSuffocation();
+            case "friendly-fire" -> arena.getRules().isFriendlyFire();
+            case "block-break" -> arena.getRules().isBlockBreak();
+            case "block-place" -> arena.getRules().isBlockPlace();
+            case "item-drop" -> arena.getRules().isItemDrop();
+            case "hunger-drain" -> arena.getRules().isHungerDrain();
+            case "visual-titles" -> arena.getVisual().isTitles();
+            case "visual-sounds" -> arena.getVisual().isSounds();
+            case "visual-particles" -> arena.getVisual().isParticles();
+            case "visual-scoreboard" -> arena.getVisual().isScoreboard();
+            case "visual-boss-bar" -> arena.getVisual().isBossBar();
+            case "visual-action-bar" -> arena.getVisual().isActionBar();
+            case "visual-holograms" -> arena.getVisual().isHolograms();
+            case "region-world" -> arena.getRegion().getWorldName();
+            case "region-min-x" -> arena.getRegion().getMinX();
+            case "region-min-y" -> arena.getRegion().getMinY();
+            case "region-min-z" -> arena.getRegion().getMinZ();
+            case "region-max-x" -> arena.getRegion().getMaxX();
+            case "region-max-y" -> arena.getRegion().getMaxY();
+            case "region-max-z" -> arena.getRegion().getMaxZ();
+            default -> null;
+        };
+    }
+
+    private Object parseGlobalValue(String key, String value) {
+        SettingDefinition def = schema.settings().stream()
+                .filter(setting -> setting.key().equalsIgnoreCase(key))
+                .findFirst()
+                .orElse(null);
+        if (def == null) return parseLoose(value);
+        return switch (def.type()) {
+            case BOOLEAN -> parseBoolean(value);
+            case INTEGER -> parseInt(value, 0);
+            case DECIMAL -> parseDouble(value, 0d);
+            case LIST -> Arrays.stream(value.split("\\R|,"))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+            default -> value;
+        };
+    }
+
+    private Object parseLoose(String value) {
+        try { return Integer.parseInt(value); } catch (NumberFormatException ignored) {}
+        try { return Double.parseDouble(value); } catch (NumberFormatException ignored) {}
+        if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) return Boolean.parseBoolean(value);
+        if (value.contains(",") || value.contains("\n")) {
+            return Arrays.stream(value.split("\\R|,"))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+        }
+        return value;
+    }
+
+    private boolean parseBoolean(String value) {
+        return value.equalsIgnoreCase("true")
+                || value.equalsIgnoreCase("yes")
+                || value.equalsIgnoreCase("on")
+                || value.equalsIgnoreCase("enabled");
+    }
+
+    private int parseInt(String value, int fallback) {
+        try { return Integer.parseInt(value.trim()); }
+        catch (NumberFormatException e) { return fallback; }
+    }
+
+    private double parseDouble(String value, double fallback) {
+        try { return Double.parseDouble(value.trim()); }
+        catch (NumberFormatException e) { return fallback; }
+    }
+
+    @Override
+    public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (args.length == 1) return List.of("set", "get");
+        if (args.length == 2 && args[0].equalsIgnoreCase("get")) {
+            return schema.settings().stream().map(SettingDefinition::key).filter(s -> s.startsWith(args[1])).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
+            Optional<Arena> arena = ArenaManager.getInstance().get(args[1]);
+            if (arena.isPresent()) {
+                return List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
+                        "goal-type", "goal-value", "respawn-type", "respawn-delay", "spawn-protection", "chat-mode",
+                        "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
+                        "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
+                        "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
+                        "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+                        "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z")
+                        .stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+            }
+            SettingDefinition def = schema.settings().stream()
+                    .filter(setting -> setting.key().equalsIgnoreCase(args[1]))
+                    .findFirst()
+                    .orElse(null);
+            if (def != null && def.type() == SettingDefinition.SettingType.BOOLEAN) {
+                return List.of("true", "false").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+            }
+        }
+        return List.of();
+    }
+}

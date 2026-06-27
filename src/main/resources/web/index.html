@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OmniArena Control</title>
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Top nav -->
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="brand-dots"><span></span><span></span><span></span></span>
+      <span class="brand-name">OmniArena.</span>
+    </div>
+    <nav class="nav" id="mainNav">
+      <button class="nav-link active" data-tab="dashboard">Dashboard<span class="ul"></span></button>
+      <button class="nav-link" data-tab="arenas">Arenas<span class="ul"></span></button>
+      <button class="nav-link" data-tab="config">Config<span class="ul"></span></button>
+      <button class="nav-link" data-tab="docs">Docs<span class="ul"></span></button>
+    </nav>
+    <div class="session"><span class="status-dot" id="statusDot"></span><span id="sessionText">Connecting…</span></div>
+    <button class="btn btn-ghost btn-sm" id="themeToggle" title="Toggle dark mode"><i class="ph-bold ph-moon"></i></button>
+    <button class="btn btn-ink btn-sm" id="applyBtn" disabled><i class="ph-bold ph-check-circle"></i> Apply</button>
+  </header>
+
+  <main class="wrap">
+
+    <!-- Dashboard -->
+    <section class="tab-panel active" id="tab-dashboard">
+      <div class="page-head row-between">
+        <div>
+          <h1>Dashboard</h1>
+          <div class="sub">Live snapshot of your arenas <span class="hand">— refresh anytime</span></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="refreshBtn"><i class="ph-bold ph-arrow-clockwise"></i> Refresh</button>
+      </div>
+
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="row-between" style="margin:6px 0 16px">
+        <h2 style="font-size:24px">Arenas</h2>
+      </div>
+      <div class="arena-grid" id="arenaGrid"></div>
+    </section>
+
+    <!-- Arenas -->
+    <section class="tab-panel" id="tab-arenas">
+      <div class="page-head row-between">
+        <div>
+          <h1>Arenas</h1>
+          <div class="sub">Pick one to tune it <span class="hand">— changes need Apply</span></div>
+        </div>
+        <button class="btn btn-mode btn-sm" id="createArenaBtn"><i class="ph-bold ph-plus"></i> New arena</button>
+      </div>
+      <div class="arena-layout">
+        <div class="arena-list" id="arenaList"></div>
+        <div id="arenaEditor"></div>
+      </div>
+    </section>
+
+    <!-- Config -->
+    <section class="tab-panel" id="tab-config">
+      <div class="page-head">
+        <h1>Config</h1>
+        <div class="sub">Server-wide settings, grouped by area <span class="hand">— hover the ? for what each does</span></div>
+      </div>
+      <div class="cfg-search">
+        <input class="input" id="cfgSearch" type="text" placeholder="Search settings…">
+        <button class="btn btn-ghost btn-sm" id="cfgExpand"><i class="ph-bold ph-arrows-out-line-vertical"></i> Expand all</button>
+        <button class="btn btn-ghost btn-sm" id="cfgCollapse"><i class="ph-bold ph-arrows-in-line-vertical"></i> Collapse all</button>
+      </div>
+      <div id="configGroups"></div>
+    </section>
+
+    <!-- Docs -->
+    <section class="tab-panel" id="tab-docs">
+      <div class="page-head"><h1>Docs</h1><div class="sub">Setup, commands, and how things work</div></div>
+      <div class="docs-layout">
+        <nav class="docs-toc" id="docsToc"></nav>
+        <article class="docs-body" id="docsBody"><p>Loading docs…</p></article>
+      </div>
+    </section>
+
+  </main>
+
+  <button class="totop" id="toTop" aria-label="Back to top"><i class="ph-bold ph-arrow-up"></i></button>
+  <div class="toast-wrap" id="toastContainer"></div>
+  <div class="confetti-wrap" id="confettiWrap"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

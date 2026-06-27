@@ -1,0 +1,56 @@
+name: Assassin
+public: true
+description: "Burst damage flanker with ender pearls and speed."
+icon: ENDER_PEARL
+cooldown: 0
+permission: ""
+arena: ""
+items:
+  - slot: 0
+    material: IRON_SWORD
+    enchants:
+      SHARPNESS: 3
+      FIRE_ASPECT: 1
+      UNBREAKING: 3
+    unbreakable: true
+  - slot: 1
+    material: ENDER_PEARL
+    amount: 4
+  - slot: 2
+    material: POTION
+    potion-type: INVISIBILITY
+    potion-duration: 200
+    amount: 1
+  - slot: 3
+    material: GOLDEN_APPLE
+    amount: 2
+armor:
+  helmet:
+    material: LEATHER_HELMET
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  chestplate:
+    material: CHAINMAIL_CHESTPLATE
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  leggings:
+    material: LEATHER_LEGGINGS
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  boots:
+    material: LEATHER_BOOTS
+    enchants:
+      PROTECTION: 2
+      FEATHER_FALLING: 3
+      UNBREAKING: 3
+    unbreakable: true
+effects:
+  - type: SPEED
+    level: 2
+    duration: -1

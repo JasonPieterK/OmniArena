@@ -1,0 +1,60 @@
+name: Healer
+public: true
+description: "Support class with powerful regeneration and speed."
+icon: GOLDEN_APPLE
+cooldown: 0
+permission: ""
+arena: ""
+items:
+  - slot: 0
+    material: GOLDEN_APPLE
+    amount: 8
+  - slot: 1
+    material: POTION
+    potion-type: REGENERATION
+    potion-level: 2
+    potion-duration: 900
+    amount: 4
+  - slot: 2
+    material: SPLASH_POTION
+    potion-type: HEALING
+    potion-level: 2
+    amount: 4
+  - slot: 3
+    material: WOODEN_SWORD
+    enchants:
+      UNBREAKING: 3
+    unbreakable: true
+armor:
+  helmet:
+    material: CHAINMAIL_HELMET
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  chestplate:
+    material: CHAINMAIL_CHESTPLATE
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  leggings:
+    material: CHAINMAIL_LEGGINGS
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  boots:
+    material: CHAINMAIL_BOOTS
+    enchants:
+      PROTECTION: 2
+      FEATHER_FALLING: 2
+      UNBREAKING: 3
+    unbreakable: true
+effects:
+  - type: SPEED
+    level: 1
+    duration: -1
+  - type: REGENERATION
+    level: 1
+    duration: -1

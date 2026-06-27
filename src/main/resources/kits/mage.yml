@@ -1,0 +1,62 @@
+name: Mage
+public: true
+description: "Potion-slinging area-denial specialist with splash damage."
+icon: SPLASH_POTION
+cooldown: 0
+permission: ""
+arena: ""
+items:
+  - slot: 0
+    material: SPLASH_POTION
+    potion-type: HARMING
+    potion-level: 2
+    amount: 6
+  - slot: 1
+    material: SPLASH_POTION
+    potion-type: SLOWNESS
+    potion-duration: 200
+    amount: 4
+  - slot: 2
+    material: POTION
+    potion-type: FIRE_RESISTANCE
+    potion-duration: 6000
+    amount: 2
+  - slot: 3
+    material: STICK
+    name: "<dark_purple>Magic Staff"
+    enchants:
+      KNOCKBACK: 2
+      UNBREAKING: 3
+    unbreakable: true
+  - slot: 4
+    material: GOLDEN_APPLE
+    amount: 3
+armor:
+  helmet:
+    material: LEATHER_HELMET
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  chestplate:
+    material: LEATHER_CHESTPLATE
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  leggings:
+    material: LEATHER_LEGGINGS
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  boots:
+    material: LEATHER_BOOTS
+    enchants:
+      FEATHER_FALLING: 4
+      UNBREAKING: 3
+    unbreakable: true
+effects:
+  - type: SLOW_FALLING
+    level: 1
+    duration: -1

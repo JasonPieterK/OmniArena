@@ -1,0 +1,42 @@
+package com.omniarena.listener;
+
+import com.omniarena.OmniArena;
+import com.omniarena.arena.Arena;
+import com.omniarena.arena.ArenaManager;
+import com.omniarena.arena.ArenaState;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+
+import java.util.Optional;
+
+public class BlockBreakListener implements Listener {
+
+    public BlockBreakListener(OmniArena plugin) {}
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+
+        // Prevent block break if holding selection wand and has permission
+        if (com.omniarena.permission.PermissionChecker.hasAdminArena(player)) {
+            org.bukkit.inventory.ItemStack item = player.getInventory().getItemInMainHand();
+            if (item != null && item.getType() == org.bukkit.Material.WOODEN_AXE) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        Optional<Arena> arenaOpt = ArenaManager.getInstance().getArenaAt(event.getBlock().getLocation());
+        if (arenaOpt.isEmpty()) return;
+
+        Arena arena = arenaOpt.get();
+        // Allow if player is OP or arena allows breaking
+        if (player.isOp()) return;
+        if (arena.getState() == ArenaState.RUNNING && !arena.getRules().isBlockBreak()) {
+            event.setCancelled(true);
+        }
+    }
+}

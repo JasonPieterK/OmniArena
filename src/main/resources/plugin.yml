@@ -1,0 +1,100 @@
+name: OmniArena
+version: '1.0.0'
+main: com.omniarena.OmniArena
+api-version: '26.2'
+description: Complete PVP Arena Plugin with 200+ features
+authors: [OmniArena Team]
+website: https://omniarena.dev
+load: POSTWORLD
+depend: []
+softdepend:
+  - Vault
+  - PlaceholderAPI
+  - WorldGuard
+  - WorldEdit
+  - FastAsyncWorldEdit
+  - LuckPerms
+  - PermissionsEx
+  - EssentialsX
+  - DiscordSRV
+  - HolographicDisplays
+  - LibsDisguises
+
+commands:
+  oa:
+    description: OmniArena main command
+    usage: /oa <subcommand> [args]
+    aliases: [omniarena, arena]
+    permission: omniarena.use
+  kit:
+    description: Player kit management
+    usage: /kit <subcommand> [args]
+    permission: omniarena.kit.use
+
+permissions:
+  omniarena.use:
+    description: Access to basic OmniArena player commands
+    default: true
+
+  omniarena.kit.use:
+    description: Access to /kit player commands
+    default: true
+
+  omniarena.admin:
+    description: Full OmniArena admin access
+    default: op
+    children:
+      omniarena.admin.arena: true
+      omniarena.admin.kit: true
+      omniarena.admin.match: true
+      omniarena.admin.sign: true
+      omniarena.admin.stats: true
+      omniarena.admin.reload: true
+
+  omniarena.admin.arena:
+    description: Arena create/delete/config
+    default: op
+
+  omniarena.admin.kit:
+    description: Admin kit management
+    default: op
+
+  omniarena.admin.match:
+    description: Force start/stop/win matches
+    default: op
+
+  omniarena.admin.sign:
+    description: Create/remove arena signs
+    default: op
+
+  omniarena.admin.stats:
+    description: Reset/view all player stats
+    default: op
+
+  omniarena.admin.reload:
+    description: Reload plugin config
+    default: op
+
+  omniarena.kit.slots.5:
+    description: Allow player to save 5 personal kits
+    default: false
+
+  omniarena.kit.slots.10:
+    description: Allow player to save 10 personal kits
+    default: false
+
+  omniarena.spectate:
+    description: Spectate arenas
+    default: true
+
+  omniarena.pvp:
+    description: Use player PvP/combat commands (/oa pvp, pvpstatus, newbie...)
+    default: true
+
+  omniarena.pvp.admin:
+    description: Admin PvP commands (tag, untag, global, override, force-toggle others)
+    default: op
+
+  omniarena.join.bypass:
+    description: Bypass arena full/whitelist checks
+    default: op

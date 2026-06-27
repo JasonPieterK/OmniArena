@@ -1,0 +1,55 @@
+name: Gunner
+public: true
+description: "Rapid-fire snowball launcher with speed and light armor."
+icon: SNOWBALL
+cooldown: 0
+permission: ""
+arena: ""
+items:
+  - slot: 0
+    material: SNOWBALL
+    amount: 64
+    name: "<gray>Ammo Pack"
+  - slot: 1
+    material: SNOWBALL
+    amount: 64
+    name: "<gray>Ammo Pack"
+  - slot: 2
+    material: STONE_SWORD
+    enchants:
+      SHARPNESS: 1
+      UNBREAKING: 3
+    unbreakable: true
+  - slot: 3
+    material: GOLDEN_APPLE
+    amount: 2
+armor:
+  helmet:
+    material: LEATHER_HELMET
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  chestplate:
+    material: LEATHER_CHESTPLATE
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  leggings:
+    material: LEATHER_LEGGINGS
+    enchants:
+      PROTECTION: 2
+      UNBREAKING: 3
+    unbreakable: true
+  boots:
+    material: LEATHER_BOOTS
+    enchants:
+      PROTECTION: 2
+      FEATHER_FALLING: 2
+      UNBREAKING: 3
+    unbreakable: true
+effects:
+  - type: SPEED
+    level: 1
+    duration: -1
