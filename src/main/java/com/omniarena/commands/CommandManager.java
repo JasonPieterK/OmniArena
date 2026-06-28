@@ -54,6 +54,19 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "wand",          new WandCommand(plugin));
         reg(adminCommands, "website",      new WebEditorCommand(plugin));
         reg(adminCommands, "settings",      new SettingsCommand());
+        com.omniarena.commands.admin.LifecycleCommand lifecycle = new LifecycleCommand(plugin);
+        reg(adminCommands, "start",         new SubCommand(PermissionChecker.ADMIN_ALL, "/oa start", "Start all systems") {
+            @Override public void execute(CommandSender sender, String[] args) { lifecycle.executeAction(sender, "start"); }
+            @Override public List<String> tabComplete(CommandSender sender, String[] args) { return List.of(); }
+        });
+        reg(adminCommands, "stop",          new SubCommand(PermissionChecker.ADMIN_ALL, "/oa stop", "Stop all systems") {
+            @Override public void execute(CommandSender sender, String[] args) { lifecycle.executeAction(sender, "stop"); }
+            @Override public List<String> tabComplete(CommandSender sender, String[] args) { return List.of(); }
+        });
+        reg(adminCommands, "restart",       new SubCommand(PermissionChecker.ADMIN_ALL, "/oa restart", "Restart all systems") {
+            @Override public void execute(CommandSender sender, String[] args) { lifecycle.executeAction(sender, "restart"); }
+            @Override public List<String> tabComplete(CommandSender sender, String[] args) { return List.of(); }
+        });
         reg(adminCommands, "pmr",           new SubCommand(PermissionChecker.ADMIN_ALL, "/oa pmr <help|cleanup|reload|worlds>", "PvP manager admin") {
             @Override public void execute(CommandSender sender, String[] args) {
                 String a = args.length > 0 ? args[0].toLowerCase() : "help";

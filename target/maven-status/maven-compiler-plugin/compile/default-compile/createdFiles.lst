@@ -54,6 +54,7 @@ com\omniarena\arena\ArenaState.class
 com\omniarena\arena\regen\BlockRestoreModule.class
 com\omniarena\gamemode\GameModeKits$1.class
 com\omniarena\settings\SettingsGUI.class
+com\omniarena\commands\CommandManager$5.class
 com\omniarena\commands\admin\EnableArenaCommand.class
 com\omniarena\combat\CombatManager.class
 com\omniarena\kit\PlayerKit.class
@@ -116,6 +117,7 @@ com\omniarena\integration\VaultIntegration.class
 com\omniarena\web\ConfigApplyService.class
 com\omniarena\web\ConfigApplyService$1.class
 com\omniarena\web\DocsCatalog.class
+com\omniarena\commands\CommandManager$6.class
 com\omniarena\kit\KitGUI.class
 com\omniarena\match\GoalType.class
 com\omniarena\commands\admin\ModuleCommand.class
@@ -132,6 +134,7 @@ com\omniarena\arena\regen\BlockRestoreModule$1.class
 com\omniarena\betting\BettingManager$BettingStats.class
 com\omniarena\listener\PlayerDeathListener.class
 com\omniarena\listener\BlockBreakListener.class
+com\omniarena\commands\CommandManager$7.class
 com\omniarena\commands\admin\SpawnCommand.class
 com\omniarena\match\MatchResult$Outcome.class
 com\omniarena\rating\EloRating.class
@@ -179,4 +182,5 @@ com\omniarena\commands\player\StatsCommand.class
 com\omniarena\match\MatchResult.class
 com\omniarena\combat\PvpCommandHandler.class
 com\omniarena\arena\ChatMode.class
+com\omniarena\commands\admin\LifecycleCommand.class
 com\omniarena\module\PowerUpModule.class
