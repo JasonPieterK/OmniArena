@@ -70,6 +70,9 @@ public class LifecycleCommand extends SubCommand {
         try {
             MatchManager mm = MatchManager.getInstance();
 
+            // Cancel all plugin tasks (regen, countdowns, updates, etc)
+            Bukkit.getScheduler().cancelTasks(plugin);
+
             // End all active matches & kick players
             int kicked = 0;
             for (var match : new java.util.ArrayList<>(mm.getActiveMatches())) {
@@ -92,7 +95,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.getVisual().shutdown();
 
             MessageUtil.send(sender, "<green>✓ OmniArena stopped successfully");
-            MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), data saved");
+            MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), canceled all tasks, data saved");
         } catch (Exception e) {
             MessageUtil.send(sender, "<red>✗ Failed to stop: " + e.getMessage());
             plugin.getLogger().severe("Stop failed: " + e.getMessage());
