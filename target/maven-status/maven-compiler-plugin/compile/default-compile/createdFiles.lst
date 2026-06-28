@@ -163,6 +163,7 @@ com\omniarena\web\WebDashboardServer.class
 com\omniarena\commands\admin\WandCommand.class
 com\omniarena\stats\PlayerStats.class
 com\omniarena\module\ModuleManager.class
+com\omniarena\commands\standalone\PlayerCommandForwarder.class
 com\omniarena\web\model\LiveTeamStats.class
 com\omniarena\arena\ArenaRegion.class
 com\omniarena\web\model\ConfigSnapshot.class

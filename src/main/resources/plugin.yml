@@ -42,6 +42,54 @@ commands:
     description: Party management
     usage: /party <subcommand> [args]
     permission: omniarena.use
+  spectate:
+    description: Spectate an arena
+    usage: /spectate <arena>
+    permission: omniarena.spectate
+  stats:
+    description: View your statistics
+    usage: /stats
+    permission: omniarena.use
+  list:
+    description: List available arenas
+    usage: /list
+    permission: omniarena.use
+  info:
+    description: Get arena information
+    usage: /info <arena>
+    permission: omniarena.use
+  ready:
+    description: Mark yourself ready for match
+    usage: /ready
+    permission: omniarena.use
+  help:
+    description: Get OmniArena help
+    usage: /help [guide]
+    permission: omniarena.use
+  pvp:
+    description: Toggle PvP status
+    usage: /pvp [player]
+    permission: omniarena.pvp
+  pvpstatus:
+    description: Check PvP status
+    usage: /pvpstatus [player]
+    permission: omniarena.pvp
+  pvptag:
+    description: Tag player for PvP
+    usage: /pvptag [player] [seconds]
+    permission: omniarena.pvp.admin
+  untag:
+    description: Remove PvP tag from player
+    usage: /untag [player]
+    permission: omniarena.pvp.admin
+  pvpglobal:
+    description: Toggle global PvP
+    usage: /pvpglobal <on|off>
+    permission: omniarena.pvp.admin
+  newbie:
+    description: Newbie protection management
+    usage: /newbie <add|remove|checktime|disable> [player]
+    permission: omniarena.pvp
 
 permissions:
   omniarena.use:

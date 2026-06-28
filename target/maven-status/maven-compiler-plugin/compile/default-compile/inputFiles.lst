@@ -52,6 +52,7 @@ C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complet
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\player\SpectateCommand.java
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\player\StatsCommand.java
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\standalone\PartyCommand.java
+C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\standalone\PlayerCommandForwarder.java
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\standalone\StandaloneJoinCommand.java
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\standalone\StandaloneLeaveCommand.java
 C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\src\main\java\com\omniarena\commands\SubCommand.java
