@@ -67,12 +67,12 @@ public class SettingsMenuListener implements Listener {
                     SettingsGUI.openGroup(player, holder.getGroup(), holder.getPage());
                 }
                 default -> {
-                    // String / select / list — edit in chat via the existing setter.
                     player.closeInventory();
-                    player.sendMessage(ColorUtil.parse("<gray>Set <yellow>" + def.key() + "</yellow>:")
-                            .append(ColorUtil.parse(" <green>[click to type a value]"))
-                            .clickEvent(ClickEvent.suggestCommand("/oa settings set " + def.key() + " " + SettingsGUI.current(def)))
-                            .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>" + def.description()))));
+                    String prompt = "/oa settings set " + def.key() + " " + SettingsGUI.current(def);
+                    net.kyori.adventure.text.Component msg = ColorUtil.parse("<gray>Set <yellow>" + def.key() + "</yellow>: <green>[click to type]")
+                            .clickEvent(ClickEvent.suggestCommand(prompt))
+                            .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>" + def.description())));
+                    player.sendMessage(msg);
                 }
             }
         } catch (Exception e) {
