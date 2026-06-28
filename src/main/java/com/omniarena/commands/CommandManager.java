@@ -38,11 +38,11 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "config",        new ConfigCommand(plugin));
         reg(adminCommands, "spawn",         new SpawnCommand(plugin));
         reg(adminCommands, "region",        new RegionCommand(plugin));
-        reg(adminCommands, "class",         new ClassCommand(plugin));
         reg(adminCommands, "goal",          new GoalCommand(plugin));
         reg(adminCommands, "module",        new ModuleCommand(plugin));
         reg(adminCommands, "match",         new MatchAdminCommand(plugin));
         reg(adminCommands, "forcewin",      new ForceWinCommand(plugin));
+        reg(adminCommands, "force",         new ForceStartCommand(plugin));
         reg(adminCommands, "regen",         new RegenCommand(plugin));
         reg(adminCommands, "sign",          new SignCommand(plugin));
         reg(adminCommands, "kit",           new AdminKitCommand(plugin));
@@ -54,7 +54,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "reload",        new ReloadCommand(plugin));
         reg(adminCommands, "version",       new VersionCommand(plugin));
         reg(adminCommands, "wand",          new WandCommand(plugin));
-        reg(adminCommands, "editor",        new WebEditorCommand(plugin));
+        reg(adminCommands, "website",      new WebEditorCommand(plugin));
         reg(adminCommands, "settings",      new SettingsCommand());
         reg(adminCommands, "pmr",           new SubCommand(PermissionChecker.ADMIN_ALL, "/oa pmr <help|cleanup|reload|worlds>", "PvP manager admin") {
             @Override public void execute(CommandSender sender, String[] args) {
@@ -102,7 +102,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(playerCommands, "info",     new InfoCommand(plugin));
         reg(playerCommands, "stats",    new StatsCommand(plugin));
         reg(playerCommands, "ready",    new ReadyCommand(plugin));
-        reg(playerCommands, "class",    new ClassSelectCommand(plugin));
         // /oa kit for players mirrors /kit exactly; admin-only actions use /oa kit as admin
         KitCommandExecutor kitExec = plugin.getKitCommandExecutor();
         reg(playerCommands, "kit", new SubCommand(PermissionChecker.PLAYER_KIT, "/oa kit [action] [args]", "Player kit management") {
@@ -146,6 +145,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        // Convert subcommand to lowercase for case-insensitivity
         String sub = args[0].toLowerCase();
         String[] subArgs = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new String[0];
 

@@ -103,6 +103,14 @@ public class MatchManager {
 
         player.setGameMode(GameMode.ADVENTURE);
         player.getInventory().clear();
+        
+        // Full health, saturation, remove effects, lock in place
+        player.setHealth(player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
+        player.setFoodLevel(20);
+        player.setSaturation(20f);
+        player.getActivePotionEffects().clear();
+        player.setWalkSpeed(0);
+        player.setFlySpeed(0);
 
         broadcastArena(match, ConfigManager.getInstance().getMessage("join-arena")
                 .replace("{arena}", arena.getName()));
@@ -192,14 +200,37 @@ public class MatchManager {
             if (match.getState() != MatchState.WAITING && match.getState() != MatchState.STARTING) return;
             if (match.getPlayerCount() < match.getArena().getMinPlayers()) {
                 match.setState(MatchState.WAITING);
-                broadcastArena(match, ConfigManager.getInstance().getMessage("match-min-players")
-                        .replace("{current}", String.valueOf(match.getPlayerCount()))
-                        .replace("{min}", String.valueOf(match.getArena().getMinPlayers())));
+                
+                // Show title instead of chat spam
+                for (UUID uuid : match.getPlayers()) {
+                    Player player = Bukkit.getPlayer(uuid);
+                    if (player != null && player.isOnline()) {
+                        player.sendTitle(
+                            "<yellow>Waiting for players</yellow>",
+                            "<gray>" + match.getPlayerCount() + "/" + match.getArena().getMinPlayers() + "</gray>\n<gray>/leave to leave the arena</gray>",
+                            0, 20, 0
+                        );
+                        // Lock player in place
+                        player.setWalkSpeed(0);
+                        player.setFlySpeed(0);
+                    }
+                }
+                
                 secondsLeft[0] = match.getArena().getCountdown();
                 return;
             }
 
             match.setState(MatchState.STARTING);
+            
+            // Unlock players when starting
+            for (UUID uuid : match.getPlayers()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null && player.isOnline()) {
+                    player.setWalkSpeed(0.2f);
+                    player.setFlySpeed(0.1f);
+                }
+            }
+            
             if (secondsLeft[0] <= 0) {
                 startMatch(match);
                 return;

@@ -14,7 +14,7 @@
   --mean-50:#FFE6F0; --median-50:#E1ECFF; --mode-50:#F1F8D4;
   --quartile-50:#EBE0F5; --sun-50:#FFF3D1; --coral-50:#FFE2D9;
 
-  /* Neutrals */
+  /* Neutrals - Light Mode */
   --ink:#0D0A2C; --ash:#5A5670; --bone:#EFEBDC; --paper:#FDFCF7;
   --cream:#FFF1D6; --white:#FFFFFF;
   --border-soft:rgba(13,10,44,0.12);
@@ -323,10 +323,74 @@ select.input{cursor:pointer;appearance:none;
 .totop.show{transform:none;opacity:1;pointer-events:auto;}
 .totop:hover{transform:translateY(-3px) scale(1.06);}
 
+/* ───────────── Live Matches ───────────── */
+.live-matches-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:20px;}
+.live-match-card{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r-lg);
+  box-shadow:var(--sh-2);padding:0;overflow:hidden;transition:transform .24s var(--ease-bounce),box-shadow .24s var(--ease-bounce);}
+.live-match-card:hover{transform:translate(-2px,-3px);box-shadow:var(--sh-3);}
+.live-match-header{background:var(--ink);color:var(--paper);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.live-match-arena{font-family:var(--font-display);font-weight:800;font-size:18px;letter-spacing:-0.01em;}
+.live-match-status{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:4px 10px;border-radius:var(--r-pill);background:var(--mean);color:var(--paper);}
+.live-match-body{padding:18px;}
+.live-match-scoreboard{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;}
+.live-match-team{flex:1;text-align:center;}
+.live-match-team-name{font-family:var(--font-display);font-weight:700;font-size:16px;margin-bottom:6px;}
+.live-match-team-score{font-family:var(--font-hero);font-size:48px;line-height:1;color:var(--ink);}
+.live-match-divider{font-family:var(--font-display);font-weight:800;font-size:28px;color:var(--ash);}
+.live-match-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:14px;border-top:var(--bw-thin) solid var(--bone);}
+.live-match-stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0;padding:14px 0;border-top:var(--bw-thin) solid var(--bone);border-bottom:var(--bw-thin) solid var(--bone);}
+.live-match-stat{text-align:center;}
+.live-match-stat-label{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ash);margin-bottom:4px;}
+.live-match-stat-value{font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink);}
+.live-match-timer{font-family:var(--font-mono);font-weight:700;font-size:14px;color:var(--median);background:var(--median-50);padding:4px 10px;border-radius:var(--r-sm);}
+.live-match-header-left{display:flex;align-items:center;gap:12px;flex:1;}
+.live-match-header-right{display:flex;align-items:center;gap:12px;}
+.live-match-mode{font-weight:600;font-size:13px;color:var(--paper);background:var(--median);padding:4px 10px;border-radius:var(--r-sm);}
+.live-match-team-members{font-size:12px;color:var(--ash);font-weight:600;margin-top:4px;}
+
+/* Leaderboard */
+.live-match-leaderboard{margin-top:16px;padding-top:14px;border-top:var(--bw-thin) solid var(--bone);}
+.lb-title{font-family:var(--font-display);font-weight:700;font-size:14px;margin-bottom:12px;color:var(--ink);}
+.lb-table{width:100%;border-collapse:collapse;font-size:13px;}
+.lb-header{background:var(--bone);border:var(--bw-thin) solid var(--ink);}
+.lb-header th{padding:8px 6px;text-align:center;font-weight:700;text-transform:uppercase;font-size:10px;color:var(--ash);}
+.lb-row{border-bottom:var(--bw-thin) solid var(--bone);}
+.lb-row td{padding:8px 6px;text-align:center;}
+.lb-rank{width:30px;font-weight:700;color:var(--median);}
+.lb-name{text-align:left;font-weight:600;color:var(--ink);}
+.lb-stat{font-family:var(--font-display);font-weight:700;color:var(--ink);}
+.lb-row:hover{background:var(--median-50);}
+
+/* ───────────── Players ───────────── */
+.search-box{max-width:300px;}
+.players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+.player-card{background:var(--paper);border:var(--bw) solid var(--ink);border-radius:var(--r-lg);
+  box-shadow:var(--sh-2);padding:18px;transition:transform .24s var(--ease-bounce),box-shadow .24s var(--ease-bounce);}
+.player-card:hover{transform:translate(-2px,-3px);box-shadow:var(--sh-3);}
+.player-card-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.player-card-avatar{width:48px;height:48px;border-radius:50%;border:var(--bw) solid var(--ink);background:var(--median);
+  display:grid;place-items:center;font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--paper);}
+.player-card-name{font-family:var(--font-display);font-weight:800;font-size:18px;}
+.player-card-elo{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--median);background:var(--median-50);padding:3px 8px;border-radius:var(--r-sm);}
+.player-card-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.player-card-stat{text-align:center;padding:8px;background:var(--bone);border-radius:var(--r-md);}
+.player-card-stat-label{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ash);margin-bottom:4px;}
+.player-card-stat-value{font-family:var(--font-display);font-weight:800;font-size:18px;color:var(--ink);}
+
 /* ───────────── Responsive ───────────── */
 @media (max-width:860px){
   .arena-layout{grid-template-columns:1fr;}
   .docs-layout{grid-template-columns:1fr;}
   .docs-toc{position:static;flex-direction:row;flex-wrap:wrap;}
   .nav{display:none;}
+  .live-matches-grid{grid-template-columns:1fr;}
+  .live-match-scoreboard{flex-direction:column;gap:8px;}
+  .live-match-divider{transform:rotate(90deg);}
+  .live-match-header{flex-direction:column;align-items:flex-start;}
+  .live-match-header-left{flex-direction:column;gap:6px;}
+  .live-match-header-right{flex-direction:column;align-items:flex-start;gap:6px;}
+  .live-match-stats-grid{grid-template-columns:1fr;}
+  .lb-table{font-size:12px;}
+  .lb-header th{padding:6px 4px;}
+  .lb-row td{padding:6px 4px;}
 }

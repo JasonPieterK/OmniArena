@@ -204,26 +204,21 @@ public class BlockRestoreModule {
         }, 1L, 1L);
     }
 
-    /** Fast path for INSTANT — no preview, no delay */
+    /** Fast path for INSTANT — no preview, no delay, truly instant */
     private void fastPlace(World world, Iterator<BlockEntry> iterator, int total,
                            BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
-        int batchSize = Math.max(1, ConfigManager.getInstance().getConfig()
-                .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
-        int[] restored = {0};
-        BukkitTask[] t = new BukkitTask[1];
-        t[0] = AsyncUtil.runSyncRepeating(() -> {
-            int n = 0;
-            while (iterator.hasNext() && n++ < batchSize) {
-                BlockEntry e = iterator.next();
-                Block b = world.getBlockAt(e.x, e.y, e.z);
-                b.setType(e.material, false);
-                if (e.material != Material.AIR && e.blockData != null)
-                    b.setBlockData(Bukkit.createBlockData(e.blockData), false);
-                restored[0]++;
-            }
-            if (onProgress != null) onProgress.accept(restored[0], total);
-            if (!iterator.hasNext()) { t[0].cancel(); if (onComplete != null) onComplete.run(); }
-        }, 1L, 1L);
+        // Place ALL blocks in a single tick - truly instant
+        int restored = 0;
+        while (iterator.hasNext()) {
+            BlockEntry e = iterator.next();
+            Block b = world.getBlockAt(e.x, e.y, e.z);
+            b.setType(e.material, false);
+            if (e.material != Material.AIR && e.blockData != null)
+                b.setBlockData(Bukkit.createBlockData(e.blockData), false);
+            restored++;
+        }
+        if (onProgress != null) onProgress.accept(restored, total);
+        if (onComplete != null) onComplete.run();
     }
 
     // ── Preview builders ───────────────────────────────────────────────────────

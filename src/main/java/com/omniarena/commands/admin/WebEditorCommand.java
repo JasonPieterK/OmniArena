@@ -14,7 +14,7 @@ public class WebEditorCommand extends SubCommand {
     private final OmniArena plugin;
 
     public WebEditorCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ALL, "/oa editor", "Open the web config editor");
+        super(PermissionChecker.ADMIN_ALL, "/oa website", "Open the web dashboard");
         this.plugin = plugin;
     }
 
@@ -22,7 +22,7 @@ public class WebEditorCommand extends SubCommand {
     public void execute(CommandSender sender, String[] args) {
         WebDashboardServer web = plugin.getWebDashboardServer();
         if (web == null) {
-            MessageUtil.send(sender, "<red>Web editor is disabled.");
+            MessageUtil.send(sender, "<red>Web dashboard is disabled.");
             return;
         }
 
@@ -35,8 +35,8 @@ public class WebEditorCommand extends SubCommand {
             return;
         }
 
-        MessageUtil.send(sender, "<gold>Web editor URL: <yellow>" + url);
-        MessageUtil.send(sender, "<gray>Open in browser, edit, click Apply.");
+        MessageUtil.send(sender, "<gold>Web dashboard URL: <yellow>" + url);
+        MessageUtil.send(sender, "<gray>Open in browser for live match data, config, and arena management.");
         MessageUtil.send(sender, "<dark_gray>Kill session: <yellow>/oa override killweb");
     }
 

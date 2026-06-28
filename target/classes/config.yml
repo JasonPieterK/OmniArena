@@ -211,3 +211,10 @@ web:
   session-minutes: 30
   max-sessions: 1
   title: OmniArena Control
+
+betting:
+  enabled: true
+  min-bet: 100.0
+  max-bet: 10000.0
+  allow-spectator-bet: true
+  bet-window-seconds: 30

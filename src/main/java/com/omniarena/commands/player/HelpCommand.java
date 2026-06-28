@@ -94,7 +94,7 @@ public class HelpCommand extends SubCommand {
                 "<yellow>Players:</yellow> <white>/kit create <name></white>, <white>/kit equip <name></white>, <white>/kit list</white>.",
                 "<yellow>Admins:</yellow> hold items, run <white>/oa kit create <name></white>.",
                 "<yellow>Public kits:</yellow> run <white>/oa kit setpublic <name></white>.",
-                "<yellow>Class menu:</yellow> run <white>/oa class</white>."));
+                "<yellow>Kit menu:</yellow> run <white>/kit</white> or <white>/oa kit</white>."));
         guides.put("startmatch", List.of(
                 "<yellow>1.</yellow> Enable arena: <white>/oa enable <arena></white>.",
                 "<yellow>2.</yellow> Players join by sign or <white>/oa join <arena></white>.",

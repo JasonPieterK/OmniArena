@@ -30,6 +30,18 @@ commands:
     description: Player kit management
     usage: /kit <subcommand> [args]
     permission: omniarena.kit.use
+  join:
+    description: Join an arena
+    usage: /join <arena>
+    permission: omniarena.use
+  leave:
+    description: Leave current arena
+    usage: /leave
+    permission: omniarena.use
+  party:
+    description: Party management
+    usage: /party <subcommand> [args]
+    permission: omniarena.use
 
 permissions:
   omniarena.use:

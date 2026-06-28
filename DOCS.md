@@ -2,7 +2,8 @@
 
 OmniArena is a full PVP arena + server-wide combat plugin for Paper 26.2. It bundles arena
 matches with 16 game types, 15 block-based regen animations, a kit system, a web dashboard,
-an in-game settings GUI, and a PvPManager-style combat system — all driven by one `/oa` command.
+an in-game settings GUI, a PvPManager-style combat system, ELO ratings, queue matchmaking,
+party support, and betting — all driven by one `/oa` command.
 
 ---
 
@@ -204,7 +205,118 @@ PvPManager-style combat management that applies outside arena matches. The old `
 
 ---
 
-## 8. Integrations
+## 8. ELO Rating System
+
+Competitive matchmaking using the standard ELO algorithm (K-factor 32, 400-point scale). Ratings
+update automatically after each match and persist to `elo.yml`.
+
+### Features
+- **Automatic rating updates** — winners gain ELO, losers lose ELO based on rating difference
+- **Leaderboard** — top players ranked by ELO
+- **Win/loss tracking** — with win rate and K/D ratio statistics
+- **Abuse prevention** — tracks recent matches to prevent rating farming
+- **Rating floor** — minimum rating of 100 to prevent negative ratings
+
+### Commands
+- `/oa elo [player]` — show your ELO rating (or another player's)
+- `/oa elo leaderboard [top N]` — show top players (default 10)
+- `/oa elo reset <player>` — reset a player's rating to 1000 (admin)
+
+### Configuration
+- `elo.enabled` — enable/disable ELO system
+- `elo.default-rating` — starting rating (default 1000)
+- `elo.min-rating` — rating floor (default 100)
+- `elo.k-factor` — rating volatility (default 32)
+
+---
+
+## 9. Queue System with Matchmaking
+
+Automatic matchmaking that pairs players based on ELO rating. Players join kit-specific queues
+and are matched when compatible opponents are available.
+
+### Features
+- **Kit-specific queues** — separate queues for each game type/kit
+- **ELO-based matchmaking** — matches players within 200 rating points
+- **Automatic arena assignment** — finds available arenas automatically
+- **Real-time queue status** — shows position and total in queue
+- **Auto-requeue** — re-queues players if no arena is available
+
+### Commands
+- `/oa queue join <kit>` — join the queue for a specific kit
+- `/oa queue leave` — leave the current queue
+- `/oa queue status` — show your queue position
+- `/oa queue list` — show all active queues and their sizes
+
+### Configuration
+- `queue.enabled` — enable/disable queue system
+- `queue.elo-max-diff` — maximum ELO difference for matching (default 200)
+- `queue.match-interval` — matchmaking check interval in ticks (default 20)
+
+---
+
+## 10. Party System
+
+Team-based PvP with party creation, invitations, and management. Parties can queue together
+and play in team modes.
+
+### Features
+- **Party creation** — create a party with yourself as leader
+- **Invitations** — invite players with 60-second expiration
+- **Leadership transfer** — pass leadership to another member
+- **Member management** — kick members, leave party
+- **Party size limit** — maximum 10 players per party
+- **Party notifications** — all members get updates on joins/leaves
+
+### Commands
+- `/party create` — create a new party
+- `/party disband` — disband your party (leader only)
+- `/party invite <player>` — invite a player to your party
+- `/party accept` — accept a pending party invite
+- `/party decline` — decline a pending party invite
+- `/party leave` — leave your current party
+- `/party kick <player>` — kick a player (leader only)
+- `/party leader <player>` — transfer leadership (leader only)
+- `/party info` — show party information
+
+### Configuration
+- `party.enabled` — enable/disable party system
+- `party.max-members` — maximum party size (default 10)
+- `party.invite-timeout` — invite expiration in seconds (default 60)
+
+---
+
+## 11. Betting System with Vault Integration
+
+Players can bet on match outcomes using server economy (requires Vault + economy plugin). Bets
+are pooled and winners receive a share based on their contribution to the winning pool.
+
+### Features
+- **Match betting** — bet on who will win a match
+- **Pool-based payouts** — winners split the total pool proportionally
+- **Min/max bet limits** — configurable betting limits
+- **Bet cancellation** — cancel bets before match starts
+- **Offline refunds** — automatically refund offline players
+- **Betting stats** — view total bets and pool size per match
+
+### Commands
+- `/oa bet <arena> <player> <amount>` — place a bet on a player
+- `/oa bet cancel` — cancel your current bet
+- `/oa bet info` — show your active bet
+- `/oa bet stats <arena>` — show betting stats for a match
+
+### Configuration
+- `betting.enabled` — enable/disable betting system
+- `betting.min-bet` — minimum bet amount (default 100)
+- `betting.max-bet` — maximum bet amount (default 10000)
+
+### Requirements
+- **Vault** plugin must be installed
+- **Economy plugin** (e.g., EssentialsX, CMI) must be installed
+
+---
+
+## 12. Integrations
 
 Auto-detected on startup (all soft dependencies):
 - **Vault** — economy rewards (`rewards.*`).
@@ -228,23 +340,24 @@ In-match: `arena`, `gamemode`, `gamemode_name`, `gamemode_desc`, `state`, `arena
 
 ---
 
-## 9. Command reference
+## 13. Command reference
 
 ### Player
 `/oa join <arena>`, `/oa leave`, `/oa spectate <arena>`, `/oa list`, `/oa info <arena>`,
-`/oa stats`, `/oa ready`, `/oa class`, `/kit` (and `/oa kit`), plus the PvP player commands.
+`/oa stats`, `/oa ready`, `/oa class`, `/kit` (and `/oa kit`), `/oa elo`, `/oa queue`, `/oa bet`,
+plus the PvP player commands and party commands (`/party`).
 
 ### Admin
 `/oa create|delete|enable|disable <arena>`, `/oa region`, `/oa spawn`, `/oa class`, `/oa goal`,
 `/oa module`, `/oa match`, `/oa forcewin`, `/oa regen`, `/oa sign`, `/oa kit`, `/oa tp`,
 `/oa debug`, `/oa announcements`, `/oa chat`, `/oa reload`, `/oa version`, `/oa wand`,
-`/oa editor`, `/oa settings`, plus the PvP admin commands and `/oa pmr`.
+`/oa editor`, `/oa settings`, `/oa elo reset`, plus the PvP admin commands and `/oa pmr`.
 
 Run `/oa <command> help` for per-command usage, or `/oa help` for the full list.
 
 ---
 
-## 10. Permissions
+## 14. Permissions
 
 - `omniarena.use` (default true) — basic player commands.
 - `omniarena.kit.use` (default true) — kit commands.
@@ -255,14 +368,14 @@ Run `/oa <command> help` for per-command usage, or `/oa help` for the full list.
 
 ---
 
-## 11. Configuration
+## 15. Configuration
 
 All settings live in `config.yml` and messages in `messages.yml`. Every key is editable three ways:
 edit the file and `/oa reload`, use the web **Config** tab, or use the in-game `/oa settings` GUI.
 
 Major sections: `plugin`, `tools`, `database`, `arena`, `match`, `regen`, `pvp`, `rewards`, `kits`,
 `signs`, `visual`, `killstreak`, `scoreboard`, `boss-bar`, `integrations`, `anticheat`,
-`performance`, `web`.
+`performance`, `web`, `elo`, `queue`, `party`, `betting`.
 
 The `pvp` block alone covers tagging, combat-log, toggles, newbie protection, kill-abuse, respawn
 protection, border-hopping, auto-soup, blood, lava/fire protection, drop transfer, and disabled
