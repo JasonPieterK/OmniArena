@@ -40,10 +40,10 @@ import java.util.function.BiConsumer;
 public class BlockRestoreModule {
 
     private static final int DEFAULT_BATCH_SIZE = 4000;
-    // Animated types use a tighter batch so you see the wave/pattern clearly
-    private static final int ANIM_BATCH_SIZE = 150;
-    // Faster batch sizes for slow animations (iron man, laser, meteor)
-    private static final int FAST_ANIM_BATCH_SIZE = 800;
+    // Animated types use higher batch for faster, smoother animations
+    private static final int ANIM_BATCH_SIZE = 400;
+    // Ultra-fast batch sizes for visual animations with descent effects
+    private static final int ULTRA_FAST_ANIM_BATCH_SIZE = 1200;
 
     private static final Random RNG = new Random();
 
@@ -123,18 +123,18 @@ public class BlockRestoreModule {
                               BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
 
         // Non-animated types: fast direct placement, no preview
-        if (type == RegenAnimationType.INSTANT) {
+        if (type == RegenAnimationType.INSTANT_RESTORE) {
             fastPlace(world, iterator, total, onProgress, onComplete);
             return;
         }
 
         int configBatch = Math.max(1, ConfigManager.getInstance().getConfig()
                 .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
-        // Visual types cap batch to ANIM_BATCH_SIZE so the pattern is visible
-        // Use faster batch for slow animations (iron man, laser, meteor)
-        int batchSize = Math.min(configBatch, 
-                (type == RegenAnimationType.IRON_MAN || type == RegenAnimationType.LASER_RAIN || type == RegenAnimationType.METEOR_DROP) 
-                ? FAST_ANIM_BATCH_SIZE : ANIM_BATCH_SIZE);
+        // Visual types use higher batch for faster, smoother animations
+        int batchSize = Math.min(configBatch,
+                (type == RegenAnimationType.ARMORED_DESCENT || type == RegenAnimationType.RAIN_OF_LIGHT || type == RegenAnimationType.METEOR_STRIKE ||
+                 type == RegenAnimationType.BINARY_FILL || type == RegenAnimationType.QUANTUM_MESH)
+                ? ULTRA_FAST_ANIM_BATCH_SIZE : ANIM_BATCH_SIZE);
 
         boolean sfx = ConfigManager.getInstance().getConfig().getBoolean("regen.animation.sound", true);
 
@@ -240,70 +240,64 @@ public class BlockRestoreModule {
                                    List<BlockEntry> batch, List<PreviewBlock> out) {
         switch (type) {
 
-            // 1. SPIRAL — gold spiral path lights up just before blocks appear
-            case SPIRAL -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.GOLD_BLOCK));
+            // 1. SPIRAL_ASCENT — gold spiral path lights up as blocks appear
+            case SPIRAL_ASCENT -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.GOLD_BLOCK));
 
-            // 2. OUTSIDE_IN — cyan ring shrinks inward; cyan concrete marks the frontier
-            case OUTSIDE_IN -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.CYAN_CONCRETE));
+            // 2. COLLAPSE_INWARD — cyan ring shrinks inward
+            case COLLAPSE_INWARD -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.CYAN_CONCRETE));
 
-            // 3. CENTER_OUT — yellow/orange shockwave expanding outward
-            case CENTER_OUT -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.YELLOW_CONCRETE));
+            // 3. RADIATE_OUTWARD — yellow/orange shockwave expanding outward
+            case RADIATE_OUTWARD -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.YELLOW_CONCRETE));
 
-            // 4. TOP_TO_BOTTOM — gravel (gravity block) placed 2 above each spot, looks like it's about to fall
-            case TOP_TO_BOTTOM -> {
+            // 4. GRAVITY_DESCENT — heavy blocks fall from above
+            case GRAVITY_DESCENT -> {
                 out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.GRAVEL));
-                out.add(new PreviewBlock(loc(world, e.x, e.y + 2, e.z), Material.SAND));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 2, e.z), Material.BLACKSTONE));
             }
 
-            // 5. BOTTOM_TO_TOP — lime block rises up; honeycomb gives "bubbling up" feel
-            case BOTTOM_TO_TOP -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.LIME_CONCRETE));
+            // 5. UPWARD_SURGE — bright lime block rises up
+            case UPWARD_SURGE -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.LIME_CONCRETE));
 
-            // 6. LASER_RAIN — the descent is done by real falling blocks
-            //    (see spawnDescenders). Leave a single glowing impact pad so the
-            //    spot lights up the instant the round lands.
-            case LASER_RAIN -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.SEA_LANTERN));
+            // 6. RAIN_OF_LIGHT — descent done by real glowing falling blocks
+            case RAIN_OF_LIGHT -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.GLOWSTONE));
 
-            // 7. IRON_MAN — descent done by real falling red-concrete suit pieces.
-            //    The landing spot flashes an arc-reactor cyan pad as it locks in.
-            case IRON_MAN -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.LIGHT_BLUE_CONCRETE));
+            // 7. ARMORED_DESCENT — descent done by real falling red suit pieces
+            case ARMORED_DESCENT -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.LIGHT_BLUE_CONCRETE));
 
-            // 8. RANDOM_BURST — glowstone pops at random offsets around each block
-            case RANDOM_BURST -> {
+            // 8. CHAOTIC_ERUPTION — glowstone and nether wart blocks burst outward
+            case CHAOTIC_ERUPTION -> {
                 int ox = RNG.nextInt(3) - 1;
                 int oz = RNG.nextInt(3) - 1;
-                out.add(new PreviewBlock(loc(world, e.x + ox, e.y, e.z + oz), Material.GLOWSTONE));
-                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.SEA_LANTERN));
+                out.add(new PreviewBlock(loc(world, e.x + ox, e.y, e.z + oz), Material.NETHER_WART_BLOCK));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.GLOWSTONE));
             }
 
-            // 9. BEAM_SWEEP — beacon beam: beacon + sea lantern column rotates as the sweep angle advances
-            case BEAM_SWEEP -> {
-                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.SEA_LANTERN));
-                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.BEACON));
+            // 9. BEACON_WAVE — bright beacon light sweeps
+            case BEACON_WAVE -> {
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.BEACON));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.GOLD_BLOCK));
             }
 
-            // 10. SHOCKWAVE — crying obsidian ring: eerie purple ring expands outward
-            case SHOCKWAVE -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.CRYING_OBSIDIAN));
+            // 10. VOID_SHOCKWAVE — purple void ring expands outward
+            case VOID_SHOCKWAVE -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.CRYING_OBSIDIAN));
 
-            // 11. CRYSTAL_GROWTH — amethyst bud, then cluster above, grows column-by-column:
-            //     ice crystals form from the floor up
-            case CRYSTAL_GROWTH -> {
-                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.AMETHYST_BLOCK));
+            // 11. ICE_CRYSTAL_GROWTH — cyan ice crystals grow upward
+            case ICE_CRYSTAL_GROWTH -> {
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.PACKED_ICE));
                 out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.BLUE_ICE));
             }
 
-            // 12. VORTEX_REBUILD — emerald + end stone: spiraling pillar sucks blocks into vortex
-            case VORTEX_REBUILD -> {
+            // 12. DARK_VORTEX — emerald and purple spiral inward
+            case DARK_VORTEX -> {
                 out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.EMERALD_BLOCK));
-                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.END_STONE));
-                out.add(new PreviewBlock(loc(world, e.x, e.y + 2, e.z), Material.PURPUR_BLOCK));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.AMETHYST_BLOCK));
             }
 
-            // 13. METEOR_DROP — descent done by real flaming falling magma meteors
-            //    (see spawnDescenders). Leave a charred impact pad at the crater.
-            case METEOR_DROP -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.MAGMA_BLOCK));
+            // 13. METEOR_STRIKE — descent done by real flaming meteors
+            case METEOR_STRIKE -> out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.MAGMA_BLOCK));
 
-            // 14. PRISM_WAVE — diagonal rainbow wave of colored concrete (7 hues, X+Z wavefront)
-            case PRISM_WAVE -> {
+            // 14. PRISM_CASCADE — rainbow colored wave pattern
+            case PRISM_CASCADE -> {
                 Material[] rainbow = {
                     Material.RED_CONCRETE, Material.ORANGE_CONCRETE, Material.YELLOW_CONCRETE,
                     Material.LIME_CONCRETE, Material.LIGHT_BLUE_CONCRETE,
@@ -311,6 +305,41 @@ public class BlockRestoreModule {
                 };
                 Material mat = rainbow[Math.abs(e.x + e.z) % 7];
                 out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), mat));
+            }
+
+            // ── NEW ANIMATIONS (5 new animations) ──
+
+            // 16. BINARY_FILL — digital matrix-style with cyan and lime alternating
+            case BINARY_FILL -> {
+                boolean isOdd = (Math.abs(e.x) + Math.abs(e.z)) % 2 == 0;
+                Material mat = isOdd ? Material.CYAN_CONCRETE : Material.LIME_CONCRETE;
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), mat));
+            }
+
+            // 17. PHOENIX_REBIRTH — fire and lava blocks rise like phoenix
+            case PHOENIX_REBIRTH -> {
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.MAGMA_BLOCK));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.FIRE));
+            }
+
+            // 18. QUANTUM_MESH — glitchy purple/cyan teleport effect
+            case QUANTUM_MESH -> {
+                boolean alternate = (e.x + e.z) % 2 == 0;
+                Material mat = alternate ? Material.PURPLE_CONCRETE : Material.CYAN_CONCRETE;
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), mat));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.AMETHYST_BLOCK));
+            }
+
+            // 19. DIAMOND_FUSION — blue diamond blocks grow inward
+            case DIAMOND_FUSION -> {
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.DIAMOND_BLOCK));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.BLUE_ICE));
+            }
+
+            // 20. TSUNAMI_SURGE — aqua/light blue wave rises like water
+            case TSUNAMI_SURGE -> {
+                out.add(new PreviewBlock(loc(world, e.x, e.y, e.z), Material.LIGHT_BLUE_CONCRETE));
+                out.add(new PreviewBlock(loc(world, e.x, e.y + 1, e.z), Material.CYAN_CONCRETE));
             }
         }
     }
@@ -328,10 +357,11 @@ public class BlockRestoreModule {
     private void spawnDescenders(World world, List<BlockEntry> batch, RegenAnimationType type) {
         int step; // 1-in-N blocks gets a descender
         switch (type) {
-            case METEOR_DROP -> step = 20;  // a few big, dramatic meteors (increased from 28)
-            case IRON_MAN    -> step = 5;    // a steady rain of suit pieces (increased from 9)
-            case LASER_RAIN  -> step = 4;    // dense rain of laser rounds (increased from 7)
-            default -> { return; }          // ground types don't descend
+            case METEOR_STRIKE -> step = 15;  // dramatic meteors
+            case ARMORED_DESCENT -> step = 3; // dense rain of suit pieces
+            case RAIN_OF_LIGHT -> step = 3;   // dense rain of light
+            case PHOENIX_REBIRTH -> step = 8; // occasional phoenix particles
+            default -> { return; }            // ground types don't descend
         }
 
         for (BlockEntry e : batch) {
@@ -352,18 +382,26 @@ public class BlockRestoreModule {
         final int lifeTicks;
 
         switch (type) {
-            case METEOR_DROP -> {
-                spawnHeight = 26; fallMat = Material.MAGMA_BLOCK; downVel = -1.1;
-                trail = Particle.FLAME; dust = null; lifeTicks = 24;
+            case METEOR_STRIKE -> {
+                spawnHeight = 28; fallMat = Material.MAGMA_BLOCK; downVel = -1.2;
+                trail = Particle.FLAME; dust = null; lifeTicks = 26;
             }
-            case IRON_MAN -> {
-                spawnHeight = 20; fallMat = Material.RED_CONCRETE; downVel = -1.4;
-                trail = Particle.SOUL_FIRE_FLAME;  // arc-reactor blue jet
-                dust = new Particle.DustOptions(Color.fromRGB(255, 196, 0), 1.2f); // gold trim sparks
-                lifeTicks = 16;
+            case ARMORED_DESCENT -> {
+                spawnHeight = 22; fallMat = Material.RED_CONCRETE; downVel = -1.5;
+                trail = Particle.SOUL_FIRE_FLAME;
+                dust = new Particle.DustOptions(Color.fromRGB(255, 196, 0), 1.2f);
+                lifeTicks = 18;
             }
-            default -> { // LASER_RAIN
-                spawnHeight = 24; fallMat = Material.WHITE_STAINED_GLASS; downVel = -2.2;
+            case RAIN_OF_LIGHT -> {
+                spawnHeight = 26; fallMat = Material.GLOWSTONE; downVel = -2.0;
+                trail = Particle.END_ROD; dust = null; lifeTicks = 14;
+            }
+            case PHOENIX_REBIRTH -> {
+                spawnHeight = 24; fallMat = Material.FIRE; downVel = -0.8;
+                trail = Particle.FLAME; dust = null; lifeTicks = 20;
+            }
+            default -> { // fallback
+                spawnHeight = 24; fallMat = Material.WHITE_STAINED_GLASS; downVel = -2.0;
                 trail = Particle.END_ROD; dust = null; lifeTicks = 12;
             }
         }
@@ -409,23 +447,29 @@ public class BlockRestoreModule {
 
     private void playImpact(World world, Location loc, RegenAnimationType type) {
         switch (type) {
-            case METEOR_DROP -> {
+            case METEOR_STRIKE -> {
                 world.spawnParticle(Particle.EXPLOSION, loc, 2, 0.2, 0.1, 0.2, 0.0);
                 world.spawnParticle(Particle.LAVA, loc, 8, 0.4, 0.2, 0.4, 0.0);
                 world.spawnParticle(Particle.LARGE_SMOKE, loc, 10, 0.5, 0.3, 0.5, 0.02);
                 world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 0.6f, 0.6f);
             }
-            case IRON_MAN -> {
+            case ARMORED_DESCENT -> {
                 world.spawnParticle(Particle.ELECTRIC_SPARK, loc, 14, 0.3, 0.2, 0.3, 0.1);
                 world.spawnParticle(Particle.SOUL_FIRE_FLAME, loc, 6, 0.25, 0.15, 0.25, 0.02);
                 world.playSound(loc, Sound.ITEM_ARMOR_EQUIP_NETHERITE, 0.7f, 0.9f);
                 world.playSound(loc, Sound.BLOCK_ANVIL_LAND, 0.3f, 1.6f);
             }
-            default -> { // LASER_RAIN
+            case RAIN_OF_LIGHT -> {
                 world.spawnParticle(Particle.FLASH, loc, 1, 0.0, 0.0, 0.0, 0.0);
                 world.spawnParticle(Particle.ELECTRIC_SPARK, loc, 10, 0.3, 0.1, 0.3, 0.12);
                 world.playSound(loc, Sound.BLOCK_BEACON_DEACTIVATE, 0.4f, 2.0f);
             }
+            case PHOENIX_REBIRTH -> {
+                world.spawnParticle(Particle.FLAME, loc, 12, 0.3, 0.2, 0.3, 0.05);
+                world.spawnParticle(Particle.LAVA, loc, 6, 0.2, 0.15, 0.2, 0.02);
+                world.playSound(loc, Sound.ENTITY_BLAZE_DEATH, 0.5f, 0.8f);
+            }
+            default -> {}
         }
     }
 
@@ -438,7 +482,7 @@ public class BlockRestoreModule {
         double cz = (region.getMinZ() + region.getMaxZ()) / 2.0;
 
         switch (type) {
-            case SPIRAL -> ordered.sort(Comparator
+            case SPIRAL_ASCENT -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> {
                         double angle = Math.atan2(e.z - cz, e.x - cx);
                         double dist = Math.sqrt(distSq(e, cx, cy, cz));
@@ -446,59 +490,51 @@ public class BlockRestoreModule {
                     })
                     .thenComparingInt(e -> e.y));
 
-            case OUTSIDE_IN -> ordered.sort(Comparator
+            case COLLAPSE_INWARD -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz))
                     .reversed()
                     .thenComparingInt(e -> e.y));
 
-            case CENTER_OUT -> ordered.sort(Comparator
+            case RADIATE_OUTWARD -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz))
                     .thenComparingInt(e -> e.y));
 
-            case TOP_TO_BOTTOM -> ordered.sort(Comparator
+            case GRAVITY_DESCENT -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> e.y).reversed()
                     .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
 
-            case BOTTOM_TO_TOP -> ordered.sort(Comparator
+            case UPWARD_SURGE -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> e.y)
                     .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
 
-            // LASER_RAIN: nearest columns first, each column top→bottom
-            case LASER_RAIN -> ordered.sort(Comparator
+            case RAIN_OF_LIGHT -> ordered.sort(Comparator
                     .<BlockEntry, Double>comparing(e -> Math.hypot(e.x - cx, e.z - cz))
                     .thenComparingInt(e -> -e.y));
 
-            // IRON_MAN: scan-line (left→right, front→back, bottom→top) like suit assembly
-            // IRON_MAN: suit assembles onto the body bottom-up (feet → head),
-            // each layer filling from the core outward like plates locking on.
-            case IRON_MAN -> ordered.sort(Comparator
+            case ARMORED_DESCENT -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> e.y)
                     .thenComparingDouble(e -> Math.hypot(e.x - cx, e.z - cz)));
 
-            case RANDOM_BURST -> Collections.shuffle(ordered, new Random(System.currentTimeMillis()));
+            case CHAOTIC_ERUPTION -> Collections.shuffle(ordered, new Random(System.currentTimeMillis()));
 
-            case INSTANT -> { /* as-stored */ }
+            case INSTANT_RESTORE -> { /* as-stored */ }
 
-            // BEAM_SWEEP: pure angular sweep (radar arm)
-            case BEAM_SWEEP -> ordered.sort(Comparator
+            case BEACON_WAVE -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> {
                         double a = Math.atan2(e.z - cz, e.x - cx);
                         return a < 0 ? a + 6.28318 : a;
                     })
                     .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
 
-            // SHOCKWAVE: concentric rings expanding outward
-            case SHOCKWAVE -> ordered.sort(Comparator
+            case VOID_SHOCKWAVE -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> (int) Math.sqrt(distSq(e, cx, cy, cz)))
                     .thenComparingInt(e -> e.y));
 
-            // CRYSTAL_GROWTH: floor columns closest-first, growing upward
-            case CRYSTAL_GROWTH -> ordered.sort(Comparator
+            case ICE_CRYSTAL_GROWTH -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> Math.hypot(e.x - cx, e.z - cz))
                     .thenComparingInt(e -> e.y));
 
-            // VORTEX_REBUILD: anti-clockwise inward spiral, top-down
-            case VORTEX_REBUILD -> ordered.sort(Comparator
+            case DARK_VORTEX -> ordered.sort(Comparator
                     .comparingDouble((BlockEntry e) -> {
                         double dist = Math.sqrt(distSq(e, cx, cy, cz));
                         double angle = Math.atan2(e.z - cz, e.x - cx);
@@ -507,16 +543,31 @@ public class BlockRestoreModule {
                     })
                     .thenComparingInt(e -> -e.y));
 
-            // METEOR_DROP: quadrant clusters, highest Y first per cluster
-            case METEOR_DROP -> ordered.sort(Comparator
+            case METEOR_STRIKE -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> (e.x > cx ? 1 : 0) * 2 + (e.z > cz ? 1 : 0))
                     .thenComparingInt(e -> -e.y)
                     .thenComparingDouble(e -> Math.hypot(e.x - cx, e.z - cz)));
 
-            // PRISM_WAVE: diagonal X+Z wavefront (rainbow sweeps corner to corner)
-            case PRISM_WAVE -> ordered.sort(Comparator
+            case PRISM_CASCADE -> ordered.sort(Comparator
                     .comparingInt((BlockEntry e) -> e.x + e.z)
                     .thenComparingInt(e -> e.y));
+
+            // New animations use sensible orderings
+            case BINARY_FILL -> ordered.sort(Comparator
+                    .comparingInt((BlockEntry e) -> (e.x + e.z) % 2)
+                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
+
+            case PHOENIX_REBIRTH -> ordered.sort(Comparator
+                    .comparingInt((BlockEntry e) -> e.y)
+                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
+
+            case QUANTUM_MESH -> Collections.shuffle(ordered, new Random(System.currentTimeMillis()));
+
+            case DIAMOND_FUSION -> ordered.sort(Comparator
+                    .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz)));
+
+            case TSUNAMI_SURGE -> ordered.sort(Comparator
+                    .comparingInt((BlockEntry e) -> e.y));
         }
         return ordered;
     }
@@ -526,35 +577,40 @@ public class BlockRestoreModule {
     private void playWaveSound(World world, BlockEntry e, RegenAnimationType type) {
         Location loc = new Location(world, e.x + 0.5, e.y + 0.5, e.z + 0.5);
         switch (type) {
-            case SPIRAL        -> world.playSound(loc, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.3f, 1.5f);
-            case OUTSIDE_IN    -> world.playSound(loc, Sound.ENTITY_WARDEN_SONIC_BOOM,      0.3f, 1.2f);
-            case CENTER_OUT    -> world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE,         0.2f, 1.8f);
-            case TOP_TO_BOTTOM -> world.playSound(loc, Sound.BLOCK_GRAVEL_PLACE,             0.4f, 0.8f);
-            case BOTTOM_TO_TOP -> world.playSound(loc, Sound.BLOCK_BUBBLE_COLUMN_BUBBLE_POP, 0.3f, 1.4f);
-            case LASER_RAIN -> {
-                world.playSound(loc, Sound.BLOCK_BEACON_ACTIVATE,           0.4f, 2.0f);
-                world.playSound(loc, Sound.ENTITY_LIGHTNING_BOLT_THUNDER,   0.15f, 1.5f);
+            case SPIRAL_ASCENT -> world.playSound(loc, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.3f, 1.5f);
+            case COLLAPSE_INWARD -> world.playSound(loc, Sound.ENTITY_WARDEN_SONIC_BOOM, 0.3f, 1.2f);
+            case RADIATE_OUTWARD -> world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 0.2f, 1.8f);
+            case GRAVITY_DESCENT -> world.playSound(loc, Sound.BLOCK_GRAVEL_PLACE, 0.4f, 0.8f);
+            case UPWARD_SURGE -> world.playSound(loc, Sound.BLOCK_BUBBLE_COLUMN_BUBBLE_POP, 0.3f, 1.4f);
+            case RAIN_OF_LIGHT -> {
+                world.playSound(loc, Sound.BLOCK_BEACON_ACTIVATE, 0.4f, 2.0f);
+                world.playSound(loc, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.15f, 1.5f);
             }
-            case IRON_MAN -> {
-                world.playSound(loc, Sound.ITEM_ARMOR_EQUIP_IRON,            0.5f, 0.7f);
-                world.playSound(loc, Sound.BLOCK_BLASTFURNACE_FIRE_CRACKLE,  0.4f, 1.3f);
+            case ARMORED_DESCENT -> {
+                world.playSound(loc, Sound.ITEM_ARMOR_EQUIP_IRON, 0.5f, 0.7f);
+                world.playSound(loc, Sound.BLOCK_BLASTFURNACE_FIRE_CRACKLE, 0.4f, 1.3f);
                 if (RNG.nextInt(6) == 0)
-                    world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE,       0.2f, 1.5f);
+                    world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 0.2f, 1.5f);
             }
-            case RANDOM_BURST  -> world.playSound(loc, Sound.ENTITY_FIREWORK_ROCKET_BLAST,  0.3f, 1.0f + RNG.nextFloat());
-            case BEAM_SWEEP    -> world.playSound(loc, Sound.BLOCK_BEACON_POWER_SELECT,      0.3f, 1.8f);
-            case SHOCKWAVE     -> world.playSound(loc, Sound.ENTITY_WARDEN_SONIC_BOOM,       0.4f, 0.7f);
-            case CRYSTAL_GROWTH -> {
-                world.playSound(loc, Sound.BLOCK_AMETHYST_BLOCK_CHIME,  0.5f, 1.4f);
-                world.playSound(loc, Sound.BLOCK_GLASS_PLACE,            0.25f, 1.8f);
+            case CHAOTIC_ERUPTION -> world.playSound(loc, Sound.ENTITY_FIREWORK_ROCKET_BLAST, 0.3f, 1.0f + RNG.nextFloat());
+            case BEACON_WAVE -> world.playSound(loc, Sound.BLOCK_BEACON_POWER_SELECT, 0.3f, 1.8f);
+            case VOID_SHOCKWAVE -> world.playSound(loc, Sound.ENTITY_WARDEN_SONIC_BOOM, 0.4f, 0.7f);
+            case ICE_CRYSTAL_GROWTH -> {
+                world.playSound(loc, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.5f, 1.4f);
+                world.playSound(loc, Sound.BLOCK_GLASS_PLACE, 0.25f, 1.8f);
             }
-            case VORTEX_REBUILD -> world.playSound(loc, Sound.ENTITY_ENDER_EYE_LAUNCH,      0.35f, 1.2f);
-            case METEOR_DROP -> {
-                world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE,  0.3f, 0.6f);
-                world.playSound(loc, Sound.ENTITY_BLAZE_HURT,        0.2f, 0.5f);
+            case DARK_VORTEX -> world.playSound(loc, Sound.ENTITY_ENDER_EYE_LAUNCH, 0.35f, 1.2f);
+            case METEOR_STRIKE -> {
+                world.playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 0.3f, 0.6f);
+                world.playSound(loc, Sound.ENTITY_BLAZE_HURT, 0.2f, 0.5f);
             }
-            case PRISM_WAVE    -> world.playSound(loc, Sound.BLOCK_AMETHYST_CLUSTER_PLACE,   0.3f,
+            case PRISM_CASCADE -> world.playSound(loc, Sound.BLOCK_AMETHYST_CLUSTER_PLACE, 0.3f,
                     1.0f + (Math.abs(e.x + e.z) % 7) * 0.1f);
+            case BINARY_FILL -> world.playSound(loc, Sound.BLOCK_REDSTONE_TORCH_BURNOUT, 0.3f, 1.2f);
+            case PHOENIX_REBIRTH -> world.playSound(loc, Sound.ITEM_FIRECHARGE_USE, 0.4f, 0.8f);
+            case QUANTUM_MESH -> world.playSound(loc, Sound.ITEM_CHORUS_FRUIT_TELEPORT, 0.3f, 1.5f);
+            case DIAMOND_FUSION -> world.playSound(loc, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 1.6f);
+            case TSUNAMI_SURGE -> world.playSound(loc, Sound.BLOCK_BUBBLE_COLUMN_BUBBLE_POP, 0.4f, 0.9f);
             default -> {}
         }
     }
