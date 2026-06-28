@@ -208,11 +208,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
     private boolean shouldUsePlayerCommand(CommandSender sender, String sub, String[] args, SubCommand adminCmd) {
         if (!PermissionChecker.hasAdmin(sender, adminCmd.getRequiredPermission())) return true;
-        // "class" — player command for select; admin command for create/delete/items/potion
-        if (sub.equals("class")) {
-            if (args.length == 0) return true;
-            return !Set.of("create", "delete", "items", "potion").contains(args[0].toLowerCase());
-        }
         // "kit" — player command for personal kit ops; admin command for setpublic/setprivate/icon/description/cooldown/permission
         if (sub.equals("kit")) {
             if (args.length == 0) return true; // open GUI — player side

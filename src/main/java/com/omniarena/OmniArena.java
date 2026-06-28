@@ -115,8 +115,13 @@ public final class OmniArena extends JavaPlugin {
         Objects.requireNonNull(getCommand("kit")).setTabCompleter(kitCommandExecutor);
 
         // Register standalone commands
-        Objects.requireNonNull(getCommand("join")).setExecutor(new com.omniarena.commands.standalone.StandaloneJoinCommand(this));
-        Objects.requireNonNull(getCommand("leave")).setExecutor(new com.omniarena.commands.standalone.StandaloneLeaveCommand(this));
+        var joinCmd = new com.omniarena.commands.standalone.StandaloneJoinCommand(this);
+        Objects.requireNonNull(getCommand("join")).setExecutor(joinCmd);
+        Objects.requireNonNull(getCommand("join")).setTabCompleter(joinCmd);
+
+        var leaveCmd = new com.omniarena.commands.standalone.StandaloneLeaveCommand(this);
+        Objects.requireNonNull(getCommand("leave")).setExecutor(leaveCmd);
+        Objects.requireNonNull(getCommand("leave")).setTabCompleter(leaveCmd);
         Objects.requireNonNull(getCommand("party")).setExecutor(new com.omniarena.commands.standalone.PartyCommand(this));
         Objects.requireNonNull(getCommand("party")).setTabCompleter(new com.omniarena.commands.standalone.PartyCommand(this));
 
