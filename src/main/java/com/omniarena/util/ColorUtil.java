@@ -12,6 +12,10 @@ public final class ColorUtil {
 
     public static Component parse(String miniMessage) {
         if (miniMessage == null || miniMessage.isBlank()) return Component.empty();
+        // If string contains legacy formatting codes (§), parse as legacy
+        if (miniMessage.contains("§")) {
+            return parseLegacy(miniMessage);
+        }
         return MM.deserialize(translateAmpersandsToMiniMessage(miniMessage));
     }
 
