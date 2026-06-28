@@ -20,12 +20,23 @@
   // ── API ──────────────────────────────────────────────────────────────
   async function api(path, opts = {}) {
     const sep = path.includes('?') ? '&' : '?';
-    const res = await fetch(path + sep + 'token=' + encodeURIComponent(S.token), {
-      headers: { 'Content-Type': 'application/json' }, ...opts,
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const txt = await res.text();
-    return txt ? JSON.parse(txt) : {};
+    const url = path + sep + 'token=' + encodeURIComponent(S.token);
+    try {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' }, ...opts,
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || `HTTP ${res.status}`);
+      }
+      const txt = await res.text();
+      return txt ? JSON.parse(txt) : {};
+    } catch (e) {
+      if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+        throw new Error('Cannot connect to server. Make sure the web dashboard is running.');
+      }
+      throw e;
+    }
   }
 
   // ── Toast + confetti ───────────────────────────────────────────────────
@@ -87,6 +98,8 @@
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         $('tab-' + tab).classList.add('active');
         if (tab === 'docs' && !S.docsRaw) loadDocs();
+        if (tab === 'live') loadLiveMatches();
+        if (tab === 'players') loadPlayers();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
     });
@@ -567,6 +580,9 @@
     $('cfgExpand').addEventListener('click', () => document.querySelectorAll('#configGroups .section').forEach(s => s.classList.remove('collapsed')));
     $('cfgCollapse').addEventListener('click', () => document.querySelectorAll('#configGroups .section').forEach(s => s.classList.add('collapsed')));
 
+    $('liveRefreshBtn').addEventListener('click', loadLiveMatches);
+    $('playerSearch').addEventListener('input', debounce(() => loadPlayers(), 300));
+
     const topbar = $('topbar'), toTop = $('toTop');
     window.addEventListener('scroll', () => {
       topbar.classList.toggle('scrolled', window.scrollY > 8);
@@ -575,6 +591,155 @@
     toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
     load();
+  }
+
+  // ── Live Matches ───────────────────────────────────────────────────────
+  let liveMatchInterval = null;
+  async function loadLiveMatches() {
+    try {
+      const data = await api('/api/live-matches');
+      renderLiveMatches(data);
+      if (liveMatchInterval) clearInterval(liveMatchInterval);
+      liveMatchInterval = setInterval(loadLiveMatches, 5000);
+    } catch (e) {
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-warning-circle"></i><p>Failed to load live matches</p></div>';
+    }
+  }
+
+  function renderLiveMatches(matches) {
+    if (!matches || matches.length === 0) {
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-soccer-ball"></i><p>No live matches currently</p></div>';
+      return;
+    }
+    $('liveMatchesGrid').innerHTML = matches.map(m => {
+      const leaderboardRows = m.leaderboard.slice(0, 10).map((p, idx) => `
+        <tr class="lb-row">
+          <td class="lb-rank">${idx + 1}</td>
+          <td class="lb-name">${esc(p.name)}</td>
+          <td class="lb-stat">${p.kills}</td>
+          <td class="lb-stat">${p.deaths}</td>
+          <td class="lb-stat">${p.streak}</td>
+        </tr>
+      `).join('');
+      return `
+        <div class="live-match-card">
+          <div class="live-match-header">
+            <div class="live-match-header-left">
+              <span class="live-match-arena">${esc(m.arena)}</span>
+              <span class="live-match-mode">${esc(m.gameMode)}</span>
+            </div>
+            <div class="live-match-header-right">
+              <span class="live-match-timer">${esc(m.time)}</span>
+              <span class="live-match-status"><span class="live-dot"></span> ${esc(m.status)}</span>
+            </div>
+          </div>
+
+          <div class="live-match-body">
+            <div class="live-match-scoreboard">
+              <div class="live-match-team">
+                <div class="live-match-team-name">${esc(m.team1.name || 'Team 1')}</div>
+                <div class="live-match-team-score">${m.team1.score}</div>
+                <div class="live-match-team-members">${m.team1.members} members</div>
+              </div>
+              <div class="live-match-divider">VS</div>
+              <div class="live-match-team">
+                <div class="live-match-team-name">${esc(m.team2.name || 'Team 2')}</div>
+                <div class="live-match-team-score">${m.team2.score}</div>
+                <div class="live-match-team-members">${m.team2.members} members</div>
+              </div>
+            </div>
+
+            <div class="live-match-stats-grid">
+              <div class="live-match-stat">
+                <div class="live-match-stat-label">Kills</div>
+                <div class="live-match-stat-value">${m.team1.kills} - ${m.team2.kills}</div>
+              </div>
+              <div class="live-match-stat">
+                <div class="live-match-stat-label">Deaths</div>
+                <div class="live-match-stat-value">${m.team1.deaths} - ${m.team2.deaths}</div>
+              </div>
+              <div class="live-match-stat">
+                <div class="live-match-stat-label">Players</div>
+                <div class="live-match-stat-value">${m.playersAlive} / ${m.totalPlayers}</div>
+              </div>
+            </div>
+
+            <div class="live-match-leaderboard">
+              <h3 class="lb-title">Top Players</h3>
+              <table class="lb-table">
+                <thead>
+                  <tr class="lb-header">
+                    <th class="lb-rank">#</th>
+                    <th class="lb-name">Player</th>
+                    <th class="lb-stat">K</th>
+                    <th class="lb-stat">D</th>
+                    <th class="lb-stat">S</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${leaderboardRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── Players ───────────────────────────────────────────────────────────
+  async function loadPlayers() {
+    const query = $('playerSearch').value.trim();
+    try {
+      const data = await api(`/api/players${query ? '?search=' + encodeURIComponent(query) : ''}`);
+      renderPlayers(data);
+    } catch (e) {
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>Failed to load players</p></div>';
+    }
+  }
+
+  function renderPlayers(players) {
+    if (!players || players.length === 0) {
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>No players found</p></div>';
+      return;
+    }
+    $('playersGrid').innerHTML = players.map(p => `
+      <div class="player-card">
+        <div class="player-card-header">
+          <div class="player-card-avatar">${esc(p.name.charAt(0).toUpperCase())}</div>
+          <div>
+            <div class="player-card-name">${esc(p.name)}</div>
+            <div class="player-card-elo">ELO: ${p.elo}</div>
+          </div>
+        </div>
+        <div class="player-card-stats">
+          <div class="player-card-stat">
+            <div class="player-card-stat-label">Wins</div>
+            <div class="player-card-stat-value">${p.wins}</div>
+          </div>
+          <div class="player-card-stat">
+            <div class="player-card-stat-label">Losses</div>
+            <div class="player-card-stat-value">${p.losses}</div>
+          </div>
+          <div class="player-card-stat">
+            <div class="player-card-stat-label">K/D</div>
+            <div class="player-card-stat-value">${p.kd.toFixed(2)}</div>
+          </div>
+          <div class="player-card-stat">
+            <div class="player-card-stat-label">Matches</div>
+            <div class="player-card-stat-value">${p.matches}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function debounce(fn, delay) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn(...args), delay);
+    };
   }
 
   document.readyState === 'loading'

@@ -17,12 +17,13 @@
     </div>
     <nav class="nav" id="mainNav">
       <button class="nav-link active" data-tab="dashboard">Dashboard<span class="ul"></span></button>
+      <button class="nav-link" data-tab="live">Live Matches<span class="ul"></span></button>
       <button class="nav-link" data-tab="arenas">Arenas<span class="ul"></span></button>
+      <button class="nav-link" data-tab="players">Players<span class="ul"></span></button>
       <button class="nav-link" data-tab="config">Config<span class="ul"></span></button>
       <button class="nav-link" data-tab="docs">Docs<span class="ul"></span></button>
     </nav>
     <div class="session"><span class="status-dot" id="statusDot"></span><span id="sessionText">Connecting…</span></div>
-    <button class="btn btn-ghost btn-sm" id="themeToggle" title="Toggle dark mode"><i class="ph-bold ph-moon"></i></button>
     <button class="btn btn-ink btn-sm" id="applyBtn" disabled><i class="ph-bold ph-check-circle"></i> Apply</button>
   </header>
 
@@ -44,6 +45,32 @@
         <h2 style="font-size:24px">Arenas</h2>
       </div>
       <div class="arena-grid" id="arenaGrid"></div>
+    </section>
+
+    <!-- Live Matches -->
+    <section class="tab-panel" id="tab-live">
+      <div class="page-head row-between">
+        <div>
+          <h1>Live Matches</h1>
+          <div class="sub">Real-time match data like football broadcasts <span class="hand">— auto-refreshes every 5s</span></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="liveRefreshBtn"><i class="ph-bold ph-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <div class="live-matches-grid" id="liveMatchesGrid"></div>
+    </section>
+
+    <!-- Players -->
+    <section class="tab-panel" id="tab-players">
+      <div class="page-head row-between">
+        <div>
+          <h1>Players</h1>
+          <div class="sub">Player statistics, ELO ratings, and match history <span class="hand">— search to find players</span></div>
+        </div>
+        <div class="search-box">
+          <input class="input" id="playerSearch" type="text" placeholder="Search players…">
+        </div>
+      </div>
+      <div class="players-grid" id="playersGrid"></div>
     </section>
 
     <!-- Arenas -->

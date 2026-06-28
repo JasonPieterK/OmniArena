@@ -7,7 +7,17 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.omniarena.OmniArena;
+import com.omniarena.arena.Arena;
+import com.omniarena.match.Match;
+import com.omniarena.match.MatchTeam;
+import com.omniarena.stats.PlayerStats;
 import com.omniarena.web.model.ConfigSnapshot;
+import com.omniarena.web.model.LiveMatchData;
+import com.omniarena.web.model.LivePlayerStat;
+import com.omniarena.web.model.LiveTeamStats;
+import com.omniarena.web.model.PlayerStatsView;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,8 +26,8 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class WebDashboardServer {
 
@@ -59,6 +69,8 @@ public class WebDashboardServer {
             server.createContext("/api/create-arena", this::handleCreateArena);
             server.createContext("/api/delete-arena", this::handleDeleteArena);
             server.createContext("/api/docs", this::handleDocs);
+            server.createContext("/api/live-matches", this::handleLiveMatches);
+            server.createContext("/api/players", this::handlePlayers);
             server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
             server.start();
             plugin.getLogger().info("[Web] Dashboard running on " + bindAddress + ":" + port);
@@ -154,6 +166,123 @@ public class WebDashboardServer {
         String name = payload != null && payload.has("name") ? payload.get("name").getAsString().trim() : "";
         boolean deleted = !name.isBlank() && plugin.getArenaManager().delete(name);
         send(exchange, deleted ? 200 : 404, deleted ? "{\"ok\":true}" : "{\"ok\":false}", "application/json; charset=utf-8");
+    }
+
+    private void handleLiveMatches(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) return;
+        List<LiveMatchData> matches = new ArrayList<>();
+        var matchMgr = com.omniarena.match.MatchManager.getInstance();
+        if (matchMgr != null) {
+            for (Arena arena : plugin.getArenaManager().getAll()) {
+                var matchOpt = matchMgr.getMatch(arena);
+                if (matchOpt.isEmpty()) continue;
+                matches.add(buildLiveMatchData(arena, matchOpt.get()));
+            }
+        }
+        send(exchange, 200, gson.toJson(matches), "application/json; charset=utf-8");
+    }
+
+    private void handlePlayers(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) return;
+        String search = queryParams(exchange.getRequestURI()).get("search");
+        List<PlayerStatsView> players = new ArrayList<>();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (search != null && !search.isBlank() && !online.getName().toLowerCase().contains(search.toLowerCase())) continue;
+            players.add(buildPlayerStats(online));
+        }
+        players.sort((a, b) -> Integer.compare(b.elo(), a.elo()));
+        send(exchange, 200, gson.toJson(players.stream().limit(100).collect(Collectors.toList())), "application/json; charset=utf-8");
+    }
+
+    private LiveMatchData buildLiveMatchData(Arena arena, Match match) {
+        int elapsedSeconds = match.getElapsedSeconds();
+        String timeStr = String.format("%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60);
+        String status = match.getState().toString();
+
+        List<LivePlayerStat> leaderboard = buildLeaderboard(match);
+        int aliveCount = (int) match.getAlivePlayers().stream().filter(uuid -> match.getPlayers().contains(uuid)).count();
+
+        LiveTeamStats team1 = buildTeamStats(match.getTeams().isEmpty() ? null : match.getTeams().get(0));
+        LiveTeamStats team2 = buildTeamStats(match.getTeams().size() > 1 ? match.getTeams().get(1) : null);
+
+        return new LiveMatchData(
+            arena.getName(),
+            status,
+            arena.getGameMode().getDisplayName(),
+            timeStr,
+            elapsedSeconds,
+            match.getCountdownSeconds(),
+            team1,
+            team2,
+            leaderboard,
+            aliveCount,
+            match.getPlayers().size()
+        );
+    }
+
+    private List<LivePlayerStat> buildLeaderboard(Match match) {
+        return match.getPlayers().stream()
+            .map(uuid -> {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null) return null;
+                MatchTeam team = match.getTeamMap().get(uuid);
+                return new LivePlayerStat(
+                    p.getName(),
+                    uuid.toString(),
+                    match.getKillsMap().getOrDefault(uuid, 0),
+                    match.getDeathsMap().getOrDefault(uuid, 0),
+                    match.getStreakMap().getOrDefault(uuid, 0),
+                    match.getComboMap().getOrDefault(uuid, 0),
+                    team != null ? team.getColor().toString() : "SPECTATOR",
+                    match.getAlivePlayers().contains(uuid)
+                );
+            })
+            .filter(Objects::nonNull)
+            .sorted((a, b) -> {
+                int kcmp = Integer.compare(b.kills(), a.kills());
+                return kcmp != 0 ? kcmp : Integer.compare(b.streak(), a.streak());
+            })
+            .collect(Collectors.toList());
+    }
+
+    private LiveTeamStats buildTeamStats(MatchTeam team) {
+        if (team == null) {
+            return new LiveTeamStats("", 0, 0, 0, 0);
+        }
+        return new LiveTeamStats(team.getColor().toString(), team.getScore(), team.getKills(), 0, team.getMembers().size());
+    }
+
+    private PlayerStatsView buildPlayerStats(Player player) {
+        var eloMgr = plugin.getEloManager();
+        var eloRating = eloMgr != null ? eloMgr.getRating(player.getUniqueId()) : null;
+        int elo = eloRating != null ? eloRating.getRating() : 1000;
+        int wins = eloRating != null ? eloRating.getWins() : 0;
+        int losses = eloRating != null ? eloRating.getLosses() : 0;
+        int matches = wins + losses;
+        double kd = 0.0;
+        return new PlayerStatsView(
+            player.getName(),
+            player.getUniqueId().toString(),
+            elo,
+            wins,
+            losses,
+            kd,
+            matches,
+            0,
+            0,
+            0,
+            "Now"
+        );
+    }
+
+    private String formatTime(long millis) {
+        long minutes = millis / 60000;
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return minutes + "m ago";
+        long hours = minutes / 60;
+        if (hours < 24) return hours + "h ago";
+        long days = hours / 24;
+        return days + "d ago";
     }
 
     private boolean authorize(HttpExchange exchange) throws IOException {
