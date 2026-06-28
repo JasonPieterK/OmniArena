@@ -113,6 +113,12 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 return java.util.List.of();
             }
         });
+        // /oa party mirrors /party exactly
+        com.omniarena.commands.standalone.PartyCommand partyCmd = new com.omniarena.commands.standalone.PartyCommand(plugin);
+        reg(playerCommands, "party", new SubCommand(PermissionChecker.PLAYER_USE, "/oa party [action] [args]", "Party management") {
+            @Override public void execute(CommandSender sender, String[] args) { partyCmd.onCommand(sender, null, "party", args); }
+            @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) { return partyCmd.onTabComplete(sender, null, "party", args); }
+        });
         reg(playerCommands, "bet",      new BetCommand(plugin));
         reg(playerCommands, "help",     new HelpCommand(plugin, adminCommands, playerCommands));
 

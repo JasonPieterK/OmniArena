@@ -79,6 +79,7 @@ com\omniarena\commands\admin\MatchAdminCommand.class
 com\omniarena\arena\ArenaTeamConfig.class
 com\omniarena\gamemode\GameModeKits.class
 com\omniarena\util\AsyncUtil.class
+com\omniarena\commands\CommandManager$4.class
 com\omniarena\kit\KitShareHandler.class
 com\omniarena\betting\BettingManager.class
 com\omniarena\util\ItemUtil$1.class
