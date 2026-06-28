@@ -76,6 +76,14 @@ public class MatchManager {
         if (uuid != null) godModePlayers.remove(uuid);
     }
 
+    public Match getOrCreateMatch(Arena arena) {
+        return activeMatches.computeIfAbsent(arena.getName(), k -> {
+            Match m = new Match(arena);
+            startCountdown(m);
+            return m;
+        });
+    }
+
     public boolean joinArena(Player player, Arena arena) {
         if (lockdown) {
             MessageUtil.send(player, "<red>Arenas are currently locked down by an administrator.");

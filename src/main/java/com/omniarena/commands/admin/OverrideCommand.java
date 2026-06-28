@@ -27,7 +27,7 @@ public class OverrideCommand extends SubCommand {
     private final OmniArena plugin;
 
     public OverrideCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_OVERRIDE, "/oa override <killweb|forceend|evacuate|freeze|lockdown|unlockdown|purge|god|broadcast|snapshotall|resetstats>", "Powerful admin overrides");
+        super(PermissionChecker.ADMIN_OVERRIDE, "/oa override <action> [args]", "Powerful admin overrides");
         this.plugin = plugin;
     }
 
@@ -41,6 +41,7 @@ public class OverrideCommand extends SubCommand {
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "killweb" -> killWeb(sender);
             case "forceend" -> forceEnd(sender, args);
+            case "endarena" -> forceEnd(sender, args);  // alias
             case "evacuate" -> evacuate(sender, args);
             case "freeze" -> freeze(sender, args);
             case "lockdown" -> setLockdown(sender, true);
@@ -50,6 +51,9 @@ public class OverrideCommand extends SubCommand {
             case "broadcast" -> broadcast(sender, args);
             case "snapshotall" -> snapshotAll(sender);
             case "resetstats" -> resetStats(sender, args);
+            case "forcewin" -> forceWin(sender, args);
+            case "forcestart" -> forceStart(sender, args);
+            case "startarena" -> startArena(sender, args);
             default -> showHelp(sender);
         }
     }
@@ -212,10 +216,66 @@ public class OverrideCommand extends SubCommand {
         return arena.get();
     }
 
+    private void forceWin(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            MessageUtil.send(sender, "<red>Usage: <yellow>/oa override forcewin <arena> <player|team>");
+            return;
+        }
+        Arena arena = resolveArena(sender, args, 1);
+        if (arena == null) return;
+        Optional<Match> match = MatchManager.getInstance().getMatch(arena);
+        if (match.isEmpty()) {
+            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            return;
+        }
+
+        String target = args[2];
+        Player player = Bukkit.getPlayer(target);
+        if (player != null) {
+            MatchManager.getInstance().forceWin(match.get(), player.getUniqueId());
+            MessageUtil.send(sender, "<green>Forced win for <yellow>" + player.getName() + "</yellow> in <yellow>" + arena.getName() + "</yellow>.");
+        } else {
+            MatchManager.getInstance().forceWinTeam(match.get(), target);
+            MessageUtil.send(sender, "<green>Forced win for team <yellow>" + target + "</yellow> in <yellow>" + arena.getName() + "</yellow>.");
+        }
+    }
+
+    private void forceStart(CommandSender sender, String[] args) {
+        Arena arena = resolveArena(sender, args, 1);
+        if (arena == null) return;
+        MatchManager matchManager = MatchManager.getInstance();
+        Optional<Match> matchOpt = matchManager.getActiveMatches().stream()
+                .filter(m -> m.getArena().getName().equals(arena.getName()))
+                .findFirst();
+        if (matchOpt.isEmpty()) {
+            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            return;
+        }
+        Match match = matchOpt.get();
+        match.cancelTasks();
+        matchManager.startMatch(match);
+        MessageUtil.send(sender, "<green>Force started match in <yellow>" + arena.getName() + "</yellow>.");
+    }
+
+    private void startArena(CommandSender sender, String[] args) {
+        Arena arena = resolveArena(sender, args, 1);
+        if (arena == null) return;
+        MatchManager matchManager = MatchManager.getInstance();
+        Match match = matchManager.getOrCreateMatch(arena);
+        if (match.getState() == com.omniarena.match.MatchState.RUNNING) {
+            MessageUtil.send(sender, "<red>Match already running in <yellow>" + arena.getName() + "</yellow>.");
+            return;
+        }
+        match.cancelTasks();
+        matchManager.startMatch(match);
+        MessageUtil.send(sender, "<green>Started match in <yellow>" + arena.getName() + "</yellow>.");
+    }
+
     private void showHelp(CommandSender sender) {
         MessageUtil.send(sender, "<gold>=== /oa override help ===");
         MessageUtil.send(sender, "<yellow>/oa override killweb</yellow> <gray>- kill active web sessions");
         MessageUtil.send(sender, "<yellow>/oa override forceend <arena></yellow> <gray>- force end a match");
+        MessageUtil.send(sender, "<yellow>/oa override endarena <arena></yellow> <gray>- force end a match (alias)");
         MessageUtil.send(sender, "<yellow>/oa override evacuate <arena></yellow> <gray>- kick all players out");
         MessageUtil.send(sender, "<yellow>/oa override freeze <arena></yellow> <gray>- toggle arena freeze");
         MessageUtil.send(sender, "<yellow>/oa override lockdown</yellow> <gray>- block joins server-wide");
@@ -225,17 +285,24 @@ public class OverrideCommand extends SubCommand {
         MessageUtil.send(sender, "<yellow>/oa override broadcast <message></yellow> <gray>- message active arena players");
         MessageUtil.send(sender, "<yellow>/oa override snapshotall</yellow> <gray>- snapshot every arena");
         MessageUtil.send(sender, "<yellow>/oa override resetstats <player></yellow> <gray>- wipe one player's stats");
+        MessageUtil.send(sender, "<yellow>/oa override forcewin <arena> <player|team></yellow> <gray>- force a winner");
+        MessageUtil.send(sender, "<yellow>/oa override forcestart <arena></yellow> <gray>- force start a match");
+        MessageUtil.send(sender, "<yellow>/oa override startarena <arena></yellow> <gray>- create and start new match");
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
         if (args.length == 1) {
-            return List.of("killweb", "forceend", "evacuate", "freeze", "lockdown", "unlockdown", "purge", "god", "broadcast", "snapshotall", "resetstats")
+            return List.of("killweb", "forceend", "endarena", "evacuate", "freeze", "lockdown", "unlockdown", "purge", "god", "broadcast", "snapshotall", "resetstats", "forcewin", "forcestart", "startarena")
                     .stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
-        if (args.length == 2 && List.of("forceend", "evacuate", "freeze", "purge", "god").contains(args[0].toLowerCase(Locale.ROOT))) {
+        if (args.length == 2 && List.of("forceend", "endarena", "evacuate", "freeze", "purge", "god", "forcestart", "startarena").contains(args[0].toLowerCase(Locale.ROOT))) {
             return ArenaManager.getInstance().getAll().stream().map(Arena::getName)
                     .filter(n -> n.startsWith(args[1])).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("forcewin")) {
+            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
+                    .filter(n -> n.startsWith(args[2])).toList();
         }
         return List.of();
     }
