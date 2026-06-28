@@ -205,14 +205,15 @@ public class MatchManager {
                 for (UUID uuid : match.getPlayers()) {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null && player.isOnline()) {
-                        player.sendTitle(
+                        com.omniarena.util.MessageUtil.sendTitle(player,
                             "<yellow>Waiting for players</yellow>",
-                            "<gray>" + match.getPlayerCount() + "/" + match.getArena().getMinPlayers() + "</gray>\n<gray>/leave to leave the arena</gray>",
+                            "<gray>" + match.getPlayerCount() + "/" + match.getArena().getMinPlayers() + "</gray>",
                             0, 20, 0
                         );
-                        // Lock player in place
+                        // Lock player in place during waiting
                         player.setWalkSpeed(0);
                         player.setFlySpeed(0);
+                        player.setAllowFlight(false);
                     }
                 }
                 
