@@ -72,5 +72,5 @@ public class WebSessionManager {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private record Session(long expiresAtMs) {}
+    public record Session(long expiresAtMs) {}
 }
