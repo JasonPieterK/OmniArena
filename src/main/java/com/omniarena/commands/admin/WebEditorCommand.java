@@ -35,8 +35,15 @@ public class WebEditorCommand extends SubCommand {
             return;
         }
 
-        MessageUtil.send(sender, "<gold>Web dashboard URL: <yellow>" + url);
-        MessageUtil.send(sender, "<gray>Open in browser for live match data, config, and arena management.");
+        MessageUtil.send(sender, "<gold>Web dashboard ready!");
+        // Send clickable link using Adventure text with click event
+        net.kyori.adventure.text.Component linkComponent =
+            net.kyori.adventure.text.Component.text(url)
+                .color(net.kyori.adventure.text.format.NamedTextColor.YELLOW)
+                .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
+                    net.kyori.adventure.text.Component.text("Click to open in browser")));
+        sender.sendMessage(linkComponent);
         MessageUtil.send(sender, "<dark_gray>Kill session: <yellow>/oa override killweb");
     }
 

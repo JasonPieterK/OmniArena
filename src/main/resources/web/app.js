@@ -119,8 +119,9 @@
       setStatus(true, `${S.snapshot.arenas.length} arena${S.snapshot.arenas.length === 1 ? '' : 's'}`);
       renderAll();
     } catch (e) {
-      setStatus(false, 'Error');
-      toast('Failed to load: ' + e.message, 'error');
+      const msg = e.message || 'Unknown error';
+      setStatus(false, msg.includes('401') ? 'Invalid token' : msg.includes('Cannot connect') ? 'Server offline' : 'Error');
+      toast('Failed to load: ' + msg, 'error');
     }
   }
 
