@@ -43,8 +43,11 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.queue.QueueManager queueManager;
     private com.omniarena.party.PartyManager partyManager;
     private com.omniarena.betting.BettingManager bettingManager;
+    private volatile boolean stopped = false;
 
     public static OmniArena getInstance() { return instance; }
+    public boolean isStopped() { return stopped; }
+    public void setStopped(boolean stopped) { this.stopped = stopped; }
     public ConfigManager getConfigManager() { return configManager; }
     public CommandManager getCommandManager() { return commandManager; }
     public ArenaManager getArenaManager() { return arenaManager; }

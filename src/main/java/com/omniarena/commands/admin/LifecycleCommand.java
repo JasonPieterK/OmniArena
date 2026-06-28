@@ -37,6 +37,7 @@ public class LifecycleCommand extends SubCommand {
     }
 
     private void start(CommandSender sender) {
+        plugin.setStopped(false);
         MessageUtil.send(sender, "<yellow>Starting OmniArena systems...");
         try {
             // Reload config
@@ -64,6 +65,7 @@ public class LifecycleCommand extends SubCommand {
     }
 
     private void stop(CommandSender sender) {
+        plugin.setStopped(true);
         MessageUtil.send(sender, "<yellow>Stopping OmniArena systems...");
         try {
             MatchManager mm = MatchManager.getInstance();

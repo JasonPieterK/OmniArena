@@ -157,6 +157,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
+        // Check if plugin is stopped - only allow 'start' command
+        if (plugin.isStopped()) {
+            String sub = args != null && args.length > 0 ? args[0].toLowerCase() : "";
+            if (!sub.equals("start")) {
+                MessageUtil.send(sender, "<red>OmniArena is currently stopped. Use <yellow>/oa start</yellow> to restart.");
+                return true;
+            }
+        }
+
         if (args == null || args.length == 0) {
             showHelp(sender);
             return true;
