@@ -116,7 +116,9 @@ public class MatchManager {
         player.setHealth(player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
         player.setFoodLevel(20);
         player.setSaturation(20f);
-        player.getActivePotionEffects().clear();
+        for (org.bukkit.potion.PotionEffect fx : player.getActivePotionEffects()) {
+            player.removePotionEffect(fx.getType()); // getActivePotionEffects() is a copy
+        }
         player.setWalkSpeed(0);
         player.setFlySpeed(0);
 
@@ -148,6 +150,10 @@ public class MatchManager {
                 : player.getWorld().getSpawnLocation();
         player.teleport(back);
         player.setGameMode(GameMode.SURVIVAL);
+        // Undo the lobby freeze / spectator state so leaving early doesn't leave the player stuck
+        player.setWalkSpeed(0.2f);
+        player.setFlySpeed(0.1f);
+        player.setInvisible(false);
 
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("leave-arena")
                 .replace("{arena}", arenaName));
@@ -443,7 +449,9 @@ public class MatchManager {
 
     private void cleanupMatch(Match match) {
         match.cancelTasks();
-        activeMatches.remove(match.getArena().getName());
+        // Only release the arena if this match still owns it: the delayed resetMatch()
+        // of an already-cleaned-up match must not tear down a newer match on the same arena.
+        if (!activeMatches.remove(match.getArena().getName(), match)) return;
         match.getArena().setState(ArenaState.WAITING);
         plugin.getBettingManager().onMatchCleanup(match.getArena().getName());
     }

@@ -100,14 +100,8 @@ public class EloManager {
         int oldWinnerRating = winnerRating.getRating();
         int oldLoserRating = loserRating.getRating();
 
-        // Calculate new ratings
-        int[] newRatings = EloRating.calculateRatingChange(oldWinnerRating, oldLoserRating);
-        
-        // Update ratings
-        winnerRating.setRating(newRatings[0]);
-        loserRating.setRating(newRatings[1]);
-        
-        // Update win/loss records
+        // recordWin/recordLoss compute and apply the new rating themselves from the
+        // pre-match ratings (also applying it here double-counted the change).
         winnerRating.recordWin(oldLoserRating);
         loserRating.recordLoss(oldWinnerRating);
 
