@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project name="maven-antrun-" default="main">
-  <target name="main">
-    <copy file="C:\Users\jason\Desktop\AI CODES\JASON\!!PROJECTS\!!MINECRAFT\OmniArena - Complete PVP Arena Plugin (Paper 26.2)\target/OmniArena-1.0.0.jar" tofile="C:/Users/jason/Desktop/Mega/Minecraft/Server/BETA WORLD SERVER/plugins/OmniArena.jar" overwrite="true" />
-  </target>
-</project>
