@@ -76,6 +76,15 @@ public final class OmniArena extends JavaPlugin {
         instance = this;
         long start = System.currentTimeMillis();
 
+        // ── Platform layer (Paper vs Spigot adapters) ─────────────
+        try {
+            com.omniarena.platform.Platform.init(this);
+        } catch (RuntimeException e) {
+            getLogger().severe(e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
         // ── Config ────────────────────────────────────────────────
         configManager = new ConfigManager(this);
         configManager.load();
@@ -213,7 +222,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new GameModeRulesListener(this),   this);
         pm.registerEvents(new com.omniarena.combat.CombatListener(this), this);
         pm.registerEvents(new com.omniarena.settings.SettingsMenuListener(this), this);
-        pm.registerEvents(new ChatListener(this),            this);
+        com.omniarena.platform.Platform.get().registerListeners(this); // chat (+ Paper-only elytra boost)
         pm.registerEvents(new InventoryClickListener(this),  this);
 
         // ── Sign update task ──────────────────────────────────────
@@ -320,6 +329,8 @@ public final class OmniArena extends JavaPlugin {
         try { if (moduleManager != null) moduleManager.shutdown(); } catch (Exception e) { getLogger().warning("Module shutdown failed: " + e.getMessage()); }
         try { if (webDashboardServer != null) webDashboardServer.stop(); } catch (Exception e) { getLogger().warning("Web stop failed: " + e.getMessage()); }
         try { if (integrationManager != null) integrationManager.shutdown(); } catch (Exception e) { getLogger().warning("Integration shutdown failed: " + e.getMessage()); }
+
+        try { com.omniarena.platform.Platform.shutdown(); } catch (Throwable t) { getLogger().warning("Platform shutdown failed: " + t.getMessage()); }
 
         logShutdownBanner();
     }
