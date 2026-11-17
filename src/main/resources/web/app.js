@@ -157,10 +157,10 @@
       { cls: 's-sun',    label: 'Settings',    val: cfgCount,      foot: 'config keys' },
     ];
     $('statGrid').innerHTML = cards.map(c => `
-      <div class="stat ${c.cls}">
-        <div class="eyebrow">${c.label}</div>
-        <div class="num" data-count="${c.val}">0</div>
-        <div class="foot">${c.foot}</div>
+      <div class="stat ${esc(c.cls)}">
+        <div class="eyebrow">${esc(c.label)}</div>
+        <div class="num" data-count="${esc(c.val)}">0</div>
+        <div class="foot">${esc(c.foot)}</div>
       </div>`).join('');
     $('statGrid').querySelectorAll('.num').forEach(el => countUp(el, Number(el.dataset.count) || 0));
   }
@@ -184,19 +184,19 @@
       const players = a.players ?? 0;
       const maxP = a.maxPlayers ?? '?';
       const pct = (a.maxPlayers ? Math.round(players / a.maxPlayers * 100) : 0);
-      return `<div class="${cardCls}">
+      return `<div class="${esc(cardCls)}">
         <div class="arena-card-top">
           <div>
             <div class="arena-card-name">${esc(a.name)}</div>
             <div class="arena-card-world">${esc(a.regionWorld || a.world || '—')}</div>
           </div>
-          <span class="badge ${badgeCls}">${dot}${esc(badgeLabel)}</span>
+          <span class="badge ${esc(badgeCls)}">${dot}${esc(badgeLabel)}</span>
         </div>
         <div class="arena-card-info">
-          <span><i class="ph-bold ph-users"></i> ${players}/${maxP}</span>
+          <span><i class="ph-bold ph-users"></i> ${esc(players)}/${esc(maxP)}</span>
           <span><i class="ph-bold ph-game-controller"></i> ${esc(a.gameMode || '—')}</span>
         </div>
-        <div class="pbar"><div style="width:${pct}%"></div></div>
+        <div class="pbar"><div style="width:${Number(pct) || 0}%"></div></div>
       </div>`;
     }).join('');
   }
@@ -520,10 +520,10 @@
   // ── HTML builders ──────────────────────────────────────────────────────
   function section(title, icon, open, body) { return sectionRaw(title, icon, open, null, body); }
   function sectionRaw(title, icon, open, count, body) {
-    const badge = count != null ? `<span class="section-count">${count}</span>` : '';
+    const badge = count != null ? `<span class="section-count">${esc(count)}</span>` : '';
     return `<div class="section${open ? '' : ' collapsed'}">
       <div class="section-head">
-        <span class="section-title"><i class="ph-bold ${icon}"></i> ${esc(title)} ${badge}</span>
+        <span class="section-title"><i class="ph-bold ${esc(icon)}"></i> ${esc(title)} ${badge}</span>
         <i class="ph-bold ph-caret-down chevron"></i>
       </div>
       <div class="section-body">${body}</div>
@@ -541,7 +541,7 @@
       <div class="cfg-control"><label class="toggle"><input type="checkbox" data-key="${esc(key)}"${val ? ' checked' : ''}><span class="slider"></span></label></div></div>`;
   }
   function emptyState(icon, title, sub) {
-    return `<div class="empty"><i class="ph-bold ${icon}"></i><div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink)">${esc(title)}</div><div>${esc(sub)}</div></div>`;
+    return `<div class="empty"><i class="ph-bold ${esc(icon)}"></i><div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink)">${esc(title)}</div><div>${esc(sub)}</div></div>`;
   }
 
   function wireSections(root) {
@@ -613,13 +613,13 @@
       return;
     }
     $('liveMatchesGrid').innerHTML = matches.map(m => {
-      const leaderboardRows = m.leaderboard.slice(0, 10).map((p, idx) => `
+      const leaderboardRows = (m.leaderboard || []).slice(0, 10).map((p, idx) => `
         <tr class="lb-row">
           <td class="lb-rank">${idx + 1}</td>
           <td class="lb-name">${esc(p.name)}</td>
-          <td class="lb-stat">${p.kills}</td>
-          <td class="lb-stat">${p.deaths}</td>
-          <td class="lb-stat">${p.streak}</td>
+          <td class="lb-stat">${esc(p.kills)}</td>
+          <td class="lb-stat">${esc(p.deaths)}</td>
+          <td class="lb-stat">${esc(p.streak)}</td>
         </tr>
       `).join('');
       return `
@@ -639,29 +639,29 @@
             <div class="live-match-scoreboard">
               <div class="live-match-team">
                 <div class="live-match-team-name">${esc(m.team1.name || 'Team 1')}</div>
-                <div class="live-match-team-score">${m.team1.score}</div>
-                <div class="live-match-team-members">${m.team1.members} members</div>
+                <div class="live-match-team-score">${esc(m.team1.score)}</div>
+                <div class="live-match-team-members">${esc(m.team1.members)} members</div>
               </div>
               <div class="live-match-divider">VS</div>
               <div class="live-match-team">
                 <div class="live-match-team-name">${esc(m.team2.name || 'Team 2')}</div>
-                <div class="live-match-team-score">${m.team2.score}</div>
-                <div class="live-match-team-members">${m.team2.members} members</div>
+                <div class="live-match-team-score">${esc(m.team2.score)}</div>
+                <div class="live-match-team-members">${esc(m.team2.members)} members</div>
               </div>
             </div>
 
             <div class="live-match-stats-grid">
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Kills</div>
-                <div class="live-match-stat-value">${m.team1.kills} - ${m.team2.kills}</div>
+                <div class="live-match-stat-value">${esc(m.team1.kills)} - ${esc(m.team2.kills)}</div>
               </div>
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Deaths</div>
-                <div class="live-match-stat-value">${m.team1.deaths} - ${m.team2.deaths}</div>
+                <div class="live-match-stat-value">${esc(m.team1.deaths)} - ${esc(m.team2.deaths)}</div>
               </div>
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Players</div>
-                <div class="live-match-stat-value">${m.playersAlive} / ${m.totalPlayers}</div>
+                <div class="live-match-stat-value">${esc(m.playersAlive)} / ${esc(m.totalPlayers)}</div>
               </div>
             </div>
 
@@ -707,28 +707,28 @@
     $('playersGrid').innerHTML = players.map(p => `
       <div class="player-card">
         <div class="player-card-header">
-          <div class="player-card-avatar">${esc(p.name.charAt(0).toUpperCase())}</div>
+          <div class="player-card-avatar">${esc(String(p.name ?? '?').charAt(0).toUpperCase())}</div>
           <div>
             <div class="player-card-name">${esc(p.name)}</div>
-            <div class="player-card-elo">ELO: ${p.elo}</div>
+            <div class="player-card-elo">ELO: ${esc(p.elo)}</div>
           </div>
         </div>
         <div class="player-card-stats">
           <div class="player-card-stat">
             <div class="player-card-stat-label">Wins</div>
-            <div class="player-card-stat-value">${p.wins}</div>
+            <div class="player-card-stat-value">${esc(p.wins)}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">Losses</div>
-            <div class="player-card-stat-value">${p.losses}</div>
+            <div class="player-card-stat-value">${esc(p.losses)}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">K/D</div>
-            <div class="player-card-stat-value">${p.kd.toFixed(2)}</div>
+            <div class="player-card-stat-value">${esc(Number(p.kd).toFixed(2))}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">Matches</div>
-            <div class="player-card-stat-value">${p.matches}</div>
+            <div class="player-card-stat-value">${esc(p.matches)}</div>
           </div>
         </div>
       </div>

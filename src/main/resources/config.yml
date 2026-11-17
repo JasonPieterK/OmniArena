@@ -205,7 +205,10 @@ performance:
 
 web:
   enabled: true
-  bind-address: 0.0.0.0
+  # Interface the dashboard listens on. 127.0.0.1 = local only (safe default).
+  # Set to 0.0.0.0 for remote access, but put it behind a reverse proxy with HTTPS
+  # (the session token is sent in the URL/query string).
+  bind-address: 127.0.0.1
   port: 8123
   public-url: ""  # optional base URL for generated editor links
   session-minutes: 30

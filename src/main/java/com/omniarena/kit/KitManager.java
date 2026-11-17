@@ -138,26 +138,26 @@ public class KitManager {
     }
 
     public void setAdminKitPublic(String name, boolean pub) {
-        getAdminKit(name).ifPresent(k -> { k.setPublic(pub); saveAdminKit(k); });
+        getAdminKit(name).ifPresent(k -> { k.setPublic(pub); saveAdminKit(k, false); });
     }
 
     public void setAdminKitIcon(String name, Material material) {
         getAdminKit(name).ifPresent(k -> {
             k.setIcon(new ItemStack(material));
-            saveAdminKit(k);
+            saveAdminKit(k, false);
         });
     }
 
     public void setAdminKitDescription(String name, String desc) {
-        getAdminKit(name).ifPresent(k -> { k.setDescription(desc); saveAdminKit(k); });
+        getAdminKit(name).ifPresent(k -> { k.setDescription(desc); saveAdminKit(k, false); });
     }
 
     public void setAdminKitCooldown(String name, int seconds) {
-        getAdminKit(name).ifPresent(k -> { k.setCooldownSeconds(seconds); saveAdminKit(k); });
+        getAdminKit(name).ifPresent(k -> { k.setCooldownSeconds(seconds); saveAdminKit(k, false); });
     }
 
     public void setAdminKitPermission(String name, String node) {
-        getAdminKit(name).ifPresent(k -> { k.setRequiredPermission(node); saveAdminKit(k); });
+        getAdminKit(name).ifPresent(k -> { k.setRequiredPermission(node); saveAdminKit(k, false); });
     }
 
     // ── Player Kit CRUD ───────────────────────────────────────────
@@ -221,9 +221,17 @@ public class KitManager {
 
     // ── Save ─────────────────────────────────────────────────────
 
-    private void saveAdminKit(AdminKit kit) {
+    private void saveAdminKit(AdminKit kit) { saveAdminKit(kit, true); }
+
+    /**
+     * @param writeItems false = metadata-only update that keeps the existing file's
+     *                   items/armor/effects sections (structured defaults would otherwise
+     *                   be rewritten in legacy format, silently dropping their effects).
+     */
+    private void saveAdminKit(AdminKit kit, boolean writeItems) {
         File file = new File(adminKitsDir, kit.getName().toLowerCase() + ".yml");
-        FileConfiguration cfg = new YamlConfiguration();
+        if (!writeItems && !file.exists()) writeItems = true;
+        FileConfiguration cfg = writeItems ? new YamlConfiguration() : YamlConfiguration.loadConfiguration(file);
         cfg.set("name", kit.getName());
         cfg.set("public", kit.isPublic());
         cfg.set("description", kit.getDescription());
@@ -231,8 +239,10 @@ public class KitManager {
         cfg.set("cooldown", kit.getCooldownSeconds());
         cfg.set("permission", kit.getRequiredPermission());
         cfg.set("arena", kit.getArenaRestriction());
-        cfg.set("contents", kit.getContents() != null ? List.of(kit.getContents()) : List.of());
-        cfg.set("armor", kit.getArmor() != null ? List.of(kit.getArmor()) : List.of());
+        if (!writeItems) { YamlUtil.save(cfg, file, plugin.getLogger()); return; }
+        // Arrays.asList: List.of() throws NPE on the null (empty) slots
+        cfg.set("contents", kit.getContents() != null ? Arrays.asList(kit.getContents()) : List.of());
+        cfg.set("armor", kit.getArmor() != null ? Arrays.asList(kit.getArmor()) : List.of());
         YamlUtil.save(cfg, file, plugin.getLogger());
     }
 
@@ -241,10 +251,10 @@ public class KitManager {
         File file = new File(playerKitsDir, playerId + ".yml");
         FileConfiguration cfg = new YamlConfiguration();
         for (PlayerKit kit : kits) {
-            String path = "kits." + kit.getName().toLowerCase();
+            String path = "kits." + kit.getName().toLowerCase().replace('.', '_');
             cfg.set(path + ".name", kit.getName());
-            cfg.set(path + ".contents", kit.getContents() != null ? List.of(kit.getContents()) : List.of());
-            cfg.set(path + ".armor", kit.getArmor() != null ? List.of(kit.getArmor()) : List.of());
+            cfg.set(path + ".contents", kit.getContents() != null ? Arrays.asList(kit.getContents()) : List.of());
+            cfg.set(path + ".armor", kit.getArmor() != null ? Arrays.asList(kit.getArmor()) : List.of());
         }
         YamlUtil.save(cfg, file, plugin.getLogger());
     }
@@ -256,7 +266,7 @@ public class KitManager {
     }
 
     private PlayerKit loadPlayerKitSection(FileConfiguration cfg, String path, UUID id, String name) {
-        PlayerKit kit = new PlayerKit(name, id);
+        PlayerKit kit = new PlayerKit(cfg.getString(path + ".name", name), id);
         List<?> contents = cfg.getList(path + ".contents");
         if (contents != null) {
             kit.setContents(contents.stream()
@@ -287,6 +297,7 @@ public class KitManager {
             ItemStack item = items[i];
             if (item == null) { result[i] = null; continue; }
             if (!ItemUtil.isSafe(item)) { result[i] = null; continue; }
+            item = item.clone(); // never mutate the source kit / live inventory item
             if (capEnabled) ItemUtil.capEnchants(item, maxLevel);
             result[i] = item;
         }
