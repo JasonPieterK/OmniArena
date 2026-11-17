@@ -56,7 +56,11 @@ public class CombatManager {
     // ── Combat tagging ────────────────────────────────────────────────────────
 
     public void tag(Player player, Player attacker) {
-        long dur = cfg().getConfig().getInt("pvp.combat.tag-duration", 15) * 1000L;
+        tag(player, attacker, cfg().getConfig().getInt("pvp.combat.tag-duration", 15));
+    }
+
+    public void tag(Player player, Player attacker, int seconds) {
+        long dur = Math.max(1, seconds) * 1000L;
         boolean wasTagged = isTagged(player);
         combatTags.put(player.getUniqueId(), System.currentTimeMillis() + dur);
         if (attacker != null) lastAttacker.put(player.getUniqueId(), attacker.getUniqueId());

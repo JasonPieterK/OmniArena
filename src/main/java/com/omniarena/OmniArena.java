@@ -193,6 +193,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new BlockBreakListener(this),      this);
         pm.registerEvents(new BlockPlaceListener(this),      this);
         pm.registerEvents(new FoodLevelChangeListener(this), this);
+        pm.registerEvents(new PlayerDropItemListener(this), this);
         pm.registerEvents(new PlayerInteractListener(this),  this);
         pm.registerEvents(new PlayerMoveListener(this),      this);
         pm.registerEvents(new PlayerTeleportListener(this),  this);

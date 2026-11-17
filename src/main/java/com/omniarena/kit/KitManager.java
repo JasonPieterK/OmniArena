@@ -170,6 +170,34 @@ public class KitManager {
         return false;
     }
 
+    public enum RenameResult { OK, NOT_FOUND, INVALID_NAME, EXISTS, FAILED }
+
+    public RenameResult renameAdminKit(String oldName, String newName) {
+        if (!isValidName(newName)) return RenameResult.INVALID_NAME;
+        AdminKit kit = adminKits.get(oldName.toLowerCase());
+        if (kit == null) return RenameResult.NOT_FOUND;
+        boolean sameKey = oldName.equalsIgnoreCase(newName);
+        if (!sameKey && (adminKits.containsKey(newName.toLowerCase())
+                || new File(adminKitsDir, fileName(newName)).exists())) return RenameResult.EXISTS;
+        File oldFile = new File(adminKitsDir, fileName(kit.getName()));
+        File newFile = new File(adminKitsDir, fileName(newName));
+        if (oldFile.exists() && !oldFile.equals(newFile)) {
+            try {
+                java.nio.file.Files.move(oldFile.toPath(), newFile.toPath());
+            } catch (java.io.IOException e) {
+                plugin.getLogger().warning("Failed to rename admin kit file: " + e.getMessage());
+                return RenameResult.FAILED;
+            }
+        }
+        adminKits.remove(kit.getName().toLowerCase());
+        boolean displayFollowsName = kit.getDisplayName() == null || kit.getDisplayName().equals(kit.getName());
+        kit.setName(newName);
+        if (displayFollowsName) kit.setDisplayName(newName);
+        adminKits.put(newName.toLowerCase(), kit);
+        saveAdminKit(kit, false); // metadata only: keeps items/armor/effects in the moved file
+        return RenameResult.OK;
+    }
+
     public Optional<AdminKit> getAdminKit(String name) {
         return Optional.ofNullable(adminKits.get(name.toLowerCase()));
     }

@@ -77,6 +77,15 @@ public class InventoryClickListener implements Listener {
         Material type = clicked.getType();
         if (type == Material.BLACK_STAINED_GLASS_PANE || type == Material.CYAN_STAINED_GLASS_PANE) return;
 
+        if (slot == KitGUI.PREV_SLOT && type == Material.ARROW) {
+            KitGUI.reopenCombinedKitMenu(player, holder.getPage() - 1);
+            return;
+        }
+        if (slot == KitGUI.NEXT_SLOT && type == Material.ARROW) {
+            KitGUI.reopenCombinedKitMenu(player, holder.getPage() + 1);
+            return;
+        }
+
         if (slot == 45 || slot == 49) {
             player.closeInventory();
             MessageUtil.send(player, "<yellow>Use <white>/kit create <name></white> to save your current inventory.");

@@ -39,6 +39,30 @@ public class KitGUI {
      * kitNames list is slot-indexed (null = filler). "admin:" prefix = admin kit.
      */
     public static void openCombinedKitMenu(Player player, List<PlayerKit> playerKits, List<AdminKit> adminKits) {
+        openCombinedKitMenu(player, playerKits, adminKits, 0);
+    }
+
+    /** Re-opens the combined menu at the given page using the player's currently visible kits. */
+    public static void reopenCombinedKitMenu(Player player, int page) {
+        List<PlayerKit> playerKits = KitManager.getInstance().getPlayerKits(player.getUniqueId());
+        List<AdminKit> adminKits = KitManager.getInstance().getAllAdminKits().stream()
+                .filter(k -> k.isPublic() || player.hasPermission("omniarena.admin")).toList();
+        openCombinedKitMenu(player, playerKits, adminKits, page);
+    }
+
+    public static final int PREV_SLOT = 47;
+    public static final int NEXT_SLOT = 51;
+
+    public static void openCombinedKitMenu(Player player, List<PlayerKit> allPlayerKits, List<AdminKit> allAdminKits, int page) {
+        final int perPage = 20;
+        int totalPages = Math.max(1, Math.max(
+                (allPlayerKits.size() + perPage - 1) / perPage,
+                (allAdminKits.size() + perPage - 1) / perPage));
+        page = Math.max(0, Math.min(page, totalPages - 1));
+        List<PlayerKit> playerKits = allPlayerKits.subList(Math.min(page * perPage, allPlayerKits.size()),
+                Math.min((page + 1) * perPage, allPlayerKits.size()));
+        List<AdminKit> adminKits = allAdminKits.subList(Math.min(page * perPage, allAdminKits.size()),
+                Math.min((page + 1) * perPage, allAdminKits.size()));
         // Build slot-indexed name list (size 54, null = not a kit)
         List<String> slotNames = new java.util.ArrayList<>(java.util.Collections.nCopies(54, null));
 
@@ -52,7 +76,7 @@ public class KitGUI {
         for (int i = 0; i < Math.min(adminKits.size(), adminSlots.length); i++)
             slotNames.set(adminSlots[i], "admin:" + adminKits.get(i).getName());
 
-        KitMenuHolder holder = new KitMenuHolder(KitMenuHolder.MenuType.PLAYER, slotNames);
+        KitMenuHolder holder = new KitMenuHolder(KitMenuHolder.MenuType.PLAYER, slotNames, page, totalPages);
         Inventory inv = createMenu(holder, 54, ColorUtil.parse("<gold><bold>My Kits</bold> <gray>│ <aqua>Preset Kits</aqua></gold>"));
 
         // Place player kits
@@ -86,6 +110,11 @@ public class KitGUI {
                 "<gray>/kit delete <name> — remove kit",
                 "<gray>/kit rename <old> <new> — rename",
                 "<gray>/kit share <name> <player> — share"));
+
+        if (page > 0) inv.setItem(PREV_SLOT, ItemUtil.buildGuiItem(Material.ARROW,
+                "<yellow>Previous page", "<gray>Page " + page + "/" + totalPages));
+        if (page < totalPages - 1) inv.setItem(NEXT_SLOT, ItemUtil.buildGuiItem(Material.ARROW,
+                "<yellow>Next page", "<gray>Page " + (page + 2) + "/" + totalPages));
 
         fillEmpty(inv, Material.BLACK_STAINED_GLASS_PANE);
         player.openInventory(inv);

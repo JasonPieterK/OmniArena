@@ -64,9 +64,16 @@ public class PvpCommandHandler {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         Player target = args.length >= 1 ? Bukkit.getPlayerExact(args[0]) : (sender instanceof Player p ? p : null);
         if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
-        cm().tag(target, null);
-        MessageUtil.send(sender, "<green>Combat-tagged " + target.getName() + " for "
-                + cfg().getConfig().getInt("pvp.combat.tag-duration", 15) + "s.");
+        int seconds = cfg().getConfig().getInt("pvp.combat.tag-duration", 15);
+        if (args.length >= 2) {
+            try { seconds = Integer.parseInt(args[1]); } catch (NumberFormatException e) { seconds = -1; }
+            if (seconds < 1 || seconds > 3600) {
+                MessageUtil.send(sender, "<red>Invalid duration '" + args[1] + "'. Use a whole number of seconds from 1 to 3600, e.g. <white>/oa pvptag " + target.getName() + " 30");
+                return;
+            }
+        }
+        cm().tag(target, null, seconds);
+        MessageUtil.send(sender, "<green>Combat-tagged " + target.getName() + " for " + seconds + "s.");
     }
 
     // /oa untag [player]
