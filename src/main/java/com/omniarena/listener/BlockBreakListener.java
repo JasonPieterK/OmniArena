@@ -14,7 +14,9 @@ import java.util.Optional;
 
 public class BlockBreakListener implements Listener {
 
-    public BlockBreakListener(OmniArena plugin) {}
+    private final OmniArena plugin;
+
+    public BlockBreakListener(OmniArena plugin) { this.plugin = plugin; }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {

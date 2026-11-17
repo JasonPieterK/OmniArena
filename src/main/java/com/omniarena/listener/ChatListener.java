@@ -22,7 +22,9 @@ import java.util.UUID;
 
 public class ChatListener implements Listener {
 
-    public ChatListener(OmniArena plugin) {}
+    private final OmniArena plugin;
+
+    public ChatListener(OmniArena plugin) { this.plugin = plugin; }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {

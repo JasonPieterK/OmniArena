@@ -14,7 +14,9 @@ import java.util.Optional;
 
 public class BlockPlaceListener implements Listener {
 
-    public BlockPlaceListener(OmniArena plugin) {}
+    private final OmniArena plugin;
+
+    public BlockPlaceListener(OmniArena plugin) { this.plugin = plugin; }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {

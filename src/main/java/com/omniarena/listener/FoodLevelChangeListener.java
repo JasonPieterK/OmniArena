@@ -13,7 +13,9 @@ import java.util.Optional;
 
 public class FoodLevelChangeListener implements Listener {
 
-    public FoodLevelChangeListener(OmniArena plugin) {}
+    private final OmniArena plugin;
+
+    public FoodLevelChangeListener(OmniArena plugin) { this.plugin = plugin; }
 
     @EventHandler
     public void onFoodChange(FoodLevelChangeEvent event) {

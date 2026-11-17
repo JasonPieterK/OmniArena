@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class RegenAnimationTypeTest {
 
     @Test
-    void hasFifteenRegenStyles() {
-        assertEquals(15, RegenAnimationType.values().length);
+    void hasTwentyRegenStyles() {
+        assertEquals(20, RegenAnimationType.values().length);
     }
 }
