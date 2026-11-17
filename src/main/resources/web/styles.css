@@ -382,7 +382,12 @@ select.input{cursor:pointer;appearance:none;
   .arena-layout{grid-template-columns:1fr;}
   .docs-layout{grid-template-columns:1fr;}
   .docs-toc{position:static;flex-direction:row;flex-wrap:wrap;}
-  .nav{display:none;}
+  .topbar{flex-wrap:wrap;gap:10px;}
+  .nav{order:5;flex:1 0 100%;overflow-x:auto;gap:16px;padding-bottom:6px;-webkit-overflow-scrolling:touch;}
+  .nav-link{white-space:nowrap;}
+  .wrap{padding:20px 16px 96px;}
+  .cfg-row{flex-wrap:wrap;}
+  .cfg-search .input{max-width:none;flex:1 1 100%;}
   .live-matches-grid{grid-template-columns:1fr;}
   .live-match-scoreboard{flex-direction:column;gap:8px;}
   .live-match-divider{transform:rotate(90deg);}
@@ -394,3 +399,12 @@ select.input{cursor:pointer;appearance:none;
   .lb-header th{padding:6px 4px;}
   .lb-row td{padding:6px 4px;}
 }
+
+@media (max-width:520px){
+  .session #sessionText{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .brand-name{font-size:18px;}
+}
+/* icon font failed to load (offline / blocked CDN): hide empty glyph boxes, buttons keep their text */
+.no-icons i.ph-bold{display:none;}
+.no-icons .totop::after{content:'\2191';font-weight:800;}
+.btn-icon{padding:8px 11px;}

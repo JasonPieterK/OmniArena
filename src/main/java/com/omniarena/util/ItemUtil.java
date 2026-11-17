@@ -66,8 +66,19 @@ public final class ItemUtil {
         return switch (item.getType()) {
             case BEDROCK, COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK,
                  BARRIER, SPAWNER, STRUCTURE_BLOCK -> false;
-            default -> true;
+            default -> !isConfigBanned(item.getType());
         };
+    }
+
+    /** Extra bans from kits.power-cap.banned-items (only applied while the power cap is enabled). */
+    private static boolean isConfigBanned(Material type) {
+        var cm = com.omniarena.config.ConfigManager.getInstance();
+        if (cm == null || cm.getConfig() == null) return false;
+        if (!cm.getConfig().getBoolean("kits.power-cap.enabled", true)) return false;
+        for (String s : cm.getConfig().getStringList("kits.power-cap.banned-items")) {
+            if (s != null && s.trim().equalsIgnoreCase(type.name())) return true;
+        }
+        return false;
     }
 
     public static int getMaxEnchantLevel(ItemStack item) {

@@ -63,9 +63,13 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
 
         switch (sub) {
             case "create" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit create <name>"); return true; }
+                if (!ConfigManager.getInstance().getConfig().getBoolean("kits.player-kits-enabled", true)) {
+                    MessageUtil.send(player, "<red>Personal kits are disabled on this server.");
+                    return true;
+                }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit create <name>")); return true; }
                 if (!KitManager.isValidName(subArgs[0])) {
-                    MessageUtil.send(player, "<red>Kit names may only use letters, numbers, '_', '-' and '.' (max 32).");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", subArgs[0]));
                     return true;
                 }
                 int limit = PermissionChecker.getKitSlotLimit(player);
@@ -99,7 +103,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
             }
             case "delete" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit delete <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit delete <name>")); return true; }
                 if (!km.deletePlayerKit(player.getUniqueId(), subArgs[0])) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
                 } else {
@@ -107,7 +111,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
             }
             case "equip" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit equip <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit equip <name>")); return true; }
                 // First check player kits, then check public admin kits
                 Optional<PlayerKit> kitOpt = km.getPlayerKit(player.getUniqueId(), subArgs[0]);
                 if (kitOpt.isPresent()) {
@@ -126,14 +130,14 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                         }
                         return true;
                     } else {
-                        MessageUtil.send(player, "<red>That kit is not public.");
+                        MessageUtil.send(player, "<red>Kit <yellow>" + subArgs[0] + "</yellow> is not public, so you can't preview/equip it. <gray>Ask an admin to publish it with <white>/oa kit admin setpublic " + subArgs[0] + "</white>.");
                         return true;
                     }
                 }
                 MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
             }
             case "share" -> {
-                if (subArgs.length < 2) { MessageUtil.send(player, "<red>Usage: /kit share <name> <player>"); return true; }
+                if (subArgs.length < 2) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit share <name> <player>")); return true; }
                 Player target = Bukkit.getPlayer(subArgs[1]);
                 if (target == null) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", subArgs[1]));
@@ -142,13 +146,13 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 plugin.getKitShareHandler().sendShare(player, target, subArgs[0]);
             }
             case "accept" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit accept <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit accept <name>")); return true; }
                 plugin.getKitShareHandler().acceptShare(player, subArgs[0]);
             }
             case "rename" -> {
-                if (subArgs.length < 2) { MessageUtil.send(player, "<red>Usage: /kit rename <old> <new>"); return true; }
+                if (subArgs.length < 2) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit rename <old> <new>")); return true; }
                 if (!KitManager.isValidName(subArgs[1])) {
-                    MessageUtil.send(player, "<red>Kit names may only use letters, numbers, '_', '-' and '.' (max 32).");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", subArgs[1]));
                     return true;
                 }
                 if (km.getPlayerKit(player.getUniqueId(), subArgs[0]).isEmpty()) {
@@ -161,7 +165,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
             }
             case "preview" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit preview <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit preview <name>")); return true; }
                 Optional<PlayerKit> kitOpt = km.getPlayerKit(player.getUniqueId(), subArgs[0]);
                 if (kitOpt.isPresent()) {
                     KitGUI.openKitPreview(player, kitOpt.get());
@@ -175,7 +179,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
                 KitGUI.openKitPreview(player, previewAdmin.get());
             }
-            default -> MessageUtil.send(player, "<red>Unknown kit command. Use <yellow>/kit</yellow> to open kit menu.");
+            default -> MessageUtil.send(player, "<red>Unknown kit action <yellow>" + sub + "</yellow>. <gray>Valid: <white>create, list, delete, equip, share, accept, rename, preview</white>. Open the menu with <white>/kit</white>; see <white>/kit help</white>.");
         }
         return true;
     }

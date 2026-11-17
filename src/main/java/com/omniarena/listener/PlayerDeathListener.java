@@ -94,7 +94,9 @@ public class PlayerDeathListener implements Listener {
                     .replace("{killer_kills}", String.valueOf(match.getKills(killer.getUniqueId())))
                     .replace("{victim}", victim.getName())
                     .replace("{weapon}", weapon);
-            mm.broadcastArena(match, killMsg);
+            if (ConfigManager.getInstance().getConfig().getBoolean("visual.kill-announcements", true)) {
+                mm.broadcastArena(match, killMsg);
+            }
 
             // Revenge
             if (match.isRevenge(killer.getUniqueId(), victim.getUniqueId())) {

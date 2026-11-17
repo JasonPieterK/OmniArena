@@ -366,7 +366,7 @@ public class MatchManager {
         if (spec != null) player.teleport(spec);
 
         player.setGameMode(GameMode.SPECTATOR);
-        player.setInvisible(true);
+        player.setInvisible(ConfigManager.getInstance().getConfig().getBoolean("visual.spectator-invisibility", true));
         if (!tabTakeover()) {
             plugin.getVisual().getScoreboardManager().createBoard(player, match);
             plugin.getVisual().getBossBarManager().addPlayer(player, match);
@@ -452,7 +452,9 @@ public class MatchManager {
                 broadcastArena(match, ConfigManager.getInstance().getMessage("match-starting")
                         .replace("{seconds}", String.valueOf(secondsLeft[0])));
                 plugin.getVisual().getTitleManager().sendCountdownTitle(match, secondsLeft[0]);
-                plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
+                if (ConfigManager.getInstance().getConfig().getBoolean("visual.countdown-sounds", true)) {
+                    plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
+                }
             }
             secondsLeft[0]--;
             match.setCountdownSeconds(Math.max(0, secondsLeft[0]));
@@ -601,7 +603,9 @@ public class MatchManager {
 
         plugin.getVisual().getTitleManager().sendMatchEndTitle(match, result);
         plugin.getVisual().getSoundManager().playMatchEnd(match, result);
-        plugin.getVisual().getEffectManager().playVictoryFireworks(match, result);
+        if (ConfigManager.getInstance().getConfig().getBoolean("visual.victory-fireworks", true)) {
+            plugin.getVisual().getEffectManager().playVictoryFireworks(match, result);
+        }
         plugin.getVisual().getBossBarManager().removeAll(match);
 
         endCommandHandler.execute(match, result);
