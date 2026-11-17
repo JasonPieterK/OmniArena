@@ -29,6 +29,8 @@ public class MatchManager {
     private final Set<String> frozenArenas = ConcurrentHashMap.newKeySet();
     private final Set<UUID> godModePlayers = ConcurrentHashMap.newKeySet();
     private volatile boolean lockdown = false;
+    /** Players mid plugin-initiated teleport; PlayerTeleportListener ignores them. */
+    private final Set<UUID> internalTeleports = ConcurrentHashMap.newKeySet();
 
     public MatchManager(OmniArena plugin) {
         this.plugin = plugin;
@@ -47,6 +49,16 @@ public class MatchManager {
     }
 
     // ── Join / Leave ──────────────────────────────────────────────
+
+    public boolean isInternalTeleport(UUID uuid) { return internalTeleports.contains(uuid); }
+
+    /** Teleports a player on behalf of the plugin without triggering out-of-arena handling. */
+    public void markInternalTeleport(Player player, Location to) {
+        if (to == null) return;
+        internalTeleports.add(player.getUniqueId());
+        try { player.teleport(to); }
+        finally { internalTeleports.remove(player.getUniqueId()); }
+    }
 
     public void setLockdown(boolean lockdown) { this.lockdown = lockdown; }
     public boolean isLockdown() { return lockdown; }
@@ -107,7 +119,7 @@ public class MatchManager {
         playerArena.put(player.getUniqueId(), arena.getName());
 
         Location spawn = arena.getLobbySpawn();
-        if (spawn != null) player.teleport(spawn);
+        if (spawn != null) markInternalTeleport(player, spawn);
 
         player.setGameMode(GameMode.ADVENTURE);
         player.getInventory().clear();
@@ -316,7 +328,7 @@ public class MatchManager {
     private void spawnPlayer(Player player, Match match, Location spawn) {
         Arena arena = match.getArena();
         if (spawn == null) spawn = arena.getRandomBattleSpawn();
-        if (spawn != null) player.teleport(spawn);
+        if (spawn != null) markInternalTeleport(player, spawn);
 
         player.setGameMode(GameMode.SURVIVAL);
         player.setHealth(player.getAttribute(

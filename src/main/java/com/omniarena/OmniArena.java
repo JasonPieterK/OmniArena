@@ -191,6 +191,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new FoodLevelChangeListener(this), this);
         pm.registerEvents(new PlayerInteractListener(this),  this);
         pm.registerEvents(new PlayerMoveListener(this),      this);
+        pm.registerEvents(new PlayerTeleportListener(this),  this);
         pm.registerEvents(new GameModeRulesListener(this),   this);
         pm.registerEvents(new com.omniarena.combat.CombatListener(this), this);
         pm.registerEvents(new com.omniarena.settings.SettingsMenuListener(this), this);
@@ -289,6 +290,7 @@ public final class OmniArena extends JavaPlugin {
         try { if (visual != null) visual.shutdown(); } catch (Exception e) { getLogger().warning("Visual shutdown failed: " + e.getMessage()); }
         try { if (moduleManager != null) moduleManager.shutdown(); } catch (Exception e) { getLogger().warning("Module shutdown failed: " + e.getMessage()); }
         try { if (webDashboardServer != null) webDashboardServer.stop(); } catch (Exception e) { getLogger().warning("Web stop failed: " + e.getMessage()); }
+        try { if (integrationManager != null) integrationManager.shutdown(); } catch (Exception e) { getLogger().warning("Integration shutdown failed: " + e.getMessage()); }
 
         logShutdownBanner();
     }

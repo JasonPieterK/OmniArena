@@ -35,6 +35,7 @@ public class ConfigManager {
         messagesFile = new File(plugin.getDataFolder(), "messages.yml");
         if (!messagesFile.exists()) plugin.saveResource("messages.yml", false);
         messages = YamlConfiguration.loadConfiguration(messagesFile);
+        applyMessageDefaults();
 
         configFile = new File(plugin.getDataFolder(), "config.yml");
     }
@@ -43,6 +44,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         config = plugin.getConfig();
         messages = YamlConfiguration.loadConfiguration(messagesFile);
+        applyMessageDefaults();
         plugin.getLogger().info("Configuration reloaded.");
     }
 
@@ -102,6 +104,7 @@ public class ConfigManager {
             try {
                 messages.save(messagesFile);
                 messages = YamlConfiguration.loadConfiguration(messagesFile);
+        applyMessageDefaults();
             } catch (Exception ex) {
                 plugin.getLogger().severe("Failed to save messages: " + ex.getMessage());
             }
@@ -116,5 +119,14 @@ public class ConfigManager {
                 plugin.getLogger().severe("Failed to save config: " + ex.getMessage());
             }
         }
+    }
+
+    /** Falls back to the jar's bundled messages.yml for keys missing on disk (e.g. after upgrades). */
+    private void applyMessageDefaults() {
+        try (java.io.InputStream in = plugin.getResource("messages.yml")) {
+            if (in == null) return;
+            messages.setDefaults(YamlConfiguration.loadConfiguration(
+                    new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.io.IOException ignored) { }
     }
 }
