@@ -316,7 +316,7 @@ public class WebDashboardServer {
 
     private PlayerStatsView buildPlayerStats(Player player) {
         var eloMgr = plugin.getEloManager();
-        var eloRating = eloMgr != null ? eloMgr.getRating(player.getUniqueId()) : null;
+        var eloRating = eloMgr != null ? eloMgr.peekRating(player.getUniqueId()) : null;
         int elo = eloRating != null ? eloRating.getRating() : 1000;
         int wins = eloRating != null ? eloRating.getWins() : 0;
         int losses = eloRating != null ? eloRating.getLosses() : 0;
