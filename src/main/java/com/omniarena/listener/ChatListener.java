@@ -26,6 +26,7 @@ public class ChatListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
+        if (plugin.isStopped()) return;
         Player player = event.getPlayer();
         MatchManager mm = MatchManager.getInstance();
 

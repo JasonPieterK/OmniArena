@@ -142,6 +142,7 @@ public class TournamentManager {
 
         for (Tournament t : tournaments.values()) {
             if (t.getState() != TournamentState.IN_PROGRESS) continue;
+            if (result.getArenaName() != null && !result.getArenaName().equalsIgnoreCase(t.getArenaName())) continue;
             TournamentBracket bracket = t.getBracket();
 
             Optional<TournamentMatch> matchOpt = bracket.getCurrentRound().stream()
@@ -181,6 +182,13 @@ public class TournamentManager {
         Arena arena = plugin.getArenaManager().get(t.getArenaName()).orElse(null);
         if (arena == null) return;
 
+        // One arena = one match at a time: if a launched match is still running, wait.
+        // (Re-launching every pending match would stuff all pairs into the same arena
+        // and re-join players that are already fighting.)
+        for (TournamentMatch pm : t.getBracket().getPendingMatches()) {
+            if (pm.isStarted()) return;
+        }
+
         for (TournamentMatch tm : t.getBracket().getPendingMatches()) {
             Player p1 = Bukkit.getPlayer(tm.getPlayer1());
             Player p2 = Bukkit.getPlayer(tm.getPlayer2());
@@ -195,11 +203,13 @@ public class TournamentManager {
                 continue;
             }
 
+            tm.setStarted(true);
             plugin.getMatchManager().joinArena(p1, arena);
             plugin.getMatchManager().joinArena(p2, arena);
 
             MessageUtil.send(p1, "<gold>[Tournament] <yellow>Your match vs <white>" + p2.getName() + " <yellow>begins!");
             MessageUtil.send(p2, "<gold>[Tournament] <yellow>Your match vs <white>" + p1.getName() + " <yellow>begins!");
+            break; // only one live match per arena
         }
 
         if (t.getBracket().isRoundComplete()) {
@@ -227,7 +237,10 @@ public class TournamentManager {
         // Pay prizes via Vault (ponytail: deposit only if online; offline prize delivery not in scope)
         if (winner != null && t.getPrizeFirst() > 0) {
             Player winnerOnline = Bukkit.getPlayer(winner);
-            if (winnerOnline != null) {
+            if (winnerOnline == null) {
+                plugin.getLogger().warning("Tournament " + t.getName() + ": champion " + winnerName
+                        + " is offline, prize of " + t.getPrizeFirst() + " not paid.");
+            } else {
                 plugin.getIntegrationManager().getVault().deposit(winnerOnline, t.getPrizeFirst());
                 MessageUtil.send(winnerOnline,
                         "<green>You won <yellow>" + plugin.getIntegrationManager().getVault()

@@ -29,12 +29,7 @@ team:
   count: 2
   colors: [RED, BLUE]
 modules:
-  killstreak: true
-  combo: true
-  power-up: false
-  item-spawner: false
-  environmental: false
-  leveling: false
+  enabled: [killstreak, combo]  # also: power-up, item-spawner, environmental, leveling
 classes:
   enabled: false
   items: []

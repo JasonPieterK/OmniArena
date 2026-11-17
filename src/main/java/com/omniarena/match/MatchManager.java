@@ -141,9 +141,23 @@ public class MatchManager {
         Match match = activeMatches.get(arenaName);
         if (match == null) return;
 
+        // Leaving a running ranked (queue) match counts as a forfeit: the leaver loses ELO.
+        MatchResult forfeit = null;
+        if (match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
+                && match.hasPlayer(player.getUniqueId())) {
+            List<UUID> others = match.getPlayers().stream()
+                    .filter(u -> !u.equals(player.getUniqueId())).toList();
+            if (others.size() == 1) {
+                forfeit = new MatchResult(arenaName, others.get(0), player.getUniqueId(), null,
+                        MatchResult.Outcome.FORFEIT, match.getDurationSeconds(),
+                        new ArrayList<>(match.getPlayers()));
+            }
+        }
+
+        // Restore before removePlayer(), which clears the saved inventory
+        restoreInventory(player, match);
         match.removePlayer(player.getUniqueId());
         plugin.getVisual().getScoreboardManager().removeBoard(player);
-        restoreInventory(player, match);
 
         Location back = player.getBedSpawnLocation() != null
                 ? player.getBedSpawnLocation()
@@ -158,7 +172,9 @@ public class MatchManager {
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("leave-arena")
                 .replace("{arena}", arenaName));
 
-        if (match.getState() == MatchState.RUNNING) {
+        if (forfeit != null) {
+            endMatch(match, forfeit);
+        } else if (match.getState() == MatchState.RUNNING) {
             checkEndConditions(match);
         }
 
@@ -308,12 +324,25 @@ public class MatchManager {
         player.setFoodLevel(20);
         player.setSaturation(20f);
 
-        // Hand the player this game type's full loadout.
-        arena.getGameMode().applyLoadout(player);
+        // Hand the player the queued kit if any, else this game type's full loadout.
+        applyLoadout(player, match);
 
         if (arena.getSpawnProtection() > 0) {
             match.setSpawnProtection(player.getUniqueId(), arena.getSpawnProtection());
         }
+    }
+
+    /** Equips the queued kit when the match has one, otherwise the arena game mode's loadout. */
+    public void applyLoadout(Player player, Match match) {
+        String kit = match.getQueueKit();
+        if (kit != null) {
+            var adminKit = com.omniarena.kit.KitManager.getInstance().getAdminKit(kit);
+            if (adminKit.isPresent()) {
+                com.omniarena.kit.KitManager.getInstance().equipKit(player, adminKit.get());
+                return;
+            }
+        }
+        match.getArena().getGameMode().applyLoadout(player);
     }
 
     private void startMatchTimer(Match match) {
@@ -341,8 +370,14 @@ public class MatchManager {
         match.setEndTime(System.currentTimeMillis());
         match.getArena().setState(ArenaState.ENDING);
 
-        // Update ELO ratings for competitive matches
-        if (result.getWinnerId() != null && result.getLoserId() != null) {
+        // Update ELO ratings for ranked (queue) matches only
+        if (match.isRanked() && result.isDraw() && result.getParticipants() != null
+                && result.getParticipants().size() == 2) {
+            UUID a = result.getParticipants().get(0), b = result.getParticipants().get(1);
+            String an = Bukkit.getOfflinePlayer(a).getName();
+            String bn = Bukkit.getOfflinePlayer(b).getName();
+            plugin.getEloManager().recordDraw(a, b, an != null ? an : "Unknown", bn != null ? bn : "Unknown");
+        } else if (match.isRanked() && result.getWinnerId() != null && result.getLoserId() != null) {
             String winnerName = Bukkit.getOfflinePlayer(result.getWinnerId()).getName();
             String loserName = Bukkit.getOfflinePlayer(result.getLoserId()).getName();
             plugin.getEloManager().recordMatch(result.getWinnerId(), result.getLoserId(), 

@@ -60,21 +60,69 @@ public class EloManager {
         }
     }
 
+    private final Object saveLock = new Object();
+    private final java.util.concurrent.ExecutorService saveExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "OmniArena-EloSave");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** Snapshots on the calling (main) thread, then writes async on a single writer; inline when disabled. */
     public void saveAll() {
-        com.omniarena.util.AsyncUtil.runAsync(() -> {
-            FileConfiguration cfg = new YamlConfiguration();
-            for (Map.Entry<UUID, EloRating> entry : ratings.entrySet()) {
-                String path = "ratings." + entry.getKey();
-                EloRating r = entry.getValue();
-                cfg.set(path + ".name", r.getPlayerName());
-                cfg.set(path + ".rating", r.getRating());
-                cfg.set(path + ".wins", r.getWins());
-                cfg.set(path + ".losses", r.getLosses());
-                cfg.set(path + ".draws", r.getDraws());
-                cfg.set(path + ".highestRating", r.getHighestRating());
-            }
+        final FileConfiguration cfg = snapshot();
+        if (!plugin.isEnabled()) {
+            write(cfg); // scheduling/executors are unreliable during shutdown
+            return;
+        }
+        try {
+            saveExecutor.execute(() -> write(cfg));
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            write(cfg);
+        }
+    }
+
+    /** Flushes pending async writes (call on disable after the final saveAll). */
+    public void shutdown() {
+        saveExecutor.shutdown();
+        try { saveExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+    }
+
+    private FileConfiguration snapshot() {
+        FileConfiguration cfg = new YamlConfiguration();
+        for (Map.Entry<UUID, EloRating> entry : ratings.entrySet()) {
+            String path = "ratings." + entry.getKey();
+            EloRating r = entry.getValue();
+            cfg.set(path + ".name", r.getPlayerName());
+            cfg.set(path + ".rating", r.getRating());
+            cfg.set(path + ".wins", r.getWins());
+            cfg.set(path + ".losses", r.getLosses());
+            cfg.set(path + ".draws", r.getDraws());
+            cfg.set(path + ".highestRating", r.getHighestRating());
+        }
+        return cfg;
+    }
+
+    private void write(FileConfiguration cfg) {
+        synchronized (saveLock) {
             com.omniarena.util.YamlUtil.save(cfg, eloFile, plugin.getLogger());
-        });
+        }
+    }
+
+    /**
+     * Read-only lookup: returns the stored rating or a transient default that is NOT cached,
+     * so placeholders/leaderboards don't create entries for unknown UUIDs.
+     */
+    public EloRating peekRating(UUID uuid) {
+        EloRating r = ratings.get(uuid);
+        return r != null ? r : new EloRating(uuid, "Unknown");
+    }
+
+    /** Rating value for read-only queries (placeholders, leaderboards) without caching. */
+    public int peekElo(UUID uuid) {
+        EloRating r = ratings.get(uuid);
+        return r != null ? r.getRating() : EloRating.DEFAULT_RATING;
     }
 
     public EloRating getRating(UUID uuid) {
@@ -110,6 +158,19 @@ public class EloManager {
         matchHistory.put(winner, (int) (now / 1000));
         matchHistory.put(loser, (int) (now / 1000));
 
+        saveAll();
+    }
+
+    /** Record a draw between two players. */
+    public void recordDraw(UUID a, UUID b, String aName, String bName) {
+        EloRating ra = getRating(a, aName);
+        EloRating rb = getRating(b, bName);
+        int oldA = ra.getRating(), oldB = rb.getRating();
+        ra.recordDraw(oldB);
+        rb.recordDraw(oldA);
+        long now = System.currentTimeMillis();
+        matchHistory.put(a, (int) (now / 1000));
+        matchHistory.put(b, (int) (now / 1000));
         saveAll();
     }
 

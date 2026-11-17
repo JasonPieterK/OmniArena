@@ -18,6 +18,7 @@ public class BlockPlaceListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {
+        if (plugin.isStopped()) return;
         Player player = event.getPlayer();
         Optional<Arena> arenaOpt = ArenaManager.getInstance().getArenaAt(event.getBlock().getLocation());
         if (arenaOpt.isEmpty()) return;

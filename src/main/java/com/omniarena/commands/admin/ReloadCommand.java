@@ -23,13 +23,25 @@ public class ReloadCommand extends SubCommand {
 
     @Override
     public void execute(CommandSender sender, String[] args) {
-        ConfigManager.getInstance().reload();
-        ArenaManager.getInstance().loadAll();
-        plugin.getModuleManager().reload();
-        // Re-update all arena signs
-        ArenaManager.getInstance().getAll().forEach(arena ->
-                SignManager.getInstance().updateAllSigns(arena));
-        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-reloaded"));
+        try {
+            ConfigManager.getInstance().reload();
+            // Reloading arenas while matches run would orphan live arena objects; skip it then.
+            if (com.omniarena.match.MatchManager.getInstance().getActiveMatches().isEmpty()) {
+                ArenaManager.getInstance().loadAll();
+            } else {
+                MessageUtil.send(sender, "<yellow>Arenas not reloaded: matches are active. Re-run /oa reload when idle.");
+            }
+            plugin.getModuleManager().reload();
+            plugin.startSignUpdateTask();
+            plugin.getCombatManager().start();
+            // Re-update all arena signs
+            ArenaManager.getInstance().getAll().forEach(arena ->
+                    SignManager.getInstance().updateAllSigns(arena));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-reloaded"));
+        } catch (Exception e) {
+            plugin.getLogger().severe("Reload failed: " + e.getMessage());
+            MessageUtil.send(sender, "<red>Reload failed: " + e.getMessage());
+        }
     }
 
     @Override

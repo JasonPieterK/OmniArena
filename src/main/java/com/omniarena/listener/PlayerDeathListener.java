@@ -28,6 +28,7 @@ public class PlayerDeathListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onDeath(PlayerDeathEvent event) {
+        if (plugin.isStopped()) return;
         Player victim = event.getEntity();
         if (victim == null) return;
         

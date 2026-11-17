@@ -30,6 +30,7 @@ public class GameModeRulesListener implements Listener {
 
     @EventHandler
     public void onRegen(EntityRegainHealthEvent event) {
+        if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player player)) return;
         Arena arena = arenaOf(player);
         if (arena == null || arena.getGameMode().naturalRegen()) return;
@@ -43,6 +44,7 @@ public class GameModeRulesListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
+        if (plugin.isStopped()) return;
         if (event.getTo() == null || event.getFrom().getBlockY() == event.getTo().getBlockY()) return;
         Player player = event.getPlayer();
         Arena arena = arenaOf(player);

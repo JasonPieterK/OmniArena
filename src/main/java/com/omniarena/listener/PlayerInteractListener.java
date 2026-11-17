@@ -40,6 +40,7 @@ public class PlayerInteractListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onRegionSelect(PlayerInteractEvent event) {
+        if (plugin.isStopped()) return;
         // Right-click fires for BOTH hands; only handle the main hand so the
         // "Position 2 set" message isn't sent twice.
         if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
@@ -73,6 +74,7 @@ public class PlayerInteractListener implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInteract(PlayerInteractEvent event) {
+        if (plugin.isStopped()) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
         if (block == null) return;

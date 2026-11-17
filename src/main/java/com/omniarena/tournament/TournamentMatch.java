@@ -10,6 +10,7 @@ public class TournamentMatch {
     private final int round;
     private UUID winner;
     private boolean completed;
+    private boolean started;
 
     public TournamentMatch(UUID player1, UUID player2, String arenaName, int round) {
         this.player1 = player1;
@@ -27,6 +28,8 @@ public class TournamentMatch {
     public UUID getWinner()   { return winner; }
     public boolean isBye()    { return player2 == null; }
     public boolean isCompleted() { return completed; }
+    public boolean isStarted()   { return started; }
+    public void setStarted(boolean started) { this.started = started; }
 
     public void setWinner(UUID winner) {
         this.winner = winner;

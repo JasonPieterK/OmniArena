@@ -25,6 +25,7 @@ public class PlayerMoveListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
+        if (plugin.isStopped()) return;
         // Only act on full block movements (skip look-only events)
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()
                 && event.getFrom().getBlockY() == event.getTo().getBlockY()

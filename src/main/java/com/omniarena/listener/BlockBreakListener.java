@@ -18,6 +18,7 @@ public class BlockBreakListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
+        if (plugin.isStopped()) return;
         Player player = event.getPlayer();
 
         // Prevent block break if holding selection wand and has permission

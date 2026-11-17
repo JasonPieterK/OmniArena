@@ -6,6 +6,7 @@ prefix: "<dark_gray>[<gradient:#ff6b35:#f7c59f>OmniArena</gradient><dark_gray>] 
 # General
 no-permission: "<red>You don't have permission to do that."
 player-only: "<red>This command is for players only."
+plugin-stopped: "<red>OmniArena is currently stopped."
 unknown-command: "<red>Unknown command. Use <yellow>/oa help</yellow> for help."
 invalid-args: "<red>Invalid usage. <yellow>{usage}"
 player-not-found: "<red>Player <yellow>{player}</yellow> not found."

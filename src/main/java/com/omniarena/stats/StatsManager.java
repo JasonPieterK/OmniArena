@@ -113,7 +113,7 @@ public class StatsManager {
             }
         }
 
-        AsyncUtil.runAsyncThenSync(() -> { saveAll(); return null; }, ignored -> {});
+        saveAll();
     }
 
     public void resetStats(UUID uuid) {

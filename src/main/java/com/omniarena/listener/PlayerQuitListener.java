@@ -22,7 +22,6 @@ public class PlayerQuitListener implements Listener {
             plugin.getVisual().getBossBarManager().removePlayer(player);
             plugin.getVisual().getScoreboardManager().removeBoard(player);
         }
-        if (plugin.isStopped()) return;
         MatchManager mm = MatchManager.getInstance();
 
         if (mm.isSpectating(player)) {

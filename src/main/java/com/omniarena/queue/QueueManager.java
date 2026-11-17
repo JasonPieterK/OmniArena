@@ -155,7 +155,7 @@ public class QueueManager {
             List<QueuedPlayer> players = new ArrayList<>(queue.getPlayers());
             Map<UUID, Integer> elo = new HashMap<>();
             for (QueuedPlayer qp : players) {
-                elo.put(qp.getUuid(), plugin.getEloManager().getRating(qp.getUuid()).getRating());
+                elo.put(qp.getUuid(), plugin.getEloManager().peekElo(qp.getUuid()));
             }
             players.sort(Comparator.comparingInt(p -> elo.get(p.getUuid())));
 
@@ -230,6 +230,14 @@ public class QueueManager {
 
         var mm = plugin.getMatchManager();
         boolean ok1 = mm.joinArena(player1, arena);
+        if (ok1) {
+            mm.getMatch(arena).ifPresent(m -> {
+                m.setRanked(true);
+                if (kitName != null && com.omniarena.kit.KitManager.getInstance().getAdminKit(kitName).isPresent()) {
+                    m.setQueueKit(kitName);
+                }
+            });
+        }
         boolean ok2 = ok1 && mm.joinArena(player2, arena);
         if (!ok2) {
             if (ok1) mm.leaveArena(player1);

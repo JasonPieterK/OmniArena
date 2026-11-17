@@ -80,25 +80,41 @@ public class ConfigManager {
     }
 
     public void setValue(String key, Object value) {
-        if (key != null && key.startsWith("messages.")) {
-            messages.set(key.substring("messages.".length()), value);
+        setValues(java.util.Collections.singletonMap(key, value));
+    }
+
+    /** Sets many keys, then saves each backing file (config.yml / messages.yml) at most once. */
+    public void setValues(java.util.Map<String, ?> values) {
+        if (values == null || values.isEmpty()) return;
+        boolean configDirty = false, messagesDirty = false;
+        for (java.util.Map.Entry<String, ?> e : values.entrySet()) {
+            String key = e.getKey();
+            if (key == null) continue;
+            if (key.startsWith("messages.")) {
+                messages.set(key.substring("messages.".length()), e.getValue());
+                messagesDirty = true;
+            } else {
+                config.set(key, e.getValue());
+                configDirty = true;
+            }
+        }
+        if (messagesDirty) {
             try {
                 messages.save(messagesFile);
                 messages = YamlConfiguration.loadConfiguration(messagesFile);
-            } catch (Exception e) {
-                plugin.getLogger().severe("Failed to save messages: " + e.getMessage());
+            } catch (Exception ex) {
+                plugin.getLogger().severe("Failed to save messages: " + ex.getMessage());
             }
-            return;
         }
-
-        config.set(key, value);
-        try {
-            config.save(configFile);
-            // Reload through the plugin so plugin.getConfig() and our reference stay the same object
-            plugin.reloadConfig();
-            config = plugin.getConfig();
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to save config: " + e.getMessage());
+        if (configDirty) {
+            try {
+                config.save(configFile);
+                // Reload through the plugin so plugin.getConfig() and our reference stay the same object
+                plugin.reloadConfig();
+                config = plugin.getConfig();
+            } catch (Exception ex) {
+                plugin.getLogger().severe("Failed to save config: " + ex.getMessage());
+            }
         }
     }
 }

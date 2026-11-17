@@ -32,6 +32,10 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
+        if (plugin.isStopped()) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("plugin-stopped"));
+            return true;
+        }
         return handle(sender, args);
     }
 

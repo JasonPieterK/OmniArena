@@ -76,7 +76,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                         MessageUtil.send(sender, "<green>Combat database cleaned.");
                     }
                     case "reload" -> {
-                        ConfigManager.getInstance().load();
+                        ConfigManager.getInstance().reload();
+                        plugin.startSignUpdateTask();
+                        plugin.getCombatManager().start();
                         MessageUtil.send(sender, "<green>OmniArena PvP config reloaded.");
                     }
                     case "worlds" -> {
@@ -161,7 +163,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         if (plugin.isStopped()) {
             String sub = args != null && args.length > 0 ? args[0].toLowerCase() : "";
             if (!sub.equals("start")) {
-                MessageUtil.send(sender, "<red>OmniArena is currently stopped. Use <yellow>/oa start</yellow> to restart.");
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("plugin-stopped")
+                        + " <gray>Use <yellow>/oa start</yellow> to restart.");
                 return true;
             }
         }

@@ -25,6 +25,7 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
+        if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
 
         MatchManager mm = MatchManager.getInstance();
@@ -73,6 +74,7 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPvP(EntityDamageByEntityEvent event) {
+        if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
         if (!(event.getDamager() instanceof Player attacker) &&
             !(event.getDamager() instanceof org.bukkit.entity.Projectile)) return;

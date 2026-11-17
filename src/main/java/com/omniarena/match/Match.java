@@ -44,6 +44,10 @@ public class Match {
     // Scores
     private boolean firstBloodDealt = false;
 
+    // Ranked (queue) matches record ELO; queueKit overrides the arena's default loadout
+    private boolean ranked = false;
+    private String queueKit;
+
     // Scheduled tasks
     private BukkitTask countdownTask;
     private BukkitTask matchTimerTask;
@@ -76,6 +80,10 @@ public class Match {
     public void setCountdownSeconds(int countdownSeconds) { this.countdownSeconds = countdownSeconds; }
     public int getElapsedSeconds() { return elapsedSeconds; }
     public void setElapsedSeconds(int elapsedSeconds) { this.elapsedSeconds = elapsedSeconds; }
+    public boolean isRanked() { return ranked; }
+    public void setRanked(boolean ranked) { this.ranked = ranked; }
+    public String getQueueKit() { return queueKit; }
+    public void setQueueKit(String queueKit) { this.queueKit = queueKit; }
     public boolean isFirstBloodDealt() { return firstBloodDealt; }
     public void setFirstBloodDealt(boolean firstBloodDealt) { this.firstBloodDealt = firstBloodDealt; }
 
@@ -102,6 +110,13 @@ public class Match {
         joinedAt.remove(uuid);
         spawnProtection.remove(uuid);
         teamMap.remove(uuid);
+        lives.remove(uuid);
+        lastKilledBy.remove(uuid);
+        lastKilledBy.values().removeIf(uuid::equals);
+        savedInventories.remove(uuid);
+        savedArmor.remove(uuid);
+        selectedKit.remove(uuid);
+        for (MatchTeam t : teams) t.getMembers().remove(uuid);
     }
 
     public boolean hasPlayer(UUID uuid) { return players.contains(uuid); }

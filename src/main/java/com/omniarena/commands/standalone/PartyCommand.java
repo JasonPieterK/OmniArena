@@ -25,6 +25,10 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (plugin.isStopped()) {
+            com.omniarena.util.MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("plugin-stopped"));
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage("This command is for players only.");
             return true;

@@ -27,6 +27,17 @@ public class PlayerCommandPreprocessListener implements Listener {
         String label = raw.split("\\s+", 2)[0];
         if (!label.toLowerCase(Locale.ROOT).equals("kit")) return;
 
+        Player p = event.getPlayer();
+        if (plugin.isStopped()) return; // let other plugins handle /kit; ours is disabled
+        // Only intercept when OmniArena owns /kit, or the player is in an arena
+        boolean inArena = com.omniarena.match.MatchManager.getInstance().isInArena(p)
+                || com.omniarena.match.MatchManager.getInstance().isSpectating(p);
+        if (!inArena) {
+            org.bukkit.command.Command registered = org.bukkit.Bukkit.getCommandMap().getCommand("kit");
+            boolean ours = registered instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == plugin;
+            if (!ours) return;
+        }
+
         event.setCancelled(true);
         if (!event.getPlayer().hasPermission(com.omniarena.permission.PermissionChecker.PLAYER_KIT)) {
             com.omniarena.util.MessageUtil.send(event.getPlayer(),

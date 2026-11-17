@@ -94,6 +94,8 @@ public class SignManager {
         for (ArenaSign as : signs) {
             Location loc = as.getLocation();
             if (loc.getWorld() == null) continue;
+            // Never force-load chunks just to refresh a sign
+            if (!loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) continue;
             Block block = loc.getBlock();
             if (isSign(block)) {
                 updateSign(block, arena);
