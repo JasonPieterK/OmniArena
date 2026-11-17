@@ -18,7 +18,7 @@ import java.util.List;
 public class StatsCommand extends SubCommand {
 
     public StatsCommand(OmniArena plugin) {
-        super(PermissionChecker.PLAYER_USE, "/oa stats [player]", "View arena stats");
+        super(PermissionChecker.PLAYER_USE, "/oa stats [player|global [kills|wins|kd]|reset <player>]", "View arena stats");
     }
 
     @Override

@@ -21,7 +21,7 @@ import java.util.Optional;
 public class SpawnCommand extends SubCommand {
 
     public SpawnCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ARENA, "/oa spawn <set|list|clear> <arena> <type>", "Manage spawns");
+        super(PermissionChecker.ADMIN_ARENA, "/oa spawn <set|list|clear> <arena> [BATTLE|LOBBY|SPECTATOR] [clear: spawn#]", "Manage spawns");
     }
 
     @Override

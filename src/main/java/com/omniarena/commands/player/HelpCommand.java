@@ -96,7 +96,7 @@ public class HelpCommand extends SubCommand {
                 "<yellow>3.</yellow> Run <white>/oa wand</white>.",
                 "<yellow>4.</yellow> Left-click corner 1, right-click corner 2.",
                 "<yellow>5.</yellow> Run <white>/oa region set <name></white>.",
-                "<yellow>6.</yellow> Add spawns with <white>/oa spawn set <name> player</white>.",
+                "<yellow>6.</yellow> Add spawns with <white>/oa spawn set <name> battle</white> (once per player spot).",
                 "<yellow>7.</yellow> Add lobby with <white>/oa spawn set <name> lobby</white>.",
                 "<yellow>8.</yellow> Run <white>/oa regen snapshot <name></white>.",
                 "<yellow>9.</yellow> Run <white>/oa enable <name></white>."));

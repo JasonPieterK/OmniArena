@@ -25,7 +25,7 @@ public class RegionCommand extends SubCommand {
     private final OmniArena plugin;
 
     public RegionCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ARENA, "/oa region <set|info> <arena>", "Define arena region");
+        super(PermissionChecker.ADMIN_ARENA, "/oa region <set|info> <arena>  |  /oa region wand", "Define arena region");
         this.plugin = plugin;
     }
 
