@@ -26,9 +26,7 @@ mvn -q -Dtest=TournamentBracketTest test
 - Shade plugin bundles FastBoard (relocated `com.omniarena.shaded.fastboard`), HikariCP
   (relocated), Gson and the MySQL connector. The database layer is unused but the libraries are
   shaded.
-- `pom.xml` has a `maven-antrun-plugin` execution that copies the jar to a hard-coded Windows path
-  (`C:/Users/.../plugins/OmniArena.jar`). It is irrelevant on other machines; do not "fix" the
-  path, and do not depend on it. Consider making it a profile when touching the POM.
+- The old antrun step that copied the jar to a hard-coded Windows path was removed.
 - `target/` is tracked in git. Never hand-edit files in it; expect it to show as modified after a
   build and do not include it in logical changes unless asked.
 - Repositories needed: PaperMC, EssentialsX, PlaceholderAPI, EngineHub, Sonatype, JitPack,
@@ -53,9 +51,13 @@ for p in paper spigot bukkit purpur; do for v in 26.3 26.2 26.1 1.21.11 1.21.10 
   mvn -q -P$p,mc-$v package || exit 1; done; done
 ```
 
-Status: the profiles are being set up by someone else; the checked-in POM has none and hardcodes
-Paper API `26.2.build.31-alpha`, `java.version 21`, and `api-version: '26.2'` in `plugin.yml`.
-Before relying on a profile, grep `pom.xml` for `<id>mc-` / `<id>paper`. Rules for matrix work:
+Status: profiles are in `pom.xml` (`paper`, `purpur`, `spigot`, `bukkit` x `mc-26.3|26.2|26.1|1.21.11|1.21.10|1.21.9`;
+defaults `paper` + `mc-26.2`). Source sets: `src/main/java` (common), `src/paper/java` (paper+purpur), `src/spigot/java`
+(spigot+bukkit); each defines `com.omniarena.platform.PlatformImpl` and common code reaches platform differences only through
+`Platform.get()` (`PlatformAdapter`). Spigot/Bukkit jars shade+relocate Adventure/MiniMessage/platform-bukkit to
+`com.omniarena.libs.kyori`. `scripts/build-all.sh` builds all 24 jars into `dist/`. Never call Paper-only API from
+`src/main`: compile `-Pspigot,mc-26.2` to catch it. `plugin.yml` `version`/`api-version` are filtered from the POM. Purpur
+(`repo.purpurmc.org`) could not be verified in the sandbox. Rules for matrix work:
 
 - Do not call Paper-only API from code paths that must run on Spigot/Bukkit builds without an
   abstraction. Today the code uses Paper API widely: `AsyncChatEvent`, `Component`/MiniMessage,
