@@ -814,7 +814,9 @@ public class MatchManager {
      */
     private boolean startAutoRegen(Match match) {
         Arena arena = match.getArena();
-        if (match.getState() != MatchState.RESETTING || plugin.isStopped() || !plugin.isEnabled()) return false;
+        // Not gated on isStopped(): matches ended by /oa stop or onDisable must still restore their arena
+        // (BlockRestoreModule.cancelAll() then finalizes that regen synchronously).
+        if (match.getState() != MatchState.RESETTING || !plugin.isEnabled()) return false;
         var restore = plugin.getBlockRestoreModule();
         if (restore == null || !arena.getRegion().isDefined()) return false;
         var cfg = ConfigManager.getInstance().getConfig();
