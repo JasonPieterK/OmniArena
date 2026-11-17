@@ -20,6 +20,8 @@ public class BoardManager {
     private static final int MAX_LINE_LEN = 40;
 
     private final Map<UUID, FastBoard> boards = new HashMap<>();
+    /** Last throttled updateAll time (ms) per match. */
+    private final Map<Match, Long> lastUpdate = new IdentityHashMap<>();
 
     /** Per-update data computed once per match, shared by every viewer. */
     private static final class Snapshot {
@@ -57,6 +59,14 @@ public class BoardManager {
     /** Updates every viewer (players and spectators) of the match; rankings computed once. */
     public void updateAll(Match match) {
         if (!enabled(match)) return;
+        // scoreboard.update-interval is in ticks; callers tick once per second, so never go below 1s.
+        long intervalMs = Math.max(1000L, ConfigManager.getInstance().getConfig()
+                .getLong("scoreboard.update-interval", 20L) * 50L);
+        long now = System.currentTimeMillis();
+        Long last = lastUpdate.get(match);
+        // 150ms tolerance for scheduler jitter so a steady 1s caller is never skipped.
+        if (last != null && now - last < intervalMs - 150L) return;
+        lastUpdate.put(match, now);
         Snapshot s = snapshot(match);
         List<UUID> viewers = new ArrayList<>(match.getPlayers());
         viewers.addAll(match.getSpectators());
@@ -74,6 +84,24 @@ public class BoardManager {
         if (board != null && !board.isDeleted()) {
             try { board.delete(); } catch (Exception ignored) { }
         }
+        restoreBukkitScoreboard(player.getUniqueId());
+    }
+
+    /**
+     * FastBoard is packet-based: it never touches the server-side Bukkit scoreboard, but deleting
+     * it removes the client's sidebar objective, which can leave a sidebar owned by another plugin
+     * (TAB etc.) blank. Re-sending the player's current Bukkit scoreboard on the next tick makes
+     * the client resync that state.
+     */
+    private void restoreBukkitScoreboard(UUID uuid) {
+        try {
+            com.omniarena.util.AsyncUtil.runSync(() -> {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null || !p.isOnline()) return;
+                org.bukkit.scoreboard.Scoreboard sb = p.getScoreboard();
+                p.setScoreboard(sb == null ? Bukkit.getScoreboardManager().getMainScoreboard() : sb);
+            });
+        } catch (Exception ignored) { /* plugin disabling: cannot schedule */ }
     }
 
     public void removeAllBoards(Match match) {
@@ -84,7 +112,9 @@ public class BoardManager {
             if (board != null && !board.isDeleted()) {
                 try { board.delete(); } catch (Exception ignored) { }
             }
+            if (board != null) restoreBukkitScoreboard(uuid);
         }
+        lastUpdate.remove(match);
     }
 
     /** Deletes every tracked board regardless of online state, then clears the map. */
@@ -93,6 +123,7 @@ public class BoardManager {
             try { if (board != null && !board.isDeleted()) board.delete(); } catch (Exception ignored) { }
         }
         boards.clear();
+        lastUpdate.clear();
     }
 
     private String title() {

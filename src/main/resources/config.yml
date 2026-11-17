@@ -167,10 +167,12 @@ killstreak:
 
 scoreboard:
   title: "<gradient:#ff6b35:#f7c59f>OmniArena</gradient>"
-  update-interval: 10  # ticks
+  update-interval: 20  # ticks (minimum effective 20 = 1s)
 
 boss-bar:
   timer-color: GREEN
+  waiting-color: YELLOW  # waiting/starting
+  ending-color: PURPLE
   low-time-color: RED  # color when < 60s remain
   low-time-threshold: 60
 
