@@ -93,7 +93,10 @@ public class SettingsMenuListener implements Listener {
                 }
                 default -> {
                     runNextTick(player::closeInventory);
-                    String prompt = "/oa settings set " + def.key() + " " + SettingsGUI.current(def);
+                    Object curVal = SettingsGUI.current(def);
+                    String curText = curVal == null ? "" : curVal instanceof java.util.List<?> l
+                            ? String.join(", ", l.stream().map(String::valueOf).toList()) : String.valueOf(curVal);
+                    String prompt = "/oa settings set " + def.key() + " " + curText;
                     net.kyori.adventure.text.Component msg = ColorUtil.parse("<gray>Set <yellow>" + def.key() + "</yellow>: <green>[click to type]")
                             .clickEvent(ClickEvent.suggestCommand(prompt))
                             .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>" + (def.description() == null ? "" : def.description()))));

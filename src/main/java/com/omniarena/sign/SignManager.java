@@ -98,6 +98,9 @@ public class SignManager {
 
     private final java.util.Set<String> pendingUpdates = new java.util.HashSet<>();
 
+    /** Forgets coalesced updates whose scheduled tasks were cancelled (e.g. by /oa stop), so requestUpdate works again. */
+    public void resetPending() { pendingUpdates.clear(); }
+
     /** Refreshes an arena's signs next tick (coalesced); call on state/player-count changes. */
     public void requestUpdate(Arena arena) {
         if (arena == null || plugin.isStopped() || !plugin.isEnabled() || arena.getSigns().isEmpty()) return;

@@ -59,6 +59,7 @@ public class LifecycleCommand extends SubCommand {
 
             // Restart web dashboard
             plugin.getWebDashboardServer().start();
+            plugin.getSignManager().resetPending();
             plugin.startSignUpdateTask();
             plugin.getCombatManager().start();
             plugin.getVisual().start();
@@ -105,6 +106,9 @@ public class LifecycleCommand extends SubCommand {
                     }
                 }
             }
+
+            // Matches that just ended may have started arena regens: finalize those too (restores the world instantly)
+            if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().cancelAll();
 
             // Close every open plugin GUI so no viewer keeps a dead menu
             try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable ignored) {}

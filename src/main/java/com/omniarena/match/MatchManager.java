@@ -211,6 +211,11 @@ public class MatchManager {
             return false;
         }
 
+        Match existing = activeMatches.get(arena.getName());
+        if (existing != null && existing.isRanked() && existing.getState() != MatchState.WAITING
+                && existing.getState() != MatchState.STARTING) {
+            return false; // queued ranked matches are closed to outsiders once underway
+        }
         Match match = activeMatches.computeIfAbsent(arena.getName(), k -> {
             Match m = new Match(arena);
             startCountdown(m);
@@ -297,7 +302,8 @@ public class MatchManager {
 
         // Ranked team forfeit: the last member of a side leaving a running 2-team match loses for that side
         // (the leaver is removed from the team below, so the end-of-match ELO pass would see no losers).
-        if (match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
+        // (skipped when a 1v1 forfeit result is already built above: endMatch records that one, never both)
+        if (forfeit == null && match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
                 && match.getTeams().size() == 2 && match.getTeam(player.getUniqueId()) != null) {
             MatchTeam own = match.getTeam(player.getUniqueId());
             MatchTeam opp = match.getTeams().get(0) == own ? match.getTeams().get(1) : match.getTeams().get(0);
@@ -568,6 +574,19 @@ public class MatchManager {
         match.setEndTime(System.currentTimeMillis());
         match.getArena().setState(ArenaState.ENDING);
 
+        try {
+            endMatchEffects(match, result);
+        } catch (Throwable t) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error while finishing the match in arena " + match.getArena().getName()
+                    + " (" + t + "). The arena is still reset after the end delay.", t);
+        }
+
+        int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
+        AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
+    }
+
+    /** ELO, betting, tournament, visuals, rewards and stats for a finished match (isolated so a failure cannot strand the arena in ENDING). */
+    private void endMatchEffects(Match match, MatchResult result) {
         // Update ELO ratings for ranked (queue) matches only
         if (match.isRanked() && result.isDraw() && result.getParticipants() != null
                 && match.getTeams().isEmpty() && result.getParticipants().size() == 2) {
@@ -627,9 +646,6 @@ public class MatchManager {
                             (result.getWinnerId() != null ? Bukkit.getOfflinePlayer(result.getWinnerId()).getName() : result.getWinnerTeamName()));
             Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(msg));
         }
-
-        int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
-        AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
     }
 
     public void forceWin(Match match, UUID winnerId) {
@@ -784,6 +800,8 @@ public class MatchManager {
             else playerArena.remove(uuid);
         }
         match.getSpectators().clear();
+        // A played match whose last player left before the delayed reset ran still dirtied the arena: regen it too
+        if (match.getState() == MatchState.RUNNING || match.getState() == MatchState.ENDING) match.setState(MatchState.RESETTING);
         // After a played match the arena stays RESETTING until the block regen finishes
         if (!startAutoRegen(match)) match.getArena().setState(ArenaState.WAITING);
         plugin.getBettingManager().onMatchCleanup(match.getArena().getName());

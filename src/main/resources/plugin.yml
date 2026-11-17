@@ -1,7 +1,7 @@
 name: OmniArena
-version: '1.0.0'
+version: '${project.version}'
 main: com.omniarena.OmniArena
-api-version: '26.2'
+api-version: '${api.version}'
 description: Complete PVP Arena Plugin with 200+ features
 authors: [OmniArena Team]
 website: https://omniarena.dev
@@ -128,6 +128,9 @@ permissions:
       omniarena.admin.stats: true
       omniarena.admin.reload: true
       omniarena.admin.override: true
+      omniarena.pvp.admin: true
+      omniarena.tournament.admin: true
+      omniarena.join.bypass: true
 
   omniarena.admin.arena:
     description: Arena create/delete/config
