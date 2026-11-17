@@ -46,7 +46,7 @@ public class SignListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onSignChange(SignChangeEvent event) {
         if (plugin.isStopped()) return;
-        String header = plain(event.line(0));
+        String header = plain(com.omniarena.platform.Platform.get().getSignLine(event, 0));
         if (!header.equalsIgnoreCase("[OmniArena]") && !header.equalsIgnoreCase("[oa]")) return;
 
         Player player = event.getPlayer();
@@ -56,15 +56,15 @@ public class SignListener implements Listener {
             return;
         }
 
-        String name = plain(event.line(1));
+        String name = plain(com.omniarena.platform.Platform.get().getSignLine(event, 1));
         Optional<Arena> arenaOpt = name.isEmpty() ? Optional.empty() : ArenaManager.getInstance().get(name);
         if (arenaOpt.isEmpty()) {
             String known = ArenaManager.getInstance().getAll().stream().map(Arena::getName).sorted().collect(Collectors.joining(", "));
             MessageUtil.send(player, "<red>No arena named <yellow>" + (name.isEmpty() ? "(empty)" : name)
                     + "</yellow>. <gray>Write the arena name on line 2 (existing arenas: <white>" + (known.isEmpty() ? "none yet" : known)
                     + "</white>), or place a blank sign and run <white>/oa sign create <arena></white>.");
-            event.line(0, ColorUtil.parse("<dark_red>[OmniArena]"));
-            event.line(2, ColorUtil.parse("<red>Unknown arena"));
+            com.omniarena.platform.Platform.get().setSignLine(event, 0, ColorUtil.parse("<dark_red>[OmniArena]"));
+            com.omniarena.platform.Platform.get().setSignLine(event, 2, ColorUtil.parse("<red>Unknown arena"));
             return;
         }
 

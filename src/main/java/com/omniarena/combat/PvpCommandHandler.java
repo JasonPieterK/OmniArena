@@ -99,7 +99,7 @@ public class PvpCommandHandler {
         }
         boolean on = args[0].equalsIgnoreCase("on") || args[0].equalsIgnoreCase("true");
         cm().setGlobalPvp(on);
-        Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+        com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                 cfg().getMessage(on ? "pvp-global-on-broadcast" : "pvp-global-off-broadcast")));
     }
 

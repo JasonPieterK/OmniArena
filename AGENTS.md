@@ -28,7 +28,7 @@ mvn -q -Dtest=TournamentBracketTest test
 | Package | What lives there |
 |---------|------------------|
 | `OmniArena` | entry point, all managers, `isStopped()` flag, sign refresh task |
-| `arena`, `arena.regen` | arena model/registry; snapshot + animated restore (20 styles, snapshot format v2) |
+| `arena`, `arena.regen` | arena model/registry; snapshot + animated restore (10 styles, snapshot format v2) |
 | `match`, `gamemode` | match engine (join/countdown/start/end/reset, forfeits, draws), 16 game types and loadouts |
 | `commands.*` | `/oa` dispatcher (`CommandManager`: admin map + player map), subcommands, standalone forwarders |
 | `kit` | preset kits (`admin-kits/`), personal kits, sharing, kit GUI |
@@ -79,7 +79,7 @@ mvn -q -Dtest=TournamentBracketTest test
   `markInternalTeleport`.
 - Regeneration is manual (`/oa regen`, `/oa override purge`, end commands); nothing auto-restores
   after a match. Snapshots: `snapshots/<arena>.yml`, `format: 2`, `palette` + `runs` (`"x,z,y0,len,idx"`).
-  Styles: 20 enum values, legacy names mapped in `RegenAnimationType.fromConfig`.
+  Styles: 10 enum values, old names mapped in `RegenAnimationType.fromConfig`.
 
 **Tournaments**
 - `/oa tournament create|join|leave|start|status|list|delete|setprize`. Auto-start when full; byes

@@ -275,13 +275,16 @@ Ranked flag and ELO (`MatchManager.endMatch`):
 - Restore: async load + ordering (`orderEntries`), then a repeating sync task places batches; preview
   blocks one tick ahead for animated styles; `activeRegens` maps arena -> finalizer so
   `cancelAll()` can complete instantly; a second restore on the same arena queues only its callback.
-- Styles: 20 enum values in `RegenAnimationType`, plus legacy-name mapping in `fromConfig`. Unknown or
-  blank -> `RADIATE_OUTWARD`. Batch: `INSTANT_RESTORE` uses `regen.batch-size`; animated types use
-  `min(batch-size, 400)` or `1200` for five "fast" types. `MAX_DESCENDERS = 90`.
-- When adding a style: add the enum value, `orderEntries` case, `buildPreview` case, optional
-  sound case, extend `RegenAnimationTypeTest`, and update docs (counts appear in README, DOCS.md and
-  the help guides).
-- `RegenCommand.showSettings` has a stale fallback default `"WAVE_SHUFFLE"`; the real default
+- Styles: 10 enum values in `RegenAnimationType` (INSTANT, SPHERE default, RISE, FALL, SWEEP, TIME_REWIND,
+  GALAXY, HOLOGRAM_SCAN, METEOR_SHOWER, OVERGROWTH); `fromConfig` maps all old 20 names and aliases to the
+  closest style, unknown -> SPHERE with a console warning, `parse` is the strict variant for commands.
+  Sort order is computed in `computeOrder` (off-main, in `loadPlan`); per-tick particles/sounds in
+  `playEffects` (budget-capped, players within 64 blocks only). TIME_REWIND reads the per-arena change log
+  fed by `RegenChangeListener` (`recordChange`, max 200k, cleared at match start and after regen).
+  Batch: `INSTANT` uses `regen.batch-size`; animated styles use `min(batch-size, 1200)`. `MAX_DESCENDERS = 90`.
+- When adding a style: add the enum value, a `computeKeys` (or dedicated key) case, a `playEffects` case,
+  extend `RegenAnimationTypeTest`, and update docs (counts appear in README, DOCS.md and the help guides).
+- The default style in `config.yml` is `SPHERE`.
   (`config.yml`) is `CENTER_OUT`.
 
 ---

@@ -72,6 +72,20 @@ public interface PlatformAdapter {
 
     void setText(TextDisplay display, Component text);
 
+    /** Whether this quit was caused by a kick (Paper: QuitReason; Spigot: tracked via PlayerKickEvent). */
+    boolean wasKicked(org.bukkit.event.player.PlayerQuitEvent event);
+
+    /** Paper: Bukkit.isStopping(). Spigot: false (shutdown kicks are covered by {@link #wasKicked}). */
+    boolean isServerStopping();
+
+    /** Item array <-> bytes (container snapshots). Paper: native NBT bytes. Spigot: Bukkit object streams. Not interchangeable. */
+    byte[] serializeItems(org.bukkit.inventory.ItemStack[] items);
+
+    org.bukkit.inventory.ItemStack[] deserializeItems(byte[] data);
+
+    /** Paper: Block#getState(false) (no snapshot copy). Spigot: Block#getState(). */
+    org.bukkit.block.BlockState getBlockState(org.bukkit.block.Block block);
+
     // ── server / world ───────────────────────────────────────────────
     CommandMap commandMap();
 

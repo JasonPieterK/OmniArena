@@ -56,7 +56,7 @@ public class PowerUpModule {
         ItemStack item = new ItemStack(type.material());
         org.bukkit.inventory.meta.ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(com.omniarena.util.ColorUtil.parse(type.displayName()));
+            com.omniarena.platform.Platform.get().setDisplayName(meta, com.omniarena.util.ColorUtil.parse(type.displayName()));
             item.setItemMeta(meta);
         }
 
@@ -79,7 +79,7 @@ public class PowerUpModule {
         if (!match.getArena().hasModule("power-up")) return;
         String name = item.getItemMeta() != null && item.getItemMeta().hasDisplayName()
                 ? net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                .plainText().serialize(item.getItemMeta().displayName()) : "";
+                .plainText().serialize(com.omniarena.platform.Platform.get().getDisplayName(item.getItemMeta())) : "";
 
         for (PowerUpType type : PowerUpType.values()) {
             if (name.contains(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().stripTags(type.displayName()))) {

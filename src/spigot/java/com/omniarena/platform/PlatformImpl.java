@@ -100,6 +100,39 @@ public final class PlatformImpl implements PlatformAdapter {
     @Override public void setText(TextDisplay display, Component text) { display.setText(LEGACY.serialize(text)); }
 
     // ── server / world ───────────────────────────────────────────────
+    /** Players kicked and not yet quit (filled by SpigotChatListener's PlayerKickEvent hook). */
+    static final java.util.Set<java.util.UUID> KICKED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    @Override public boolean wasKicked(org.bukkit.event.player.PlayerQuitEvent event) {
+        return KICKED.remove(event.getPlayer().getUniqueId());
+    }
+
+    @Override public byte[] serializeItems(org.bukkit.inventory.ItemStack[] items) {
+        try (java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+             org.bukkit.util.io.BukkitObjectOutputStream out = new org.bukkit.util.io.BukkitObjectOutputStream(bos)) {
+            out.writeInt(items.length);
+            for (org.bukkit.inventory.ItemStack it : items) out.writeObject(it);
+            out.flush();
+            return bos.toByteArray();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Cannot serialize items: " + e, e);
+        }
+    }
+
+    @Override public org.bukkit.inventory.ItemStack[] deserializeItems(byte[] data) {
+        try (org.bukkit.util.io.BukkitObjectInputStream in = new org.bukkit.util.io.BukkitObjectInputStream(new java.io.ByteArrayInputStream(data))) {
+            org.bukkit.inventory.ItemStack[] items = new org.bukkit.inventory.ItemStack[in.readInt()];
+            for (int i = 0; i < items.length; i++) items[i] = (org.bukkit.inventory.ItemStack) in.readObject();
+            return items;
+        } catch (java.io.IOException | ClassNotFoundException e) {
+            throw new IllegalStateException("Cannot deserialize items: " + e, e);
+        }
+    }
+
+    @Override public org.bukkit.block.BlockState getBlockState(org.bukkit.block.Block b) { return b.getState(); }
+
+    @Override public boolean isServerStopping() { return false; }
+
     @Override
     public CommandMap commandMap() {
         CommandMap m = commandMap;

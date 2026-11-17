@@ -39,7 +39,7 @@ regen:
     enabled: true
     interval-percent: 10  # chat progress updates every N percent
   animation:
-    type: CENTER_OUT  # SPIRAL, OUTSIDE_IN, CENTER_OUT, TOP_TO_BOTTOM, BOTTOM_TO_TOP, LASER_RAIN, IRON_MAN, RANDOM_BURST, INSTANT, BEAM_SWEEP, SHOCKWAVE, CRYSTAL_GROWTH, VORTEX_REBUILD, METEOR_DROP, PRISM_WAVE
+    type: SPHERE  # INSTANT, SPHERE, RISE, FALL, SWEEP, TIME_REWIND, GALAXY, HOLOGRAM_SCAN, METEOR_SHOWER, OVERGROWTH (old names are mapped)
     particles: true
     sound: true
 

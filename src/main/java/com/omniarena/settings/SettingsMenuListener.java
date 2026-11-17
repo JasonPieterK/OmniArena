@@ -100,7 +100,7 @@ public class SettingsMenuListener implements Listener {
                     net.kyori.adventure.text.Component msg = ColorUtil.parse("<gray>Set <yellow>" + def.key() + "</yellow>: <green>[click to type]")
                             .clickEvent(ClickEvent.suggestCommand(prompt))
                             .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>" + (def.description() == null ? "" : def.description()))));
-                    player.sendMessage(msg);
+                    com.omniarena.util.MessageUtil.send(player, msg);
                 }
             }
         } catch (Exception e) {
@@ -120,7 +120,7 @@ public class SettingsMenuListener implements Listener {
 
     private String legacyName(ItemStack item) {
         try {
-            return com.omniarena.util.ColorUtil.toLegacy(item.getItemMeta().displayName());
+            return com.omniarena.util.ColorUtil.toLegacy(com.omniarena.platform.Platform.get().getDisplayName(item.getItemMeta()));
         } catch (Throwable t) {
             return item.getItemMeta().getDisplayName();
         }

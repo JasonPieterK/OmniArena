@@ -75,7 +75,7 @@ public class SettingsCommand extends SubCommand {
                 MessageUtil.send(sender, "");
                 MessageUtil.send(sender, "<aqua>" + group);
             }
-            sender.sendMessage(settingLine(entry));
+            com.omniarena.util.MessageUtil.send(sender, settingLine(entry));
         }
     }
 
@@ -135,7 +135,7 @@ public class SettingsCommand extends SubCommand {
         if (value == null) return;
         ConfigManager.getInstance().setValue(entry.key(), value);
         MessageUtil.send(sender, "<green>Set <yellow>" + entry.key() + "</yellow> to <white>" + stringifyCurrent(value) + "</white>.");
-        sender.sendMessage(settingLine(entry));
+        com.omniarena.util.MessageUtil.send(sender, settingLine(entry));
     }
 
     private Object parseValue(SettingDefinition entry, String raw, CommandSender sender) {
@@ -156,8 +156,9 @@ public class SettingsCommand extends SubCommand {
                         .toList();
                 case COLOR, SELECT, STRING -> {
                     if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
-                        try { yield RegenAnimationType.valueOf(raw.trim().toUpperCase(Locale.ROOT)).name(); }
-                        catch (IllegalArgumentException e) {
+                        RegenAnimationType parsed = RegenAnimationType.parse(raw);
+                        if (parsed != null) yield parsed.name();
+                        {
                             MessageUtil.send(sender, "<red>Unknown regen style <yellow>" + raw + "</yellow>. <gray>Valid: <white>" + Arrays.stream(RegenAnimationType.values()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")) + "</white> (see <white>/oa help regenstyles</white>).");
                             yield null;
                         }

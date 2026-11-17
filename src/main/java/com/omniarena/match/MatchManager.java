@@ -480,6 +480,7 @@ public class MatchManager {
         match.cancelTasks();
 
         Arena arena = match.getArena();
+        if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().clearChangeLog(arena.getName()); // TIME_REWIND log: this match only
         arena.setState(ArenaState.RUNNING);
         match.setState(MatchState.RUNNING);
         match.setStartTime(System.currentTimeMillis());
@@ -644,7 +645,7 @@ public class MatchManager {
             String msg = ConfigManager.getInstance().getMessage("match-ended")
                     .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
                             (result.getWinnerId() != null ? Bukkit.getOfflinePlayer(result.getWinnerId()).getName() : result.getWinnerTeamName()));
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(msg));
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(msg));
         }
     }
 

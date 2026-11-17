@@ -55,6 +55,17 @@ public final class PlatformImpl implements PlatformAdapter {
     @Override public void setSignLine(SignChangeEvent event, int index, Component line) { event.line(index, line); }
     @Override public void setText(TextDisplay display, Component text) { display.text(text); }
 
+    @Override public boolean wasKicked(org.bukkit.event.player.PlayerQuitEvent event) {
+        return event.getReason() == org.bukkit.event.player.PlayerQuitEvent.QuitReason.KICKED;
+    }
+
+    @Override public byte[] serializeItems(org.bukkit.inventory.ItemStack[] items) { return org.bukkit.inventory.ItemStack.serializeItemsAsBytes(items); }
+    @Override public org.bukkit.inventory.ItemStack[] deserializeItems(byte[] data) { return org.bukkit.inventory.ItemStack.deserializeItemsFromBytes(data); }
+
+    @Override public org.bukkit.block.BlockState getBlockState(org.bukkit.block.Block b) { return b.getState(false); }
+
+    @Override public boolean isServerStopping() { return Bukkit.isStopping(); }
+
     @Override public CommandMap commandMap() { return Bukkit.getCommandMap(); }
 
     @Override

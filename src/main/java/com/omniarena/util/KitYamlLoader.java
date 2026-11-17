@@ -117,7 +117,7 @@ public final class KitYamlLoader {
                     == net.kyori.adventure.text.format.TextDecoration.State.NOT_SET) {
                 nm = nm.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
             }
-            meta.displayName(nm);
+            com.omniarena.platform.Platform.get().setDisplayName(meta, nm);
         }
 
         Object enchants = raw.get("enchants");
@@ -213,7 +213,7 @@ public final class KitYamlLoader {
 
         PotionEffectType byName = PotionEffectType.getByName(normalized);
         if (byName != null) return byName;
-        return Registry.POTION_EFFECT_TYPE.get(NamespacedKey.minecraft(normalized.toLowerCase(Locale.ROOT)));
+        return PotionEffectType.getByKey(NamespacedKey.minecraft(normalized.toLowerCase(Locale.ROOT)));
     }
 
     private static int toInt(Object value, int fallback) {

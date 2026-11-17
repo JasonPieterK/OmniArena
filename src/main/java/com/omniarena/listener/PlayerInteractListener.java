@@ -136,7 +136,7 @@ public class PlayerInteractListener implements Listener {
                             .replace("{arena}", arenaName))
                     .clickEvent(ClickEvent.runCommand("/oa spectate " + arenaName))
                     .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>Click to spectate")));
-            player.sendMessage(msg);
+            com.omniarena.util.MessageUtil.send(player, msg);
             return;
         }
 

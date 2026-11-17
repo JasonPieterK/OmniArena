@@ -67,7 +67,7 @@ public class TournamentManager {
         tournaments.put(name.toLowerCase(), t);
         saveAll();
 
-        Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+        com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                 "<gold>[Tournament] <yellow>" + creator.getName() +
                 " created tournament <white>" + name +
                 " <gray>(" + arena.getName() + ", max " + maxPlayers + "). Use /oa tournament join " + name));
@@ -134,7 +134,7 @@ public class TournamentManager {
         t.setState(TournamentState.IN_PROGRESS);
         t.setBracket(new TournamentBracket(t.getParticipants(), t.getArenaName()));
 
-        Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+        com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                 "<gold>[Tournament] <white>" + t.getName() + " <yellow>has started! " +
                 t.getParticipants().size() + " players competing."));
 
@@ -181,7 +181,7 @@ public class TournamentManager {
             UUID winner = resWinner != null && tm.involves(resWinner) ? resWinner : decideDraw(tm);
             bracket.recordWinner(tm, winner);
             String winnerName = Bukkit.getOfflinePlayer(winner).getName();
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                     "<gold>[Tournament] <white>" + t.getName() +
                     " R" + bracket.getCurrentRoundNumber() +
                     ": <yellow>" + winnerName + " <gray>advances!"));
@@ -191,7 +191,7 @@ public class TournamentManager {
                     finishTournament(t);
                 } else {
                     bracket.advanceRound();
-                    Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+                    com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                             "<gold>[Tournament] <white>" + t.getName() +
                             " <yellow>Round " + bracket.getCurrentRoundNumber() + " begins!"));
                     scheduleLaunch(t);
@@ -257,7 +257,7 @@ public class TournamentManager {
             }
             // opponent left before the fight started: walkover
             t.getBracket().recordWinner(tm, winner);
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                     "<gold>[Tournament] <yellow>" + Bukkit.getOfflinePlayer(winner).getName()
                     + " <gray>wins by walkover (opponent left)."));
             mm.leaveArena(in1 ? p1 : p2);
@@ -303,7 +303,7 @@ public class TournamentManager {
                 UUID winner = p1 != null ? tm.getPlayer1() : p2 != null ? tm.getPlayer2() : tm.getPlayer1();
                 t.getBracket().recordWinner(tm, winner);
                 String wName = Bukkit.getOfflinePlayer(winner).getName();
-                Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+                com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                         "<gold>[Tournament] <yellow>" + wName + " <gray>wins by walkover (opponent offline)."));
                 changed = true;
                 continue;
@@ -337,7 +337,7 @@ public class TournamentManager {
                 finishTournament(t);
             } else {
                 t.getBracket().advanceRound();
-                Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+                com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                         "<gold>[Tournament] <white>" + t.getName() +
                         " <yellow>Round " + t.getBracket().getCurrentRoundNumber() + " begins!"));
                 launchPendingMatches(t);
@@ -352,7 +352,7 @@ public class TournamentManager {
         t.setState(TournamentState.FINISHED);
 
         String winnerName = winner != null ? Bukkit.getOfflinePlayer(winner).getName() : "Unknown";
-        Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+        com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                 "<gold>★ [Tournament] <white>" + t.getName() +
                 " <yellow>finished! Champion: <green>" + winnerName + " <yellow>★"));
 

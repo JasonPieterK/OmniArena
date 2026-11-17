@@ -7,6 +7,7 @@ import com.omniarena.arena.ArenaState;
 import com.omniarena.match.Match;
 import com.omniarena.match.MatchManager;
 import com.omniarena.util.ColorUtil;
+import com.omniarena.platform.Platform;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -87,8 +88,8 @@ public class SignManager {
         boolean changed = false;
         for (Side side : Side.values()) {
             for (int i = 0; i < 4; i++) {
-                if (!lines[i].equals(sign.getSide(side).line(i))) {
-                    sign.getSide(side).line(i, lines[i]);
+                if (!ColorUtil.toLegacy(lines[i]).equals(ColorUtil.toLegacy(Platform.get().getSignLine(sign.getSide(side), i)))) {
+                    Platform.get().setSignLine(sign.getSide(side), i, lines[i]);
                     changed = true;
                 }
             }
@@ -132,10 +133,10 @@ public class SignManager {
             Block block = loc.getBlock();
             if (block.getState() instanceof Sign sign) {
                 for (Side side : Side.values()) {
-                    sign.getSide(side).line(0, ColorUtil.parse("<dark_red>[OmniArena]"));
-                    sign.getSide(side).line(1, Component.text("Arena removed"));
-                    sign.getSide(side).line(2, Component.empty());
-                    sign.getSide(side).line(3, Component.empty());
+                    Platform.get().setSignLine(sign.getSide(side), 0, ColorUtil.parse("<dark_red>[OmniArena]"));
+                    Platform.get().setSignLine(sign.getSide(side), 1, Component.text("Arena removed"));
+                    Platform.get().setSignLine(sign.getSide(side), 2, Component.empty());
+                    Platform.get().setSignLine(sign.getSide(side), 3, Component.empty());
                 }
                 sign.update();
             }

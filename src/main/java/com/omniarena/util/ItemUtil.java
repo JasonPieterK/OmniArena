@@ -25,12 +25,12 @@ public final class ItemUtil {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
-        meta.displayName(noItalic(ColorUtil.parse(name)));
+        com.omniarena.platform.Platform.get().setDisplayName(meta, noItalic(ColorUtil.parse(name)));
         if (lore.length > 0) {
             List<Component> loreComponents = Arrays.stream(lore)
                     .map(l -> noItalic(ColorUtil.parse(l)))
                     .toList();
-            meta.lore(loreComponents);
+            com.omniarena.platform.Platform.get().setLore(meta, loreComponents);
         }
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
                 ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
@@ -42,7 +42,7 @@ public final class ItemUtil {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.empty().decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+            com.omniarena.platform.Platform.get().setDisplayName(meta, Component.empty().decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
                     ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
             item.setItemMeta(meta);
@@ -55,7 +55,7 @@ public final class ItemUtil {
         ItemStack clone = original.clone();
         ItemMeta meta = clone.getItemMeta();
         if (meta != null) {
-            meta.displayName(noItalic(ColorUtil.parse(name)));
+            com.omniarena.platform.Platform.get().setDisplayName(meta, noItalic(ColorUtil.parse(name)));
             clone.setItemMeta(meta);
         }
         return clone;

@@ -32,9 +32,11 @@ import java.util.List;
  */
 public class CombatListener implements Listener {
 
+    private static volatile CombatListener instance;
     private final OmniArena plugin;
 
     public CombatListener(OmniArena plugin) {
+        instance = this;
         this.plugin = plugin;
     }
 
@@ -128,8 +130,8 @@ public class CombatListener implements Listener {
         Player player = event.getPlayer();
         boolean tagged = enabled() && cm().isTagged(player);
         // Shutdown, plugin/admin kicks and arena players are never combat-logs.
-        boolean exempt = Bukkit.isStopping() || plugin.isStopped()
-                || event.getReason() == PlayerQuitEvent.QuitReason.KICKED
+        boolean exempt = com.omniarena.platform.Platform.get().isServerStopping() || plugin.isStopped()
+                || com.omniarena.platform.Platform.get().wasKicked(event)
                 || inArena(player);
         if (!tagged || exempt
                 || !cfg().getConfig().getBoolean("pvp.combat.punish-combat-log", true)) {
@@ -148,7 +150,7 @@ public class CombatListener implements Listener {
             }
         }
         if (cfg().getConfig().getBoolean("pvp.combat.broadcast-combat-log", true)) {
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                     cfg().getMessage("combat-log").replace("{player}", player.getName())));
         }
         cm().handleQuit(player.getUniqueId());
@@ -188,7 +190,7 @@ public class CombatListener implements Listener {
         // namespaced form (/minecraft:tp) is judged by its bare label
         String bare = label.contains(":") ? label.substring(label.indexOf(':') + 1) : label;
         java.util.Set<String> names = new java.util.HashSet<>(List.of(label, bare));
-        var cmd = Bukkit.getCommandMap().getCommand(bare);
+        var cmd = com.omniarena.platform.Platform.get().commandMap().getCommand(bare);
         if (cmd != null) names.add(cmd.getName().toLowerCase(java.util.Locale.ROOT));
         boolean ok = cfg().getConfig().getStringList("pvp.combat.allowed-commands").stream()
                 .map(a -> a.trim().toLowerCase(java.util.Locale.ROOT))
@@ -227,13 +229,17 @@ public class CombatListener implements Listener {
         MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onElytraBoost(com.destroystokyo.paper.event.player.PlayerElytraBoostEvent event) {
-        Player player = event.getPlayer();
-        if (!enabled() || !cm().isTagged(player) || inArena(player)) return;
-        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return;
-        event.setCancelled(true);
+    /** Shared by the Paper-only elytra boost listener (platform layer). @return true if the boost must be cancelled. */
+    public static boolean blockElytraUse(Player player) {
+        CombatListener self = instance;
+        return self != null && self.denyElytra(player);
+    }
+
+    private boolean denyElytra(Player player) {
+        if (!enabled() || !cm().isTagged(player) || inArena(player)) return false;
+        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return false;
         MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
+        return true;
     }
 
     // ── Block placement while tagged + auto-soup ─────────────────────────────────
@@ -250,7 +256,7 @@ public class CombatListener implements Listener {
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         if (!enabled() || event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
-        if (!event.getAction().isRightClick()) return;
+        if (!(event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK)) return;
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item == null) return;

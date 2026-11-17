@@ -43,7 +43,7 @@ public class WebEditorCommand extends SubCommand {
                 .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
                     net.kyori.adventure.text.Component.text("Click to open in browser")));
-        sender.sendMessage(linkComponent);
+        MessageUtil.send(sender, linkComponent);
         MessageUtil.send(sender, "<dark_gray>Kill session: <yellow>/oa override killweb");
     }
 

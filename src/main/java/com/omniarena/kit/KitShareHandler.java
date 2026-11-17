@@ -49,7 +49,7 @@ public class KitShareHandler {
             return false;
         }
 
-        long expiryTick = plugin.getServer().getCurrentTick() + EXPIRY_TICKS;
+        long expiryTick = System.currentTimeMillis() + EXPIRY_TICKS * 50L /* ms: Server#getCurrentTick is Paper-only */;
         pendingRequests.put(recipient.getUniqueId(),
                 new ShareRequest(sender.getUniqueId(), kitName, expiryTick));
 
@@ -74,7 +74,7 @@ public class KitShareHandler {
                 .clickEvent(ClickEvent.runCommand("/kit accept " + kitName))
                 .hoverEvent(HoverEvent.showText(ColorUtil.parse("<green>Click to accept kit!")));
 
-        recipient.sendMessage(msg);
+        MessageUtil.send(recipient, msg);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-share-sent")
                 .replace("{player}", recipient.getName()));
         return true;
@@ -87,7 +87,7 @@ public class KitShareHandler {
             return false;
         }
 
-        if (plugin.getServer().getCurrentTick() > req.expiryTick()) {
+        if (System.currentTimeMillis() > req.expiryTick()) {
             pendingRequests.remove(recipient.getUniqueId());
             MessageUtil.send(recipient, "<red>That kit share request expired (requests last a limited time). <gray>Ask the sender to run <white>/kit share <name> <player></white> again.");
             return false;

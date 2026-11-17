@@ -115,11 +115,10 @@ public class RegenCommand extends SubCommand {
             MessageUtil.send(sender, "<gray>Default affects <yellow>/oa regen <arena></yellow>. Use <yellow>/oa regen style <type></yellow>.");
             return;
         }
-        RegenAnimationType type;
-        try { type = RegenAnimationType.valueOf(args[1].toUpperCase()); }
-        catch (IllegalArgumentException e) {
+        RegenAnimationType type = RegenAnimationType.parse(args[1]);
+        if (type == null) {
             MessageUtil.send(sender, "<red>Unknown style <yellow>" + args[1] + "</yellow>. Valid: "
-                    + Arrays.stream(RegenAnimationType.values()).map(Enum::name).reduce((a, b) -> a + ", " + b).orElse(""));
+                    + RegenAnimationType.validList());
             return;
         }
         ConfigManager.getInstance().setConfigValue("regen.animation.type", type.name());
@@ -165,7 +164,7 @@ public class RegenCommand extends SubCommand {
     private void showSettings(CommandSender sender) {
         var cfg = ConfigManager.getInstance().getConfig();
         MessageUtil.send(sender, "<gold>=== Regen Settings ===");
-        MessageUtil.send(sender, "<gray>Default style: <yellow>" + RegenAnimationType.fromConfig(cfg.getString("regen.animation.type", "CENTER_OUT")).name());
+        MessageUtil.send(sender, "<gray>Default style: <yellow>" + RegenAnimationType.fromConfig(cfg.getString("regen.animation.type", "SPHERE")).name());
         MessageUtil.send(sender, "<gray>Batch size: <yellow>" + cfg.getInt("regen.batch-size", 4000) + "</yellow> blocks/tick");
         MessageUtil.send(sender, "<gray>Progress bar: <yellow>" + cfg.getBoolean("regen.progress.enabled", true));
         MessageUtil.send(sender, "<gray>Particles: <yellow>" + cfg.getBoolean("regen.animation.particles", true));

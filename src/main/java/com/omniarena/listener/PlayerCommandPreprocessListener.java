@@ -33,7 +33,7 @@ public class PlayerCommandPreprocessListener implements Listener {
         boolean inArena = com.omniarena.match.MatchManager.getInstance().isInArena(p)
                 || com.omniarena.match.MatchManager.getInstance().isSpectating(p);
         if (!inArena) {
-            org.bukkit.command.Command registered = org.bukkit.Bukkit.getCommandMap().getCommand("kit");
+            org.bukkit.command.Command registered = com.omniarena.platform.Platform.get().commandMap().getCommand("kit");
             boolean ours = registered instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == plugin;
             if (!ours) return;
         }

@@ -103,14 +103,14 @@ public class HelpCommand extends SubCommand {
         guides.put("regenarena", List.of(
                 "<yellow>1.</yellow> Make sure region is set.",
                 "<yellow>2.</yellow> Save original blocks: <white>/oa regen snapshot <arena></white>.",
-                "<yellow>3.</yellow> Pick default style: <white>/oa regen style RADIATE_OUTWARD</white>.",
+                "<yellow>3.</yellow> Pick default style: <white>/oa regen style SPHERE</white>.",
                 "<yellow>4.</yellow> Rebuild: <white>/oa regen <arena></white>.",
                 "<yellow>5.</yellow> Watch chat progress bar until 100%."));
         java.util.List<String> styles = new java.util.ArrayList<>();
         for (com.omniarena.arena.regen.RegenAnimationType t : com.omniarena.arena.regen.RegenAnimationType.values()) {
             styles.add("<yellow>" + t.name() + "</yellow> - <white>/oa regen style " + t.name() + "</white>");
         }
-        styles.add("<gray>Legacy names (TOP_DOWN, CENTER_OUT, OUTSIDE_IN, RANDOM_BURST...) still work and map to the styles above.");
+        styles.add("<gray>Old style names (CENTER_OUT, TOP_DOWN, METEOR_STRIKE, ...) still load from config and map to the closest style above.");
         guides.put("regenstyles", styles);
         guides.put("signjoin", List.of(
                 "<yellow>1.</yellow> Look at block where sign should go.",

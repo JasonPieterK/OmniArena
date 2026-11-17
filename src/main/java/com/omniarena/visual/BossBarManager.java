@@ -62,7 +62,7 @@ public class BossBarManager {
 
     private void show(UUID uuid, BossBar bar) {
         Player p = Bukkit.getPlayer(uuid);
-        if (p != null) p.showBossBar(bar); // idempotent for the same bar instance
+        if (p != null) com.omniarena.util.MessageUtil.showBossBar(p, bar); // idempotent for the same bar instance
     }
 
     public void updateTimer(Match match) {
@@ -105,12 +105,12 @@ public class BossBarManager {
     /** Shows the match bar to a joining player/spectator (creating it if needed). */
     public void addPlayer(Player player, Match match) {
         if (!enabled(match)) return;
-        player.showBossBar(getOrCreate(match));
+        com.omniarena.util.MessageUtil.showBossBar(player, getOrCreate(match));
     }
 
     public void removePlayer(Player player, Match match) {
         BossBar bar = matchBars.get(match);
-        if (bar != null) player.hideBossBar(bar);
+        if (bar != null) com.omniarena.util.MessageUtil.hideBossBar(player, bar);
     }
 
     public void removeAll(Match match) {
@@ -118,25 +118,25 @@ public class BossBarManager {
         if (bar == null) return;
         for (UUID uuid : new ArrayList<>(match.getPlayers())) hide(uuid, bar);
         for (UUID uuid : new ArrayList<>(match.getSpectators())) hide(uuid, bar);
-        for (Player p : Bukkit.getOnlinePlayers()) p.hideBossBar(bar); // anyone who already left
+        for (Player p : Bukkit.getOnlinePlayers()) com.omniarena.util.MessageUtil.hideBossBar(p, bar); // anyone who already left
     }
 
     private void hide(UUID uuid, BossBar bar) {
         Player p = Bukkit.getPlayer(uuid);
-        if (p != null) p.hideBossBar(bar);
+        if (p != null) com.omniarena.util.MessageUtil.hideBossBar(p, bar);
     }
 
     /** Hides every tracked bar from all online players, then clears the map. */
     public void removeAll() {
         for (BossBar bar : new ArrayList<>(matchBars.values())) {
-            for (Player player : Bukkit.getOnlinePlayers()) player.hideBossBar(bar);
+            for (Player player : Bukkit.getOnlinePlayers()) com.omniarena.util.MessageUtil.hideBossBar(player, bar);
         }
         matchBars.clear();
     }
 
     /** Hides all tracked bars from one player (e.g. on quit/leave). */
     public void removePlayer(Player player) {
-        for (BossBar bar : matchBars.values()) player.hideBossBar(bar);
+        for (BossBar bar : matchBars.values()) com.omniarena.util.MessageUtil.hideBossBar(player, bar);
     }
 
     private static String formatTime(int seconds) {

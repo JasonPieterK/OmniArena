@@ -242,7 +242,7 @@ public class HologramManager implements Listener {
                 td.getPersistentDataContainer().set(tagKey, PersistentDataType.BYTE, (byte) 1);
             });
         }
-        h.entity.text(buildText(h));
+        com.omniarena.platform.Platform.get().setText(h.entity, buildText(h));
     }
 
     private Component buildText(Holo h) {

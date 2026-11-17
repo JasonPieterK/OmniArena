@@ -92,10 +92,10 @@ public class KitGUI {
             ItemStack item = buildKitItem(adminKits.get(i));
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                List<net.kyori.adventure.text.Component> lore = meta.lore() == null
-                        ? new java.util.ArrayList<>() : new java.util.ArrayList<>(meta.lore());
+                List<net.kyori.adventure.text.Component> lore = com.omniarena.platform.Platform.get().getLore(meta) == null
+                        ? new java.util.ArrayList<>() : new java.util.ArrayList<>(com.omniarena.platform.Platform.get().getLore(meta));
                 lore.add(0, ItemUtil.noItalic(ColorUtil.parse("<aqua><bold>[PRESET KIT]</bold></aqua>")));
-                meta.lore(lore);
+                com.omniarena.platform.Platform.get().setLore(meta, lore);
                 item.setItemMeta(meta);
             }
             inv.setItem(adminSlots[i], item);
@@ -182,7 +182,7 @@ public class KitGUI {
         ItemMeta meta = icon.getItemMeta();
         if (meta == null) return icon;
 
-        meta.displayName(ItemUtil.noItalic(ColorUtil.parse("<yellow><bold>" + esc(kit.getDisplayName()) + "</bold></yellow>")));
+        com.omniarena.platform.Platform.get().setDisplayName(meta, ItemUtil.noItalic(ColorUtil.parse("<yellow><bold>" + esc(kit.getDisplayName()) + "</bold></yellow>")));
 
         List<Component> lore = new ArrayList<>();
         if (kit.getDescription() != null && !kit.getDescription().isBlank()) {
@@ -207,7 +207,7 @@ public class KitGUI {
         lore.add(Component.empty());
         lore.add(ColorUtil.parse("<green>Click to equip"));
 
-        meta.lore(lore.stream().map(ItemUtil::noItalic).toList());
+        com.omniarena.platform.Platform.get().setLore(meta, lore.stream().map(ItemUtil::noItalic).toList());
         meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ATTRIBUTES,
                 org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS,
                 org.bukkit.inventory.ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
@@ -234,7 +234,7 @@ public class KitGUI {
     }
 
     private static Inventory createMenu(KitMenuHolder holder, int size, Component title) {
-        Inventory inv = Bukkit.createInventory(holder, size, title);
+        Inventory inv = com.omniarena.platform.Platform.get().createInventory(holder, size, title);
         holder.setInventory(inv);
         return inv;
     }

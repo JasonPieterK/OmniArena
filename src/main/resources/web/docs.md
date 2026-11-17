@@ -276,45 +276,49 @@ instantly finishes running restores, removes preview blocks, and removes falling
   in that arena.
 - `/oa regen snapshot <arena>`.
 - `/oa regen style [type]`: set (or list) the default style. The command and the settings GUI
-  accept only the 20 current names (an unknown name is rejected); the legacy aliases below are
-  still honoured when found in `config.yml`.
+  accept the 10 current names and the legacy names below (an unknown name is rejected).
 - `/oa regen batch [n]`: set (or show) `regen.batch-size`.
 - `/oa regen settings`: show current values. (Its fallback text for an unset style shows a stale
-  name, `WAVE_SHUFFLE`; the effective default is `CENTER_OUT` which maps to `RADIATE_OUTWARD`.)
+  name; the effective default is `SPHERE`.)
 - `/oa regen progress|particles|sound <true|false>`: toggles `regen.progress.enabled`,
   `regen.animation.particles`, `regen.animation.sound`; any other value is rejected.
 
-### Styles (20)
+### Styles (10)
 
-`SPIRAL_ASCENT`, `COLLAPSE_INWARD`, `RADIATE_OUTWARD`, `GRAVITY_DESCENT`, `UPWARD_SURGE`,
-`RAIN_OF_LIGHT`, `ARMORED_DESCENT`, `CHAOTIC_ERUPTION`, `INSTANT_RESTORE`, `BEACON_WAVE`,
-`VOID_SHOCKWAVE`, `ICE_CRYSTAL_GROWTH`, `DARK_VORTEX`, `METEOR_STRIKE`, `PRISM_CASCADE`,
-`BINARY_FILL`, `PHOENIX_REBIRTH`, `QUANTUM_MESH`, `DIAMOND_FUSION`, `TSUNAMI_SURGE`.
+| Style | Order | Effect |
+|-------|-------|--------|
+| `INSTANT` | none | batched placement (`regen.batch-size`), one whoosh sound |
+| `SPHERE` (default) | distance from region center, ascending | thin particle shell at the current radius |
+| `RISE` | y ascending | particle plane rising |
+| `FALL` | y descending | particle plane sinking |
+| `SWEEP` | vertical plane along the longest horizontal axis | spark plane sweeping across |
+| `TIME_REWIND` | exact reverse of the order blocks changed during the match (per-arena change log of break/place/explosion/fluid/burn/fade/form events, max 200k positions, cleared at match start and after a regen); unlogged blocks follow in SPHERE order | counter-clockwise particle clock above the arena, rising pitch |
+| `GALAXY` | 4 spiral arms (angle + k*radius), outward within each arm | PORTAL/END_ROD along the arm |
+| `HOLOGRAM_SCAN` | y ascending, two passes | pass 1: light blue glass previews under a scan plane; pass 2: real blocks replace them (previews always cleaned on cancel/finish) |
+| `METEOR_SHOWER` | random impact points (preferring blocks changed in the match), each rebuilds its surroundings; impacts accelerate | FLAME/LAVA trails and explosion particles, capped decorative falling magma (no damage, no explosion) |
+| `OVERGROWTH` | flood fill from 3-6 seeds through adjacent differing blocks | spore particles, grass/azalea sounds |
 
-Legacy names still accepted when read from `config.yml` and what they map to:
+Sort keys are computed off the main thread when the plan loads. Effects are capped per tick and sent only
+to players within 64 blocks of the region.
 
-| Legacy | Current | Legacy | Current |
-|--------|---------|--------|---------|
-| `SPIRAL` | `SPIRAL_ASCENT` | `BEAM_SWEEP` | `BEACON_WAVE` |
-| `OUTSIDE_IN` | `COLLAPSE_INWARD` | `SHOCKWAVE` | `VOID_SHOCKWAVE` |
-| `CENTER_OUT` | `RADIATE_OUTWARD` | `CRYSTAL_GROWTH` | `ICE_CRYSTAL_GROWTH` |
-| `TOP_TO_BOTTOM`, `TOP_DOWN` | `GRAVITY_DESCENT` | `VORTEX_REBUILD` | `DARK_VORTEX` |
-| `BOTTOM_TO_TOP`, `BOTTOM_UP` | `UPWARD_SURGE` | `METEOR_DROP` | `METEOR_STRIKE` |
-| `LASER_RAIN` | `RAIN_OF_LIGHT` | `PRISM_WAVE` | `PRISM_CASCADE` |
-| `IRON_MAN` | `ARMORED_DESCENT` | `INSTANT` | `INSTANT_RESTORE` |
-| `RANDOM_BURST` | `CHAOTIC_ERUPTION` | | |
-
-Blank or unknown values resolve to `RADIATE_OUTWARD`.
-
-Highlights: `ARMORED_DESCENT` drops red suit pieces as falling blocks; `METEOR_STRIKE` drops flaming
-meteors that explode on impact; `RAIN_OF_LIGHT` streaks glowing blocks that vanish on impact. Falling
-blocks are capped at 90 concurrent entities.
+Old style names and aliases are mapped when read from `config.yml` and also accepted by the commands:
+`RADIATE_OUTWARD`/`COLLAPSE_INWARD`/`VOID_SHOCKWAVE`/`CENTER_OUT`/`OUTSIDE_IN`/`SHOCKWAVE` -> `SPHERE`;
+`UPWARD_SURGE`/`BOTTOM_UP`/`BOTTOM_TO_TOP` -> `RISE`;
+`GRAVITY_DESCENT`/`RAIN_OF_LIGHT`/`ARMORED_DESCENT`/`TOP_DOWN`/`TOP_TO_BOTTOM`/`LASER_RAIN`/`IRON_MAN` -> `FALL`;
+`BEACON_WAVE`/`TSUNAMI_SURGE`/`BEAM_SWEEP` -> `SWEEP`;
+`SPIRAL_ASCENT`/`DARK_VORTEX`/`QUANTUM_MESH`/`SPIRAL`/`VORTEX_REBUILD` -> `GALAXY`;
+`METEOR_STRIKE`/`CHAOTIC_ERUPTION`/`PHOENIX_REBIRTH`/`RANDOM_BURST`/`METEOR_DROP` -> `METEOR_SHOWER`;
+`ICE_CRYSTAL_GROWTH`/`DIAMOND_FUSION`/`CRYSTAL_GROWTH` -> `OVERGROWTH`;
+`BINARY_FILL`/`PRISM_CASCADE`/`PRISM_WAVE` -> `HOLOGRAM_SCAN`;
+`INSTANT_RESTORE` -> `INSTANT`.
+Blank values resolve to `SPHERE`; unknown values resolve to `SPHERE` with a console warning listing the valid
+styles. Commands reject unknown names and list the 10 valid styles. Falling blocks are capped at 90
+concurrent entities.
 
 ### Batch size
 
-`INSTANT_RESTORE` places `regen.batch-size` blocks per tick (default 4000). Animated styles use
-`min(regen.batch-size, 400)`; `ARMORED_DESCENT`, `RAIN_OF_LIGHT`, `METEOR_STRIKE`, `BINARY_FILL` and
-`QUANTUM_MESH` use `min(regen.batch-size, 1200)`.
+`INSTANT` places `regen.batch-size` blocks per tick (default 4000). Animated styles use
+`min(regen.batch-size, 1200)`; `METEOR_SHOWER` ramps up from about 15% of that.
 
 ---
 
@@ -762,7 +766,7 @@ and the dashboard but nothing reads it.
 | `match.announce-arena` | true | - | |
 | `regen.batch-size` | 4000 | yes | Blocks per tick (see section 5) |
 | `regen.progress.enabled`, `interval-percent` | true, 10 | yes | Chat progress for command-driven restores |
-| `regen.animation.type` | CENTER_OUT | yes | Default style |
+| `regen.animation.type` | SPHERE | yes | Default style |
 | `regen.animation.particles`, `sound` | true | yes | |
 | `pvp.*` | see section 9 | mostly | |
 | `rewards.*` | | - | Not implemented |

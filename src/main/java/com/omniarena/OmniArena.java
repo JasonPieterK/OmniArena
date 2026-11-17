@@ -213,6 +213,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new EntityDamageListener(this),    this);
         pm.registerEvents(new BlockBreakListener(this),      this);
         pm.registerEvents(new BlockPlaceListener(this),      this);
+        pm.registerEvents(new com.omniarena.listener.RegenChangeListener(this), this);
         pm.registerEvents(new FoodLevelChangeListener(this), this);
         pm.registerEvents(new PlayerDropItemListener(this), this);
         pm.registerEvents(new PlayerInteractListener(this),  this);
@@ -248,7 +249,7 @@ public final class OmniArena extends JavaPlugin {
     private void logStartupBanner(long elapsed) {
         String line = "==============================================";
         String version = getDescription().getVersion();
-        String gameVersion = getServer().getMinecraftVersion();
+        String gameVersion = getServer().getBukkitVersion().split("-")[0] /* Paper-only getMinecraftVersion avoided */;
 
         org.bukkit.command.ConsoleCommandSender console = getServer().getConsoleSender();
         console.sendMessage(org.bukkit.ChatColor.DARK_BLUE.toString() + org.bukkit.ChatColor.BOLD + line);
