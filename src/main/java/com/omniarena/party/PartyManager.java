@@ -97,7 +97,7 @@ public class PartyManager {
         }
 
         parties.remove(leader.getUniqueId());
-        pendingInvites.values().removeIf(inv -> party.isMember(inv.getLeaderUuid()));
+        pendingInvites.values().removeIf(inv -> inv.getPartyId().equals(party.getId()));
         MessageUtil.send(leader, "<green>Party disbanded.");
         return true;
     }
@@ -137,7 +137,7 @@ public class PartyManager {
         }
 
         // Create invite (expires in 60 seconds)
-        PartyInvite invite = new PartyInvite(leader.getUniqueId(), target.getUniqueId(), party.getKitName());
+        PartyInvite invite = new PartyInvite(party.getId(), leader.getUniqueId(), target.getUniqueId(), party.getKitName());
         pendingInvites.put(target.getUniqueId(), invite);
 
         MessageUtil.send(target, "<yellow>" + leader.getName() + " <gray>has invited you to join their party.");
@@ -171,9 +171,8 @@ public class PartyManager {
             return false;
         }
 
-        // The inviter may have transferred leadership since: resolve the party they are in now
-        UUID leaderId = playerToParty.get(invite.getLeaderUuid());
-        Party party = leaderId != null ? parties.get(leaderId) : null;
+        // Invites are keyed by party id, so they survive leadership transfers
+        Party party = findPartyById(invite.getPartyId());
         Player leader = party != null ? Bukkit.getPlayer(party.getLeaderUuid()) : null;
         if (party == null) {
             MessageUtil.send(player, "<red>That party no longer exists.");
@@ -226,7 +225,7 @@ public class PartyManager {
             return false;
         }
 
-        Player leader = Bukkit.getPlayer(invite.getLeaderUuid());
+        Player leader = Bukkit.getPlayer(invite.getInviterUuid());
         if (leader != null && leader.isOnline()) {
             MessageUtil.send(leader, "<red>" + player.getName() + " <gray>declined your party invite.");
         }
@@ -296,7 +295,7 @@ public class PartyManager {
         if (nextId == null) {
             // Nobody online to inherit the party: disband it
             for (UUID m : party.getMembers()) playerToParty.remove(m);
-            pendingInvites.values().removeIf(inv -> inv.getLeaderUuid().equals(oldId));
+            pendingInvites.values().removeIf(inv -> inv.getPartyId().equals(party.getId()));
             MessageUtil.send(leaver, "<green>You left the party. <gray>It was disbanded because no other member is online.");
             return true;
         }
@@ -402,7 +401,6 @@ public class PartyManager {
     public void handleQuit(Player player) {
         UUID id = player.getUniqueId();
         pendingInvites.remove(id);
-        pendingInvites.values().removeIf(inv -> inv.getLeaderUuid().equals(id));
         if (isInParty(player)) leaveParty(player);
     }
 
@@ -459,9 +457,15 @@ public class PartyManager {
         return parties.size();
     }
 
+    private Party findPartyById(UUID partyId) {
+        for (Party p : parties.values()) if (p.getId().equals(partyId)) return p;
+        return null;
+    }
+
     // Inner classes
 
     public static class Party {
+        private final UUID id = UUID.randomUUID(); // stable across leader transfers
         private UUID leaderUuid;
         private String leaderName;
         private final Set<UUID> members = new LinkedHashSet<>();
@@ -473,6 +477,7 @@ public class PartyManager {
             this.members.add(leaderUuid);
         }
 
+        public UUID getId() { return id; }
         public UUID getLeaderUuid() { return leaderUuid; }
         public String getLeaderName() { return leaderName; }
         public Set<UUID> getMembers() { return members; }
@@ -500,19 +505,22 @@ public class PartyManager {
     }
 
     public static class PartyInvite {
-        private final UUID leaderUuid;
+        private final UUID partyId;
+        private final UUID inviterUuid;
         private final UUID targetUuid;
         private final String kitName;
         private final long expireTime;
 
-        public PartyInvite(UUID leaderUuid, UUID targetUuid, String kitName) {
-            this.leaderUuid = leaderUuid;
+        public PartyInvite(UUID partyId, UUID inviterUuid, UUID targetUuid, String kitName) {
+            this.partyId = partyId;
+            this.inviterUuid = inviterUuid;
             this.targetUuid = targetUuid;
             this.kitName = kitName;
             this.expireTime = System.currentTimeMillis() + 60000; // 60 seconds
         }
 
-        public UUID getLeaderUuid() { return leaderUuid; }
+        public UUID getPartyId() { return partyId; }
+        public UUID getInviterUuid() { return inviterUuid; }
         public UUID getTargetUuid() { return targetUuid; }
         public String getKitName() { return kitName; }
         public boolean isExpired() { return System.currentTimeMillis() > expireTime; }
