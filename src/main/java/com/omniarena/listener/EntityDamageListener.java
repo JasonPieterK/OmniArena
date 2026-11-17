@@ -41,6 +41,11 @@ public class EntityDamageListener implements Listener {
         Optional<Match> matchOpt = mm.getMatch(arena);
         if (matchOpt.isEmpty() || matchOpt.get().getState() != MatchState.RUNNING) {
             event.setCancelled(true);
+            // Falling into the void in the lobby / end phase would otherwise loop forever
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID && arena.getLobbySpawn() != null) {
+                victim.setFallDistance(0f);
+                mm.markInternalTeleport(victim, arena.getLobbySpawn());
+            }
             return;
         }
 
@@ -80,6 +85,21 @@ public class EntityDamageListener implements Listener {
             !(event.getDamager() instanceof org.bukkit.entity.Projectile)) return;
 
         MatchManager mm = MatchManager.getInstance();
+        Player shooter = null;
+        if (event.getDamager() instanceof Player pa) shooter = pa;
+        else if (event.getDamager() instanceof org.bukkit.entity.Projectile pr && pr.getShooter() instanceof Player ps) shooter = ps;
+
+        // Arena fighters can't hurt outsiders, and outsiders/other matches/spectators can't hurt them
+        if (shooter != null && !shooter.equals(victim)) {
+            Optional<String> va = mm.getArenaName(victim);
+            Optional<String> sa = mm.getArenaName(shooter);
+            if (!va.equals(sa) || mm.isSpectating(shooter)) {
+                if (va.isPresent() || sa.isPresent()) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         if (!mm.isInArena(victim)) return;
 
         Optional<String> arenaName = mm.getArenaName(victim);

@@ -35,6 +35,7 @@ public class PlayerMoveListener implements Listener {
         MatchManager mm = MatchManager.getInstance();
 
         if (!mm.isInArena(player) || mm.isSpectating(player)) return;
+        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) return; // eliminated
 
         Optional<String> arenaName = mm.getArenaName(player);
         if (arenaName.isEmpty()) return;

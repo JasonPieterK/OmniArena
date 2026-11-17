@@ -138,6 +138,7 @@ public class QueueManager {
      */
     private void processMatchmaking() {
         if (queues.isEmpty()) return;
+        if (plugin.getMatchManager().isLockdown()) return;
         long now = System.currentTimeMillis();
         var mm = plugin.getMatchManager();
 
@@ -207,6 +208,8 @@ public class QueueManager {
         for (Arena a : plugin.getArenaManager().getEnabled()) {
             if (a.getState() == com.omniarena.arena.ArenaState.WAITING
                     && a.isJoinable()
+                    && (a.getMaxPlayers() <= 0 || a.getMaxPlayers() >= 2)
+                    && !mm.isArenaReserved(a.getName(), new UUID(0, 0))
                     && mm.getMatch(a).isEmpty()) {
                 return a;
             }
@@ -233,6 +236,7 @@ public class QueueManager {
         if (ok1) {
             mm.getMatch(arena).ifPresent(m -> {
                 m.setRanked(true);
+                m.setQueueName(kitName);
                 if (kitName != null && com.omniarena.kit.KitManager.getInstance().getAdminKit(kitName).isPresent()) {
                     m.setQueueKit(kitName);
                 }

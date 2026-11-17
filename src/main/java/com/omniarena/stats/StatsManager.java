@@ -123,7 +123,9 @@ public class StatsManager {
 
             if (result.isDraw()) {
                 stats.addDraw();
-            } else if (uuid.equals(result.getWinnerId())) {
+            } else if (uuid.equals(result.getWinnerId())
+                    || (result.getWinnerTeamName() != null && match.getTeam(uuid) != null
+                        && result.getWinnerTeamName().equals(match.getTeam(uuid).getName()))) {
                 stats.addWin();
             } else {
                 stats.addLoss();

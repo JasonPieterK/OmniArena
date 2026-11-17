@@ -38,6 +38,7 @@ public class PlayerTeleportListener implements Listener {
         MatchManager mm = MatchManager.getInstance();
         if (mm == null || mm.isInternalTeleport(player.getUniqueId())) return;
         if (!mm.isInArena(player) || mm.isSpectating(player)) return;
+        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) return; // eliminated players using spectator teleport
 
         Location to = event.getTo();
         if (to == null) return;
@@ -55,6 +56,7 @@ public class PlayerTeleportListener implements Listener {
         MatchManager mm = MatchManager.getInstance();
         if (mm == null || mm.isInternalTeleport(player.getUniqueId())) return;
         if (!mm.isInArena(player) || mm.isSpectating(player)) return;
+        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) return;
 
         Optional<Arena> arena = arenaOf(mm, player);
         if (arena.isEmpty() || !arena.get().getRegion().isDefined()) return;

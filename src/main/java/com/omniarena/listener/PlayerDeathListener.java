@@ -50,7 +50,7 @@ public class PlayerDeathListener implements Listener {
         MatchState st = matchOpt.get().getState();
 
         // Death while the match is winding down: no drops/keep inventory, respawn at arena lobby
-        if (st == MatchState.ENDING || st == MatchState.RESETTING) {
+        if (st != MatchState.RUNNING) {
             event.setDeathMessage(null);
             event.getDrops().clear();
             event.setDroppedExp(0);
@@ -59,7 +59,6 @@ public class PlayerDeathListener implements Listener {
             scheduleEndingRespawn(victim.getUniqueId(), arena);
             return;
         }
-        if (st != MatchState.RUNNING) return;
 
         Match match = matchOpt.get();
 
@@ -73,7 +72,7 @@ public class PlayerDeathListener implements Listener {
         Player killer = victim.getKiller();
 
         // Record kill
-        if (killer != null && mm.isInArena(killer)) {
+        if (killer != null && !killer.equals(victim) && match.hasPlayer(killer.getUniqueId())) {
             match.recordKill(killer.getUniqueId(), victim.getUniqueId());
 
             // First blood
@@ -115,6 +114,7 @@ public class PlayerDeathListener implements Listener {
             }
         } else {
             // Environmental death — reset stats
+            match.getDeathsMap().merge(victim.getUniqueId(), 1, Integer::sum);
             match.resetStreak(victim.getUniqueId());
             match.resetCombo(victim.getUniqueId());
         }
@@ -141,13 +141,30 @@ public class PlayerDeathListener implements Listener {
         }
     }
 
+    /** Dead players in an arena respawn inside it: lobby when not fighting, spectator spot when eliminated. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onRespawn(org.bukkit.event.player.PlayerRespawnEvent event) {
+        if (plugin.isStopped()) return;
+        Player p = event.getPlayer();
+        MatchManager mm = MatchManager.getInstance();
+        if (mm == null || !mm.isInArena(p)) return;
+        Optional<Arena> arenaOpt = mm.getArenaName(p).flatMap(n -> ArenaManager.getInstance().get(n));
+        if (arenaOpt.isEmpty()) return;
+        Arena arena = arenaOpt.get();
+        Optional<Match> m = mm.getMatch(arena);
+        org.bukkit.Location loc;
+        if (mm.isSpectating(p)) loc = arena.getSpectatorSpawn();
+        else if (m.isPresent() && m.get().getState() == MatchState.RUNNING)
+            loc = arena.getGameMode().respawns() ? arena.getRandomBattleSpawn() : arena.getSpectatorSpawn();
+        else loc = arena.getLobbySpawn();
+        if (loc != null) event.setRespawnLocation(loc);
+    }
+
     private void scheduleEndingRespawn(UUID uuid, Arena arena) {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             Player p = Bukkit.getPlayer(uuid);
             if (p == null || !p.isOnline()) return;
             if (p.isDead()) p.spigot().respawn();
-            var spot = arena.getLobbySpawn();
-            if (spot != null) p.teleport(spot);
         }, 1L);
     }
 
@@ -176,10 +193,11 @@ public class PlayerDeathListener implements Listener {
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             Player victim = Bukkit.getPlayer(victimId);
-            if (victim == null || !victim.isOnline() || !MatchManager.getInstance().isInArena(victim)) return;
+            if (victim == null || !victim.isOnline() || !match.hasPlayer(victimId)
+                    || !MatchManager.getInstance().isInArena(victim)) return;
+            if (victim.isDead()) victim.spigot().respawn();
             if (match.getState() != MatchState.RUNNING) return;
 
-            victim.spigot().respawn();
             match.getAlivePlayers().add(victim.getUniqueId());
 
             // Teleport to spawn + re-equip this game type's loadout
