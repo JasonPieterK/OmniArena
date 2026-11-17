@@ -388,7 +388,7 @@ public class CombatListener implements Listener {
     }
 
     /** Reads a key, falling back to its pre-rename name when only the old key is set in the server's config.yml. */
-    private static boolean legacyBool(String key, String legacyKey, boolean def) {
+    private boolean legacyBool(String key, String legacyKey, boolean def) {
         var c = cfg().getConfig();
         if (c.isSet(key)) return c.getBoolean(key, def);
         if (c.isSet(legacyKey)) return c.getBoolean(legacyKey, def);
