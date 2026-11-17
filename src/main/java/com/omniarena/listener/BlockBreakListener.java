@@ -38,6 +38,12 @@ public class BlockBreakListener implements Listener {
         Arena arena = arenaOpt.get();
         // Allow if player is OP or arena allows breaking
         if (player.isOp()) return;
+        if (!arena.getRules().isBlockBreak() && arena.getState() != ArenaState.RUNNING
+                && com.omniarena.config.ConfigManager.getInstance().getConfig().getBoolean("arena.region-protection", true)
+                && !com.omniarena.permission.PermissionChecker.hasAdminArena(player)) {
+            event.setCancelled(true);
+            return;
+        }
         if (arena.getState() == ArenaState.RUNNING && !arena.getRules().isBlockBreak()) {
             event.setCancelled(true);
         }

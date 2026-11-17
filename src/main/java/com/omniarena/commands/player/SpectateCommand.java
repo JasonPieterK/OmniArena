@@ -41,7 +41,7 @@ public class SpectateCommand extends SubCommand {
             return;
         }
         if (!MatchManager.getInstance().joinSpectator(player, arenaOpt.get())) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-not-allowed"));
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-not-allowed").replace("{arena}", arenaOpt.get().getName()));
         }
     }
 

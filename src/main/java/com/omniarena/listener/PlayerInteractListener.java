@@ -121,12 +121,12 @@ public class PlayerInteractListener implements Listener {
         }
 
         if (arena.isBanned(player.getUniqueId())) {
-            MessageUtil.send(player, "<red>You are banned from this arena.");
+            MessageUtil.send(player, "<red>You are banned from this arena, so the sign did nothing. <gray>Ask an admin to lift the ban if this is a mistake.");
             return;
         }
 
         if (!arena.isWhitelisted(player.getUniqueId())) {
-            MessageUtil.send(player, "<red>You are not whitelisted for this arena.");
+            MessageUtil.send(player, "<red>This arena is whitelist-only and you are not on its whitelist. <gray>Ask an admin to add you.");
             return;
         }
 

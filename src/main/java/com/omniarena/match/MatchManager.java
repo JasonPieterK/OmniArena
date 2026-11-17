@@ -382,13 +382,21 @@ public class MatchManager {
     private void startCountdown(Match match) {
         match.setState(MatchState.WAITING);
         final int[] secondsLeft = {match.getArena().getCountdown()};
+        final int[] waitedSeconds = {0}; // seconds spent below the minimum player count (arena.lobby-timeout)
         match.setCountdownSeconds(secondsLeft[0]);
 
         BukkitTask task = AsyncUtil.runSyncRepeating(() -> {
             if (match.getState() != MatchState.WAITING && match.getState() != MatchState.STARTING) return;
             if (match.getPlayerCount() < effectiveMin(match)) {
                 match.setState(MatchState.WAITING);
-                
+
+                int lobbyTimeout = ConfigManager.getInstance().getConfig().getInt("arena.lobby-timeout", 0);
+                if (lobbyTimeout > 0 && ++waitedSeconds[0] >= lobbyTimeout) {
+                    broadcastArena(match, "<yellow>Not enough players joined in time - the lobby was closed.");
+                    resetMatch(match);
+                    return;
+                }
+
                 // Show title instead of chat spam
                 for (UUID uuid : match.getPlayers()) {
                     Player player = Bukkit.getPlayer(uuid);
@@ -410,6 +418,7 @@ public class MatchManager {
             }
 
             match.setState(MatchState.STARTING);
+            waitedSeconds[0] = 0;
             
             // Unlock players when starting
             for (UUID uuid : match.getPlayers()) {
@@ -577,6 +586,13 @@ public class MatchManager {
 
         endCommandHandler.execute(match, result);
         StatsManager.getInstance().recordResult(match, result);
+
+        if (match.getArena().isAnnouncements()
+                && ConfigManager.getInstance().getConfig().getBoolean("match.announce-arena", true)) {
+            broadcastArena(match, ConfigManager.getInstance().getMessage("match-ended")
+                    .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
+                            (result.getWinnerId() != null ? String.valueOf(Bukkit.getOfflinePlayer(result.getWinnerId()).getName()) : String.valueOf(result.getWinnerTeamName()))));
+        }
 
         if (ConfigManager.getInstance().getConfig().getBoolean("match.announce-global")) {
             String msg = ConfigManager.getInstance().getMessage("match-ended")

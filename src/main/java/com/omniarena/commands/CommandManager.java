@@ -251,7 +251,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("unknown-command"));
+        MessageUtil.send(sender, ConfigManager.getInstance().getMessage("unknown-command").replace("{input}", args[0]));
         return true;
     }
 

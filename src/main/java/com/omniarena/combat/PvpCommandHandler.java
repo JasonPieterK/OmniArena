@@ -35,7 +35,7 @@ public class PvpCommandHandler {
             case "pvpinfo"    -> pvpinfo(sender, args);
             case "pvplist"    -> pvplist(sender, args);
             case "pvpoverride"-> pvpoverride(sender, args);
-            default -> MessageUtil.send(sender, "<red>Unknown PvP command.");
+            default -> MessageUtil.send(sender, "<red>Unknown PvP command. <gray>Valid: <white>/oa pvp, pvpstatus, pvptag, untag, pvpglobal, newbie, pvpinfo, pvplist, pvpoverride</white>.");
         }
     }
 
@@ -43,7 +43,7 @@ public class PvpCommandHandler {
     private void pvp(CommandSender sender, String[] args) {
         if (args.length >= 1 && sender.hasPermission(ADMIN)) {
             Player target = Bukkit.getPlayerExact(args[0]);
-            if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+            if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
             boolean now = cm().togglePvp(target);
             MessageUtil.send(sender, "<green>" + target.getName() + " PvP: " + onOff(now));
             MessageUtil.send(target, cfg().getMessage(now ? "pvp-enabled-self" : "pvp-disabled-self"));
@@ -66,7 +66,7 @@ public class PvpCommandHandler {
     private void pvptag(CommandSender sender, String[] args) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         Player target = args.length >= 1 ? Bukkit.getPlayerExact(args[0]) : (sender instanceof Player p ? p : null);
-        if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+        if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
         int seconds = cfg().getConfig().getInt("pvp.combat.tag-duration", 15);
         if (args.length >= 2) {
             try { seconds = Integer.parseInt(args[1]); } catch (NumberFormatException e) { seconds = -1; }
@@ -83,7 +83,7 @@ public class PvpCommandHandler {
     private void untag(CommandSender sender, String[] args) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         Player target = args.length >= 1 ? Bukkit.getPlayerExact(args[0]) : (sender instanceof Player p ? p : null);
-        if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+        if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
         cm().untag(target);
         MessageUtil.send(sender, "<green>Untagged " + target.getName() + ".");
     }
@@ -120,21 +120,21 @@ public class PvpCommandHandler {
         Player target = args.length >= 2 ? Bukkit.getPlayerExact(args[1]) : null;
         switch (sub) {
             case "add" -> {
-                if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+                if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
                 int secs = args.length >= 3 ? parseInt(args[2], 300) : cfg().getConfig().getInt("pvp.newbie.duration", 300);
                 cm().grantNewbie(target.getUniqueId(), secs);
                 MessageUtil.send(sender, "<green>Gave " + target.getName() + " " + secs + "s newbie protection.");
             }
             case "remove" -> {
-                if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+                if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
                 cm().removeNewbie(target.getUniqueId());
                 MessageUtil.send(sender, "<green>Removed newbie protection from " + target.getName() + ".");
             }
             case "checktime" -> {
-                if (target == null) { MessageUtil.send(sender, "<red>Player not online."); return; }
+                if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
                 MessageUtil.send(sender, "<gray>" + target.getName() + " newbie: " + cm().getNewbieSeconds(target.getUniqueId()) + "s left.");
             }
-            default -> MessageUtil.send(sender, "<red>Usage: /oa newbie <add|remove|checktime|disable> [player] [seconds]");
+            default -> MessageUtil.send(sender, "<red>Usage: <yellow>/oa newbie <add|remove|checktime|disable> [player] [seconds]</yellow> <gray>- pick one action, e.g. <white>/oa newbie checktime</white>.");
         }
     }
 
@@ -209,7 +209,7 @@ public class PvpCommandHandler {
         if (args.length > idx) {
             if (!sender.hasPermission(ADMIN)) { noPerm(sender); return null; }
             Player t = Bukkit.getPlayerExact(args[idx]);
-            if (t == null) MessageUtil.send(sender, "<red>Player not online.");
+            if (t == null) MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command.");
             return t;
         }
         if (sender instanceof Player p) return p;

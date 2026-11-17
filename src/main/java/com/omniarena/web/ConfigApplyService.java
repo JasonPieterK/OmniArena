@@ -284,7 +284,11 @@ public class ConfigApplyService {
     // ── Apply (values already validated) ───────────────────────────────
 
     private void applyArena(Arena arena, JsonObject obj) {
-        if (present(obj, "enabled")) arena.setState(bool(obj.get("enabled")) ? ArenaState.WAITING : ArenaState.DISABLED);
+        if (present(obj, "enabled")) {
+            boolean want = bool(obj.get("enabled"));
+            // Only flip on a real change: never knock a running/starting arena back to WAITING.
+            if (want != arena.isEnabled()) arena.setState(want ? ArenaState.WAITING : ArenaState.DISABLED);
+        }
         if (present(obj, "gameMode")) arena.setGameMode(GameModeType.fromString(obj.get("gameMode").getAsString()));
         if (present(obj, "minPlayers")) arena.setMinPlayers(num(obj.get("minPlayers")));
         if (present(obj, "maxPlayers")) arena.setMaxPlayers(num(obj.get("maxPlayers")));

@@ -55,7 +55,7 @@ match-min-players: "<yellow>Waiting for players... <gray>({current}/{min} needed
 # Spectator
 spectate-joined: "<gray>You are now spectating <yellow>{arena}</yellow>."
 spectate-left: "<gray>You left spectator mode."
-spectate-not-allowed: "<red>Spectating is not allowed in this arena. <gray>Admins: set <white>spectators.enabled</white> for it with <white>/oa config set <arena> <key> <value></white>."
+spectate-not-allowed: "<red>You can't spectate <yellow>{arena}</yellow> right now: spectating is disabled for it, or the arena has no spectator spawn/running match. <gray>Check <white>/oa info {arena}</white>; admins can set a spectator spawn with <white>/oa spawn set {arena} SPECTATOR</white>."
 spectate-follow: "<gray>Following <yellow>{player}</yellow>. Sneak to stop."
 
 # Kill / Death
