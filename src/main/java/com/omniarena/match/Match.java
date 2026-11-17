@@ -48,6 +48,9 @@ public class Match {
     // Ranked (queue) matches record ELO; queueKit overrides the arena's default loadout
     private boolean ranked = false;
     private String queueKit;
+    private String queueName;
+    /** Number of players that were in the match when it started (0 before start). */
+    private int startedWith;
 
     // Scheduled tasks
     private BukkitTask countdownTask;
@@ -85,6 +88,10 @@ public class Match {
     public void setRanked(boolean ranked) { this.ranked = ranked; }
     public String getQueueKit() { return queueKit; }
     public void setQueueKit(String queueKit) { this.queueKit = queueKit; }
+    public String getQueueName() { return queueName; }
+    public void setQueueName(String queueName) { this.queueName = queueName; }
+    public int getStartedWith() { return startedWith; }
+    public void setStartedWith(int startedWith) { this.startedWith = startedWith; }
     public boolean isFirstBloodDealt() { return firstBloodDealt; }
     public void setFirstBloodDealt(boolean firstBloodDealt) { this.firstBloodDealt = firstBloodDealt; }
 
