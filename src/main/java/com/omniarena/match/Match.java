@@ -32,6 +32,8 @@ public class Match {
     private final Map<UUID, Long>       spawnProtection = new HashMap<>(); // expiry millis
     private final Map<UUID, MatchTeam>  teamMap     = new HashMap<>();
     private final Map<UUID, BukkitTask> spawnProtectionTasks = new HashMap<>();
+    /** Pre-arranged side (0-based) per player, e.g. queued parties that must share a team. */
+    private final Map<UUID, Integer> presetSides = new HashMap<>();
 
     // Teams
     private final List<MatchTeam> teams = new ArrayList<>();
@@ -71,6 +73,8 @@ public class Match {
     public Map<UUID, Integer> getStreakMap() { return streak; }
     public Map<UUID, Integer> getComboMap() { return combo; }
     public Map<UUID, Integer> getLivesMap() { return lives; }
+    public Map<UUID, Integer> getPresetSides() { return presetSides; }
+    public int getLives(UUID uuid) { return lives.getOrDefault(uuid, 0); }
     public Map<UUID, Long> getJoinedAt() { return joinedAt; }
     public Map<UUID, UUID> getLastKilledBy() { return lastKilledBy; }
     public Map<UUID, String> getSelectedKit() { return selectedKit; }
@@ -121,6 +125,7 @@ public class Match {
         BukkitTask spTask = spawnProtectionTasks.remove(uuid);
         if (spTask != null) spTask.cancel();
         lives.remove(uuid);
+        presetSides.remove(uuid);
         lastKilledBy.remove(uuid);
         lastKilledBy.values().removeIf(uuid::equals);
         savedInventories.remove(uuid);

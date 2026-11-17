@@ -445,8 +445,8 @@ now `/oa` (`/oa pmr` remains for admin actions).
   `lava-fire-radius`).
 - **Override:** `/oa pvpoverride` lets an admin attack regardless of toggles and protections.
 
-Commands: `/oa pvp [player]`, `pvpstatus [player]`, `pvptag [player]` (admin; seconds argument is
-accepted by the usage text but the configured duration is used), `untag [player]`,
+Commands: `/oa pvp [player]`, `pvpstatus [player]`, `pvptag [player] [seconds]` (admin; seconds 1-3600, default
+`pvp.combat.tag-duration`), `untag [player]`,
 `pvpglobal <on|off>`, `newbie [disable]` (players) and `newbie add|remove|checktime <player>
 [seconds]` (admin), `pvpinfo [player]`, `pvplist`, `pvpoverride`, `pmr <help|cleanup|reload|worlds>`.
 Targeting another player requires `omniarena.pvp.admin`.
@@ -480,10 +480,13 @@ displays ratings; the web Players tab shows them.
   counts), capped at **1000**.
 - A free arena is any enabled, WAITING, joinable arena with no running match. If none is free
   matchmaking stops for that tick and everyone stays queued.
-- The match is created by joining both players; it is flagged **ranked** and, if the queue key
-  names an admin kit, `queueKit` is set. If joining fails both players are re-queued with their
-  original wait time.
-- `joinQueue(Player, kitName)` has no caller in this build, see section 21.
+- The match is created by joining both players; it is flagged **ranked**, remembers its queue name,
+  and, if the queue key names an admin kit, `queueKit` is set. If joining fails both players are
+  re-queued with their original wait time. If a ranked match collapses before it starts, the
+  remaining player is put back into the queue by `MatchManager`.
+- A manual `/oa join` or a tournament launch removes the player from any queue.
+- Outside that re-queue path, `joinQueue(Player, kitName)` has no caller in this build, see
+  section 21.
 
 ---
 
@@ -502,20 +505,21 @@ constants. Parties are not yet consumed by matches or queues.
 
 Requires Vault and an economy provider present when the plugin enables (checked once at startup).
 
-- `/oa bet place <arena> <player> <amount>`: the target must be online and a participant (not a
-  spectator) of that arena.
+- `/oa bet place <arena> <player> <amount>`: the arena must have a live match that is not
+  ENDING/RESETTING, and the target must be online and a participant (not a spectator) of that arena.
+  Non-OP players need the `omniarena.bet` node (see section 16).
 - `/oa bet cancel`: refund your bet while the betting window is open.
 - `/oa bet info [arena]`: your active bet and, with an arena, its bet count and pool.
 
-Rules: one bet per player; amount between `betting.min-bet` (default 100) and `betting.max-bet`
+Rules: **one active bet per player at a time** (cancel it before placing another); amount between `betting.min-bet` (default 100) and `betting.max-bet`
 (default 10000) and within the player's balance; money is withdrawn on placement. The window is
 open before the match starts and for `betting.bet-window-seconds` (default 30) after it starts;
 afterwards you cannot place or cancel.
 
 Settlement when a match ends: winner pool = bets on the winner. If there is no winner (draw,
 timeout, forfeit without winner id) or nobody backed the winner, **every bet is refunded**.
-Otherwise each winning bet receives `totalPool x (yourBet / winnerPool)` (paid even to offline
-players); losing bets are lost. Bets still pending at match cleanup (aborted match) are refunded;
+Otherwise each winning bet receives `totalPool x (yourBet / winnerPool)` rounded down to cents
+(paid even to offline players); losing bets are lost. Bets still pending at match cleanup (aborted match) are refunded;
 all bets are refunded on `/oa stop` and on plugin disable. `betting.allow-spectator-bet` exists in
 `config.yml` but is not read.
 
@@ -530,7 +534,7 @@ Single elimination on one arena (one live match at a time). Command `/oa tournam
 | `create <name> <arena> <maxPlayers>` | players with `omniarena.tournament.create` (default true) or admins | Arena must exist, max >= 2, name unique (case-insensitive). Broadcast on create. |
 | `join <name>` | players | Registration state only. Starts automatically when the tournament is full. |
 | `leave <name>` | players | Registration state only. |
-| `start <name>` | creator or `omniarena.tournament.admin` | Needs >= 2 players. |
+| `start <name>` | creator or `omniarena.tournament.admin` | Drops participants who are offline at that moment; needs >= 2 online players. |
 | `status <name>` (alias `info`), `list` | anyone | |
 | `delete <name>` (alias `cancel`) | admin | Removes the tournament (no entry fees exist to refund). |
 | `setprize <name> <1st\|2nd\|3rd> <amount>` | admin | Non-negative number. |
@@ -538,22 +542,28 @@ Single elimination on one arena (one live match at a time). Command `/oa tournam
 ### Bracket
 
 Seed order is join order. For a non power-of-two field the top seeds receive byes in round 1
-(for 6 players: 2 byes, 2 real matches). Each launch picks the first pending match, joins both
-players to the arena via the normal join path, and waits for the match to end before launching
-the next (`match.end-delay + 2` seconds later). An offline player forfeits by walkover. Tournament
-matches are **not ranked** (no ELO).
+(for 6 players: 2 byes, 2 real matches). Each launch picks the first pending match, removes both
+players from any queue, joins them to the arena via the normal join path, and waits for the match
+to end before launching the next (`match.end-delay + 2` seconds later). A 5-second safety tick
+(`TournamentManager` task, every 100 ticks) relaunches matches that had to wait (arena busy, a
+player busy elsewhere) or that vanished without a result. If a player is offline, the opponent
+gets a walkover after `tournament.walkover-grace-seconds` (default 60); if a player leaves the arena
+during a running tournament match the other player is declared the winner. Tournament matches are
+**not ranked** (no ELO).
 
 ### Draw and timeout rule
 
-If a match ends without a winner (draw or timeout), the winner is decided by: the only online
-player; else the player with higher current health; else a coin flip. The bracket never stalls.
+If a match ends without a winner (draw or timeout), the winner is decided by: the only player
+still in the arena (or online); else the player with higher current health; else a coin flip. The
+bracket never stalls. (Kill-based modes already resolve a strict timeout leader to a winner, so this
+rule mainly covers ties and last-alive draws.)
 
 ### Prizes (Vault)
 
 When the final ends, `prizeFirst` goes to the champion, `prizeSecond` to the final's loser, and
 `prizeThird` is **split evenly among the losers of the round before the final** (the semifinal
-losers; there is no third-place match). Prizes <= 0 are skipped; with no economy a warning is
-logged. Finished tournaments are removed from memory and from `tournaments.yml`.
+losers; there is no third-place match), each share rounded down to cents. Prizes <= 0 are skipped;
+with no economy a warning is logged. Finished tournaments are removed from memory and from `tournaments.yml`.
 
 ### Persistence
 
@@ -601,7 +611,9 @@ Run `/oa <subcommand> help` for usage of any subcommand and `/oa help [guide]` f
 - `/oa` (aliases `omniarena`, `arena`) requires `omniarena.use` to be run at all.
 - While stopped, only `/oa start` runs.
 - Admin subcommands require `PermissionChecker.hasAdmin`: console, OP, `omniarena.admin`, or the
-  specific node. Player subcommands run for anyone who can use `/oa`.
+  specific node. Player subcommands are checked against the subcommand's own required node for
+  non-OP players (`omniarena.use`, `omniarena.spectate`, `omniarena.kit.use`, `omniarena.pvp`,
+  `omniarena.bet`, `omniarena.tournament.create`); the console and OPs always pass.
 - When a name exists as both a player and admin command (`kit`), admins get the admin version only
   for `setpublic`, `setprivate`, `icon`, `description`, `cooldown`, `permission`.
 
@@ -614,25 +626,33 @@ Run `/oa <subcommand> help` for usage of any subcommand and `/oa help [guide]` f
 ### Admin subcommands
 
 `create`, `delete`, `enable`, `disable`, `config`, `spawn`, `region`, `goal`, `module`, `match`,
-`regen`, `sign`, `kit` (metadata actions), `tp`, `debug`, `announcements`, `chat`, `override`,
-`reload`, `version`, `wand`, `website`, `settings`, `start`, `stop`, `restart`, `pmr`.
+`force`, `forcewin`, `regen`, `sign`, `kit` (metadata actions), `tp`, `debug`, `announcements`,
+`chat`, `override`, `reload`, `version`, `wand`, `website`, `settings`, `start`, `stop`, `restart`,
+`pmr`.
 
 ### `/oa stats`
 
-`/oa stats [player]`, `/oa stats global [kills|wins|kd]` (top 10), `/oa stats reset <online
-player>` (needs `omniarena.admin.stats`).
+`/oa stats [player]` (unknown players are reported), `/oa stats global [kills|wins|kd]` (top 10),
+`/oa stats reset <player>` (online or known offline player; needs `omniarena.admin.stats`).
 
 ### `/oa match <start|stop> <arena>` (`omniarena.admin.match`)
 
-`start` begins the arena's existing match immediately; `stop` ends it as a forfeit with no winner.
-`reset` is accepted by tab-complete but is not implemented.
+`start` begins the arena's existing match immediately (needs at least one player; refused when
+already running/ending); `stop` ends it as a forfeit with no winner; `reset` removes every player
+and spectator from the arena (the match is then cleaned up).
+
+### `/oa force start <arena>` and `/oa forcewin <arena> <player|team>` (`omniarena.admin.match`)
+
+Force start the arena's existing match; declare a winner. `forcewin` requires a RUNNING match and
+an exact online player in it, or an exact team name (for example `Team RED`).
 
 ### `/oa override <action>` (`omniarena.admin.override`)
 
 `killweb`, `forceend <arena>` (alias `endarena`), `evacuate <arena>`, `freeze <arena>` (toggle),
 `lockdown`, `unlockdown`, `purge <arena>` (evacuate, then restore snapshot), `god <arena>`
-(toggle invulnerability), `broadcast <message>`, `snapshotall`, `resetstats <player>`,
-`forcewin <arena> <player|team>`, `forcestart <arena>`, `startarena <arena>`.
+(toggle invulnerability), `broadcast <message>`, `snapshotall` (arenas with a region only),
+`resetstats <player>`, `forcewin <arena> <player|team>`, `forcestart <arena>`,
+`startarena <arena>` (arena must be enabled and already have players in its match).
 
 ### Lifecycle: `/oa stop`, `/oa start`, `/oa restart`, `/oa reload`
 
@@ -658,9 +678,9 @@ See section 20.
 | `omniarena.admin.sign` | op | `/oa sign` |
 | `omniarena.admin.stats` | op | `/oa stats reset` |
 | `omniarena.admin.reload` | op | reload, version, settings |
-| `omniarena.admin.override` | (not declared) | `/oa override`; OP/`omniarena.admin`/console pass |
-| `omniarena.bet` | (not declared) | declared as `/oa bet`'s required node |
-| `omniarena.join.bypass` | op | declared, not checked on the join path |
+| `omniarena.admin.override` | op | `/oa override` (child of `omniarena.admin`) |
+| `omniarena.bet` | **not declared** | required by `/oa bet` for non-OP players; grant it explicitly |
+| `omniarena.join.bypass` | op | skips the whitelist and full-arena checks on `/oa join` |
 | `omniarena.kit.slots.5`, `.10` | false | personal kit limits |
 
 Per-kit permission nodes (preset kit `permission` field) are free-form.
@@ -736,6 +756,7 @@ and the dashboard but nothing reads it.
 | `web.title` | | - | |
 | `betting.enabled`, `min-bet`, `max-bet`, `bet-window-seconds` | true, 100, 10000, 30 | yes | |
 | `betting.allow-spectator-bet` | true | - | |
+| `tournament.walkover-grace-seconds` | 60 | yes | Wait for an offline player before a walkover |
 
 `messages.yml`: every player-facing string, MiniMessage format, with a `prefix` key prepended by
 `ConfigManager.getMessage`. Missing keys fall back to the defaults bundled in the jar (so upgrades
@@ -771,7 +792,8 @@ All under `plugins/OmniArena/`:
   ```
   The legacy format 1 (`x,y,z|MATERIAL|blockdata` lines) is still loaded.
 - `sign-glowstone.yml`: `locations: ["world,x,y,z"]`.
-- `admin-kits/<name>.yml`, `player-kits/<uuid>.yml` (section `kits.<name>`).
+- `admin-kits/<name>.yml`, `player-kits/<uuid>.yml` (section `kits.<name>`), `kit-cooldowns.yml`
+  (preset-kit cooldown expiries per player).
 - `stats.yml`: `stats.<uuid>.{name,kills,deaths,wins,losses,assists,draws,time-played}`.
 - `elo.yml`: `ratings.<uuid>.{name,rating,wins,losses,draws,highestRating}`.
 - `tournaments.yml`: `tournaments.<name>.{name,arena,maxPlayers,creator,state,participants,prizes.first|second|third,bracket.rounds,bracket.currentRound}`.
@@ -804,7 +826,7 @@ skip the rest.
 ### `/oa stop`, `/oa start`, `/oa restart` (`omniarena.admin`)
 
 - **stop:** sets `stopped = true`; finishes running regens; cancels **all** scheduler tasks of the
-  plugin; removes all players from matches; saves stats and arenas; refunds bets; saves and clears
+  plugin; removes all players and spectators from matches; saves stats and arenas; refunds bets; saves and clears
   tournaments; stops the web server; shuts down visuals and modules; stops queue and party.
   While stopped, listeners check `isStopped()` and do nothing, all commands except `/oa start`
   are refused, and `/kit` and `/party` report the stopped message.
@@ -821,20 +843,19 @@ skip the rest.
 
 ## 21. Known limitations
 
-- No command or sign enters the queue (`QueueManager.joinQueue` has no caller) and no command
-  shows ELO. Ranked matches, and therefore ELO changes, only come from the queue.
-- Older documentation described `/oa elo ...`, `/oa queue ...`, `/oa forcewin`, `/oa class`,
-  `/oa editor`, `elo.*`, `queue.*`, `party.*` config keys, 16/15 regen counts and
-  `rewards`; those are not present. The equivalents are listed above (force win lives under
-  `/oa override`, the dashboard command is `/oa website`).
-- `ForceStartCommand` and `ForceWinCommand` classes exist but are not registered.
-- Arena `goal-type`, `respawn-type` WAVE timing, `/oa ready`, `/oa match reset`, arena
-  whitelist/blacklist population (no command stores them and they are not persisted),
+- No command or sign enters the queue for the first time (`QueueManager.joinQueue` is only called
+  by `MatchManager` to re-queue a player whose ranked match fell apart) and no command shows ELO.
+  Ranked matches, and therefore ELO changes, only come from the queue.
+- Older documentation described `/oa elo ...`, `/oa queue ...`, `/oa class`, `/oa editor`, `elo.*`,
+  `queue.*`, `party.*` config keys, 16/15 regen counts and `rewards`; those are not present. The
+  dashboard command is `/oa website`.
+- Arena `goal-type` (stored but not read by the engine), `respawn-type` WAVE timing (flat 1 s),
+  arena whitelist/blacklist population (no command stores them and they are not persisted),
   global `visual.*`, `rewards.*`, `database.*` are unimplemented or inert, as described in the
   sections above.
 - Admin preset kits cannot be created, deleted or equipped through `/oa kit` (player version
-  wins); manage them as files.
-- `omniarena.bet`, `omniarena.admin.override` are used but not declared in `plugin.yml`;
-  `omniarena.join.bypass` is declared but unused.
+  wins); manage them as files (metadata and `rename` do work through `/oa kit`).
+- `omniarena.bet` is required by `/oa bet` but not declared in `plugin.yml`, so non-OP players are
+  denied unless a permissions plugin grants it.
 - The Docs tab serves a separate bundled copy of this documentation.
 - The Spigot/Bukkit/Purpur and non-26.2 builds are pending the build-matrix work (section 17).

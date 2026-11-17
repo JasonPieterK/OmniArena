@@ -45,12 +45,24 @@ public class InventoryClickListener implements Listener {
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
 
-        if (holder.getType() == KitMenuHolder.MenuType.ADMIN) {
-            handleAdminKitClick(player, holder, event.getRawSlot());
+        if (holder.getType() == KitMenuHolder.MenuType.PREVIEW) {
+            if (event.getRawSlot() == 49) next(player::closeInventory);
             return;
         }
+        // Defer all actions (equip, close, reopen) out of the click handler.
+        final int rawSlot = event.getRawSlot();
+        next(() -> {
+            if (!player.isOnline()) return;
+            // Menu may have been replaced/closed before this tick runs
+            if (player.getOpenInventory().getTopInventory() != top) return;
+            if (holder.getType() == KitMenuHolder.MenuType.ADMIN) handleAdminKitClick(player, holder, rawSlot);
+            else handlePlayerKitClick(player, holder, rawSlot, clicked);
+        });
+    }
 
-        handlePlayerKitClick(player, holder, event.getRawSlot(), clicked);
+    private void next(Runnable r) {
+        if (!plugin.isEnabled()) return;
+        org.bukkit.Bukkit.getScheduler().runTask(plugin, r);
     }
 
     @EventHandler
@@ -67,6 +79,7 @@ public class InventoryClickListener implements Listener {
         if (kitOpt.isEmpty()) return;
 
         AdminKit kit = kitOpt.get();
+        if (!kit.isPublic() && !player.hasPermission("omniarena.admin")) return;
         if (!KitManager.getInstance().tryEquip(player, kit)) return;
         player.closeInventory();
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
@@ -102,6 +115,7 @@ public class InventoryClickListener implements Listener {
             Optional<AdminKit> adminKitOpt = KitManager.getInstance().getAdminKit(adminName);
             if (adminKitOpt.isEmpty()) return;
             AdminKit kit = adminKitOpt.get();
+            if (!kit.isPublic() && !player.hasPermission("omniarena.admin")) return;
             if (!KitManager.getInstance().tryEquip(player, kit)) return;
             player.closeInventory();
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")

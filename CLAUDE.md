@@ -137,11 +137,12 @@ delayed `resetMatch` -> `cleanupMatch`.
 ### `/oa stop`, `/oa start`, `/oa restart` (`LifecycleCommand`)
 
 - **stop**: `setStopped(true)`; `cancelAll()` on regen; `Bukkit.getScheduler().cancelTasks(plugin)`
-  (cancels *everything*: matchmaking, sign refresh, combat tasks, countdowns, timers); leave all
-  active matches; save stats, arenas; refund bets; `tournament.stop()`; stop web; shut down visuals,
+  (cancels *everything*: matchmaking, sign refresh, combat tasks, tournament tick, countdowns,
+  timers); leave all active matches (players and spectators); save stats, arenas; refund bets; `tournament.stop()`; stop web; shut down visuals,
   modules, queue, party.
 - **start** (only if stopped): `setStopped(false)`; reload config; reload arenas, kits, stats, ELO;
-  restart queue, party, tournaments, web server, sign task, combat tasks. Listeners and command
+  restart queue, party, tournaments (which also restarts the tournament tick task), web server,
+  sign task, combat tasks. Listeners and command
   executors stay registered; `BettingManager` is not re-initialised.
 - **restart**: stop on the next tick, start 20 ticks later.
 - **reload** (`ReloadCommand`): reload config/messages; reload arenas only when no match is active;
@@ -199,10 +200,14 @@ onEnable, onDisable, `/oa stop` and `/oa start`.
 - Needs a free arena: enabled, `WAITING`, `isJoinable()`, no active match. No arena: return and keep
   everyone queued.
 - `createMatch`: both players are removed from the queue first; join player 1, mark the match
-  `setRanked(true)` and `setQueueKit(kit)` (if an admin kit by that name exists), join player 2; on
-  failure undo and `requeue` both (keeps `queueTime`).
-- **No code calls `joinQueue`** (no command, GUI or sign). There is also no ELO display command.
-  Wiring those up is a known gap; do not document them as available.
+  `setRanked(true)`, `setQueueName(kit)` and `setQueueKit(kit)` (if an admin kit by that name
+  exists), join player 2; on failure undo and `requeue` both (keeps `queueTime`).
+- The only caller of `joinQueue` outside `QueueManager` is `MatchManager.leaveArena`, which sends the
+  remaining player of a collapsed ranked match back to its queue. There is **no command, GUI or sign
+  for a first join**, and no ELO display command. Wiring those up is a known gap; do not document
+  them as available. `MatchManager.joinArena` and tournament launches call `removeOnQuit` / `leaveQueue`
+  so a manual join cancels a queue entry.
+- Ranked matches use `effectiveMin(match)` = `clamp(arena.minPlayers, 1..2)` for the countdown.
 
 Ranked flag and ELO (`MatchManager.endMatch`):
 
@@ -221,12 +226,23 @@ Ranked flag and ELO (`MatchManager.endMatch`):
 ## 6. Match engine details worth knowing
 
 - Win condition comes from `arena.getGameMode().getGoalType()`; `arena.getGoalValue()` overrides the
-  mode's default target only when > 0. `Arena.goalType` is not consulted. `TEAM_DEATHMATCH` ends by
-  individual leader kills, not team kills; `GameModeType.isTeamBased()` is unused.
+  mode's default target only when > 0. `Arena.goalType` is not consulted. If the arena has teams
+  (`team-enabled`, so `match.getTeams()` is non-empty) `KILLS` uses team kills and `LAST_ALIVE` uses
+  alive teams; otherwise the individual leader / last alive player. A match that started with
+  `startedWith > 1` and drops to one player/team ends in that side's favour
+  (`checkEndConditions`). `GameModeType.isTeamBased()` is unused.
+- Timeout: `buildTimeoutResult` awards a strict kill leader (or leading team) in `KILLS` modes;
+  ties and `LAST_ALIVE` modes yield `Outcome.TIMEOUT` (a draw).
+- Player state: `MatchManager.saveState/restoreState` store and restore location, game mode, health,
+  food, saturation, XP, effects, flight, speeds, invisibility and (if `arena.inventory-restore`)
+  inventory/armor for players *and* spectators. Always leave through `leaveArena`/`leaveSpectator`
+  so state is restored. A stale mapping (match gone) still restores state.
+- `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`.
 - Player *i* spawns at `arena.getBattleSpawn(i)` (index modulo size). Respawns use a random spawn.
 - `cleanupMatch` uses `activeMatches.remove(arenaName, match)`: the delayed `resetMatch` of an old
   match must never tear down a newer one on the same arena (fixed in 79f37fe).
-- `endMatch` is guarded by state `ENDING` (idempotent). Order inside it: ELO, betting settlement,
+- `endMatch` is guarded by state `ENDING`/`RESETTING` and by identity
+  (`activeMatches.get(arena) == match`), so it is idempotent. Order inside it: ELO, betting settlement,
   `TournamentManager.onMatchEnd`, visuals, end commands, stats, announcement, delayed reset.
   Keep betting/tournament hooks before cleanup.
 - Death handling is in `PlayerDeathListener`; it forces keep-inventory, clears drops unless the arena
@@ -266,13 +282,20 @@ Ranked flag and ELO (`MatchManager.endMatch`):
 - States: `REGISTRATION -> IN_PROGRESS -> FINISHED` (or `CANCELLED` on delete). Auto-start when full.
 - Bracket: join-order seeding; byes go to the first `nextPow2 - n` seeds; each round pairs winners in
   order; odd leftover gets a safety bye. One live match at a time per arena: `launchPendingMatches`
-  returns if any pending match is already `started`; offline player -> walkover.
-- `onMatchEnd(MatchResult)`: finds the first non-completed, non-bye match of the current round that
-  involves the winner/loser or both participants. **Draw/timeout rule**: if the result has no winner in
-  the match, `decideDraw`: only-online player wins; else higher current health; else random.
+  waits while a started match is live (`checkLive`), launches the first pending match whose players
+  are free and the arena is idle, and requeues nothing itself (it calls `leaveQueue` for both
+  players). A 100-tick task (`tickTask`, cancelled in `stop()`, gated by `isStopped()`) retries
+  launches and recovers matches that vanished without a result (`tm.setStarted(false)`).
+- Offline player: `waitingSince` map; walkover only after `tournament.walkover-grace-seconds`
+  (default 60). A player who leaves the arena while the match runs forfeits via `forceWin`.
+- `startTournament` drops offline participants and needs >= 2 online players.
+- `onMatchEnd(MatchResult)`: finds the first started, non-completed, non-bye match of the current
+  round that involves the winner/loser or both participants. **Draw/timeout rule**: if the result has
+  no winner in the match, `decideDraw`: the player still in the arena (or only the online one) wins;
+  else higher current health; else random.
 - Prizes in `finishTournament`: champion = `prizeFirst`; final loser = `prizeSecond`; `prizeThird`
-  is divided equally among `getSemifinalLosers()` (losers of the round before the final; no 3rd place
-  match). Zero prizes skipped; no Vault -> warning logged. Payment via
+  is divided equally (rounded down to cents) among `getSemifinalLosers()` (losers of the round before
+  the final; no 3rd place match). Zero prizes skipped; no Vault -> warning logged. Payment via
   `VaultIntegration.depositOffline`.
 - Persistence: `saveAll` after every transition; stores participants, prizes, state, and for
   `IN_PROGRESS` the full bracket (`bracket.rounds` as lists of `{p1, p2?, winner?}` maps and
@@ -291,13 +314,14 @@ Ranked flag and ELO (`MatchManager.endMatch`):
 - Removes the arena's bet list. `winnerPool` = sum of bets whose predicted winner == `winnerId`.
 - If `winnerId == null` (draw/timeout/no winner) **or** `winnerPool <= 0`: refund every bet
   (never destroy money).
-- Else each winning bet gets `totalPool * (bet / winnerPool)` (offline players included); losing bets
-  are forfeited.
+- Else each winning bet gets `floor(totalPool * (bet / winnerPool) * 100) / 100` (offline players
+  included); losing bets are forfeited.
 - `onMatchCleanup` refunds still-pending bets (aborted match); `refundAll()` on `/oa stop` and
   disable; `cancelBet` only while the window is open and only if the bet is still in `activeBets`
   (`remove(key, value)` prevents double refunds).
-- Window: open until `betting.bet-window-seconds` after `onMatchStart`. One active bet per player
-  (`activeBets` keyed by player).
+- Window: open until `betting.bet-window-seconds` after `onMatchStart`. **One active bet per player
+  across all arenas** (`activeBets` keyed by player; a second bet is rejected until cancelled).
+  `BetCommand` also requires a live match that is not ENDING/RESETTING.
 - Economy is resolved once in the constructor; `enabled` stays false without Vault + provider.
 - `betting.allow-spectator-bet` is not read.
 
@@ -325,18 +349,20 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
 1. Create a `SubCommand` subclass in `commands/admin` or `commands/player` (constructor passes the
    required permission node, usage, description).
 2. Register it in `CommandManager.registerAll` in the right map. Admin map entries are gated by
-   `PermissionChecker.hasAdmin` (console and OP pass). Player-map commands are **not** permission-gated
-   by the dispatcher beyond `/oa`'s own `omniarena.use`: check inside `execute` if needed.
+   `PermissionChecker.hasAdmin` (console and OP pass). Player-map entries are gated for non-OP players by
+   `p.hasPermission(subcommand.getRequiredPermission())`, so the permission passed to `super(...)`
+   must be a node that regular players actually have (declared in `plugin.yml` with `default: true`),
+   otherwise non-OP players are denied.
 3. If it should also exist as a standalone command, add it to `plugin.yml` `commands:` and register a
    `PlayerCommandForwarder` in `OmniArena.onEnable` (and add a permission entry).
-4. Declare every permission node you check in `plugin.yml`. (`omniarena.bet` and
-   `omniarena.admin.override` are currently used but undeclared; fix when touching them.)
+4. Declare every permission node you check in `plugin.yml`. (`omniarena.bet` is currently required by
+   `BetCommand` but undeclared, which denies non-OP players; fix when touching it.)
 5. Tab completion goes in `tabComplete`. `/oa <sub> help` is automatic.
 6. Add messages to `messages.yml` and read via `ConfigManager.getMessage(key)`.
 7. Update README command table, DOCS.md section 15, and the help guides in `HelpCommand`.
 
-Note the classes `ForceStartCommand` and `ForceWinCommand` exist but are not registered
-(`OverrideCommand` provides `forcestart`/`forcewin`).
+`/oa force start <arena>` (`ForceStartCommand`), `/oa forcewin <arena> <player|team>`
+(`ForceWinCommand`) and the `/oa override forcestart|forcewin|startarena` variants all exist.
 
 ### Adding a config key
 
@@ -421,18 +447,23 @@ bundled `messages.yml`.
    `stop` calls `visual.shutdown()` which only clears boards/boss bars/holograms, so they remain usable.
 8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin
    owns `/kit`.
-9. `CommandManager` routes `kit` for admins to the *player* command unless the first argument is one
-   of `setpublic|setprivate|icon|description|cooldown|permission`; `AdminKitCommand`'s `create`,
-   `delete`, `equip`, `list` are therefore unreachable.
+9. `CommandManager.shouldUsePlayerCommand` routes `kit` for admins to the *player* command unless the
+   first argument is one of `setpublic|setprivate|icon|description|cooldown|permission|rename` (check
+   the set when adding actions; the dispatcher's set is the authority); `AdminKitCommand`'s `create`,
+   `delete`, `equip`, `list` are therefore unreachable. Player-initiated equips go through
+   `KitManager.tryEquip` (lobby-only inside arenas, permission, persisted cooldown): do not call
+   `equipKit` directly for player actions.
 10. Standalone `/list`, `/info`, `/help`, `/join`, `/leave` are registered in `plugin.yml` and can clash
     with other plugins' commands.
-11. The player-command map is not permission-checked by the dispatcher: do the check inside the command.
+11. Player-map commands are permission-checked by the dispatcher using their constructor node; keep
+    that node declared and default-true for anything regular players should use.
 12. `ConfigSchemaService.settings()` instantiates a lot on each call (`SettingsGUI.grouped()` constructs a
     new service per call): avoid calling it in hot paths.
 13. `WebSessionManager` is created once; `web.session-minutes`/`web.max-sessions` do not live-reload.
 14. The `pom.xml` antrun copy step targets a Windows path.
 15. `target/` is tracked: do not commit build output unintentionally; avoid editing it.
-16. Whitelist/blacklist on arenas are never populated or saved.
+16. Whitelist/blacklist on arenas are never populated or saved (`JoinCommand` consults the whitelist
+    and `omniarena.join.bypass`).
 17. `RespawnType.WAVE` is a flat 1 s respawn; `respawn.delay` only applies to `DELAYED`.
 18. `BlockRestoreModule` keeps `shuttingDown = true` after `cancelAll()` until the next snapshot or
     restore resets it; `/oa start` therefore works for regen again on the next call.

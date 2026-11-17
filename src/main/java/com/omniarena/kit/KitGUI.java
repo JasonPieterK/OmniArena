@@ -94,7 +94,7 @@ public class KitGUI {
             if (meta != null) {
                 List<net.kyori.adventure.text.Component> lore = meta.lore() == null
                         ? new java.util.ArrayList<>() : new java.util.ArrayList<>(meta.lore());
-                lore.add(0, ColorUtil.parse("<aqua><bold>[PRESET KIT]</bold></aqua>"));
+                lore.add(0, ItemUtil.noItalic(ColorUtil.parse("<aqua><bold>[PRESET KIT]</bold></aqua>")));
                 meta.lore(lore);
                 item.setItemMeta(meta);
             }
@@ -141,8 +141,9 @@ public class KitGUI {
     }
 
     public static void openKitPreview(Player player, Kit kit) {
-        Inventory inv = Bukkit.createInventory(null, 54,
-                ColorUtil.parse("<gray>Preview: <yellow>" + kit.getDisplayName()));
+        KitMenuHolder holder = new KitMenuHolder(KitMenuHolder.MenuType.PREVIEW, List.of());
+        Inventory inv = createMenu(holder, 54,
+                ColorUtil.parse("<gray>Preview: <yellow>" + esc(kit.getDisplayName())));
 
         if (kit.getContents() != null) {
             ItemStack[] contents = kit.getContents();
@@ -181,11 +182,11 @@ public class KitGUI {
         ItemMeta meta = icon.getItemMeta();
         if (meta == null) return icon;
 
-        meta.displayName(ColorUtil.parse("<yellow><bold>" + kit.getDisplayName() + "</bold></yellow>"));
+        meta.displayName(ItemUtil.noItalic(ColorUtil.parse("<yellow><bold>" + esc(kit.getDisplayName()) + "</bold></yellow>")));
 
         List<Component> lore = new ArrayList<>();
         if (kit.getDescription() != null && !kit.getDescription().isBlank()) {
-            lore.add(ColorUtil.parse("<gray>" + kit.getDescription()));
+            lore.add(ColorUtil.parse("<gray>" + esc(kit.getDescription())));
             lore.add(Component.empty());
         }
 
@@ -200,13 +201,13 @@ public class KitGUI {
         }
 
         if (kit.getRequiredPermission() != null && !kit.getRequiredPermission().isBlank()) {
-            lore.add(ColorUtil.parse("<dark_red>Requires: <gray>" + kit.getRequiredPermission()));
+            lore.add(ColorUtil.parse("<dark_red>Requires: <gray>" + esc(kit.getRequiredPermission())));
         }
 
         lore.add(Component.empty());
         lore.add(ColorUtil.parse("<green>Click to equip"));
 
-        meta.lore(lore);
+        meta.lore(lore.stream().map(ItemUtil::noItalic).toList());
         meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ATTRIBUTES,
                 org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS,
                 org.bukkit.inventory.ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
@@ -218,6 +219,17 @@ public class KitGUI {
         ItemStack glass = ItemUtil.buildFillerItem(filler);
         for (int i = 0; i < inv.getSize(); i++) {
             if (inv.getItem(i) == null) inv.setItem(i, glass);
+        }
+    }
+
+    private static String esc(String s) {
+        return s == null ? "" : net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().escapeTags(s);
+    }
+
+    /** Closes every open kit menu (used on plugin disable). */
+    public static void closeAll() {
+        for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
+            if (p.getOpenInventory().getTopInventory().getHolder() instanceof KitMenuHolder) p.closeInventory();
         }
     }
 

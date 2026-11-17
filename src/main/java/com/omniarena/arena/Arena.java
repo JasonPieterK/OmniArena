@@ -28,6 +28,8 @@ public class Arena {
     private RespawnType respawnType = RespawnType.INSTANT;
     private int respawnDelay = 3;
     private int spawnProtection = 3;
+    /** Lives per player; 0 = not configured (mode default respawn semantics apply). */
+    private int lives = 0;
 
     // Spawns
     private final List<Location> battleSpawns = new ArrayList<>();
@@ -93,6 +95,8 @@ public class Arena {
     public void setRespawnType(RespawnType respawnType) { this.respawnType = respawnType; }
     public int getRespawnDelay() { return respawnDelay; }
     public void setRespawnDelay(int respawnDelay) { this.respawnDelay = respawnDelay; }
+    public int getLives() { return lives; }
+    public void setLives(int lives) { this.lives = Math.max(0, lives); }
     public int getSpawnProtection() { return spawnProtection; }
     public void setSpawnProtection(int spawnProtection) { this.spawnProtection = spawnProtection; }
     public List<Location> getBattleSpawns() { return battleSpawns; }

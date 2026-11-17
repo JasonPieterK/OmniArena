@@ -74,6 +74,7 @@ public class ArenaConfig {
             arena.setRespawnDelay(respawn.getInt("delay", 3));
         }
         arena.setSpawnProtection(cfg.getInt("spawn-protection", 3));
+        arena.setLives(cfg.getInt("lives", 0));
 
         // Rules
         ConfigurationSection rules = cfg.getConfigurationSection("rules");
@@ -166,6 +167,7 @@ public class ArenaConfig {
         cfg.set("mid-match-join", arena.isMidMatchJoin());
         cfg.set("spectator-allowed", arena.isSpectatorAllowed());
         cfg.set("spawn-protection", arena.getSpawnProtection());
+        cfg.set("lives", arena.getLives());
 
         cfg.set("goal.type", arena.getGoalType().name());
         cfg.set("goal.value", arena.getGoalValue());

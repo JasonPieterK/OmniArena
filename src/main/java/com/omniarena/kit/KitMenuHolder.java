@@ -9,7 +9,8 @@ public final class KitMenuHolder implements InventoryHolder {
 
     public enum MenuType {
         ADMIN,
-        PLAYER
+        PLAYER,
+        PREVIEW
     }
 
     private final MenuType type;

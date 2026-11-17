@@ -265,6 +265,10 @@ public final class OmniArena extends JavaPlugin {
         stopped = true;
         if (signUpdateTask != null) { signUpdateTask.cancel(); signUpdateTask = null; }
 
+        // Close every open plugin GUI so no viewer is left with a dead menu
+        try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Kit GUI close failed: " + t.getMessage()); }
+        try { com.omniarena.settings.SettingsGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Settings GUI close failed: " + t.getMessage()); }
+
         // End all active matches cleanly first so their results are included in the saves below
         try {
             if (matchManager != null) {
