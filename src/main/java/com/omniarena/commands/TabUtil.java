@@ -113,4 +113,28 @@ public final class TabUtil {
         for (T t : items) out.add(f.apply(t));
         return out;
     }
+
+    /** Value suggestions for a schema-defined setting. */
+    public static List<String> settingValue(com.omniarena.web.model.SettingDefinition def, String cur) {
+        if (def == null) return hint("<value>", cur);
+        if ("regen.animation.type".equalsIgnoreCase(def.key())) {
+            return enums(com.omniarena.arena.regen.RegenAnimationType.class, cur);
+        }
+        return switch (def.type()) {
+            case BOOLEAN -> bools(cur);
+            case INTEGER, DECIMAL -> hint("<number>", cur);
+            case COLOR -> hint("<color>", cur);
+            case LIST -> hint("<a,b,c>", cur);
+            case SELECT -> hint("<option>", cur);
+            default -> hint("<text>", cur);
+        };
+    }
+
+    /** Online players plus the team names of the arena's running match. */
+    public static List<String> forceWinTargets(CommandSender sender, String arenaName, String cur) {
+        List<String> opts = new ArrayList<>(players(sender, ""));
+        ArenaManager.getInstance().get(arenaName).flatMap(a -> com.omniarena.match.MatchManager.getInstance().getMatch(a))
+                .ifPresent(m -> m.getTeams().forEach(t -> opts.add(t.getName())));
+        return filter(opts, cur);
+    }
 }

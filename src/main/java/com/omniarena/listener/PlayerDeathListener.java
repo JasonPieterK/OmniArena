@@ -127,14 +127,28 @@ public class PlayerDeathListener implements Listener {
                 .replace("{killer}", killer != null ? killer.getName() : "the environment");
         MessageUtil.send(victim, deathMsg);
 
-        // Remove from alive list
-        match.getAlivePlayers().remove(victim.getUniqueId());
+        // Lives (per-arena `lives`): respawn while any remain, eliminate at 0.
+        // 0 = not configured -> the game mode's own respawn semantics apply.
+        boolean livesMode = arena.getLives() > 0;
+        boolean outOfLives = false;
+        if (livesMode) {
+            int left = Math.max(0, match.getLivesMap().getOrDefault(victim.getUniqueId(), arena.getLives()) - 1);
+            match.getLivesMap().put(victim.getUniqueId(), left);
+            outOfLives = left <= 0;
+            if (!outOfLives) {
+                MessageUtil.send(victim, "<red>You died. <yellow>" + left + "</yellow> "
+                        + (left == 1 ? "life" : "lives") + " remaining.");
+            }
+        }
+
+        // Remove from alive list (with lives, only once the last one is spent)
+        if (!livesMode || outOfLives) match.getAlivePlayers().remove(victim.getUniqueId());
 
         // Check end conditions
         mm.checkEndConditions(match);
 
         // Respawn, or eliminate in one-life modes (last-one-standing, sumo, duels…)
-        if (arena.getGameMode().respawns()) {
+        if (livesMode ? !outOfLives : arena.getGameMode().respawns()) {
             scheduleRespawn(victim, match, arena);
         } else {
             eliminate(victim, match);
@@ -155,7 +169,8 @@ public class PlayerDeathListener implements Listener {
         org.bukkit.Location loc;
         if (mm.isSpectating(p)) loc = arena.getSpectatorSpawn();
         else if (m.isPresent() && m.get().getState() == MatchState.RUNNING)
-            loc = arena.getGameMode().respawns() ? arena.getRandomBattleSpawn() : arena.getSpectatorSpawn();
+            loc = (arena.getLives() > 0 ? m.get().getLives(p.getUniqueId()) > 0 : arena.getGameMode().respawns())
+                    ? arena.getRandomBattleSpawn() : arena.getSpectatorSpawn();
         else loc = arena.getLobbySpawn();
         if (loc != null) event.setRespawnLocation(loc);
     }

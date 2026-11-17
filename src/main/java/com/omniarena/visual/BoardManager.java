@@ -73,6 +73,12 @@ public class BoardManager {
         lines.add("§7Deaths: §c" + deaths);
         lines.add("§7K/D: §f" + (deaths == 0 ? kills : Math.round((double) kills / deaths * 100.0) / 100.0));
 
+        // Lives (only when the arena configures them)
+        if (match.getArena().getLives() > 0) {
+            int lives = match.getLivesMap().getOrDefault(uuid, match.getArena().getLives());
+            lines.add("§7Lives: §c" + "❤".repeat(Math.max(0, Math.min(lives, 10))) + (lives > 10 ? " §7(" + lives + ")" : ""));
+        }
+
         // Streak
         int streak = match.getStreak(uuid);
         if (streak > 0) {

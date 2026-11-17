@@ -445,6 +445,7 @@ public class MatchManager {
         if (spawn == null) spawn = arena.getRandomBattleSpawn();
         if (spawn != null) markInternalTeleport(player, spawn);
 
+        if (arena.getLives() > 0) match.getLivesMap().putIfAbsent(player.getUniqueId(), arena.getLives());
         player.setGameMode(GameMode.SURVIVAL);
         player.setWalkSpeed(0.2f);
         player.setFlySpeed(0.1f);
@@ -515,6 +516,15 @@ public class MatchManager {
             plugin.getEloManager().recordMatch(result.getWinnerId(), result.getLoserId(), 
                     winnerName != null ? winnerName : "Unknown", 
                     loserName != null ? loserName : "Unknown");
+        }
+
+        // Ranked team matches (e.g. queued parties): per-player ELO against the opposing side's average
+        if (match.isRanked() && !result.isDraw() && result.getWinnerTeamName() != null && !match.getTeams().isEmpty()) {
+            List<UUID> winners = new ArrayList<>(), losers = new ArrayList<>();
+            for (MatchTeam t : match.getTeams()) {
+                (t.getName().equals(result.getWinnerTeamName()) ? winners : losers).addAll(t.getMembers());
+            }
+            if (!winners.isEmpty() && !losers.isEmpty()) plugin.getEloManager().recordTeamMatch(winners, losers);
         }
 
         // Betting payout
@@ -589,6 +599,23 @@ public class MatchManager {
         GoalType goal = mode.getGoalType();
         int goalValue = arena.getGoalValue() > 0 ? arena.getGoalValue() : mode.getDefaultGoalValue();
 
+        // Per-player lives on a kills-goal arena: last player/team with lives left also wins
+        if (arena.getLives() > 0 && goal == GoalType.KILLS && match.getStartedWith() > 1) {
+            boolean teamWon = false;
+            if (teamed) {
+                for (MatchTeam t : match.getTeams()) {
+                    if (t.getKills() >= goalValue) { teamWon = true; break; }
+                }
+            } else {
+                UUID l = match.getLeader();
+                teamWon = l != null && match.getKills(l) >= goalValue;
+            }
+            if (!teamWon) {
+                checkLastAlive(match, alive, teamed);
+                if (match.getState() != MatchState.RUNNING) return;
+            }
+        }
+
         switch (goal) {
             case KILLS -> {
                 if (teamed) {
@@ -610,28 +637,32 @@ public class MatchManager {
                     endMatch(match, result);
                 }
             }
-            case LAST_ALIVE -> {
-                if (teamed) {
-                    Set<MatchTeam> aliveTeams = new LinkedHashSet<>();
-                    for (UUID u : alive) {
-                        MatchTeam t = match.getTeam(u);
-                        if (t != null) aliveTeams.add(t);
-                    }
-                    if (aliveTeams.size() == 1) endMatch(match, teamWin(match, aliveTeams.iterator().next()));
-                    else if (aliveTeams.isEmpty()) endMatch(match, buildDrawResult(match));
-                } else if (alive.size() == 1) {
-                    UUID winnerUuid = alive.get(0);
-                    UUID loserUuid = match.getPlayers().stream()
-                            .filter(u -> !u.equals(winnerUuid)).findFirst().orElse(null);
-                    MatchResult result = new MatchResult(arena.getName(), winnerUuid, loserUuid, null,
-                            MatchResult.Outcome.WIN, match.getDurationSeconds(),
-                            new ArrayList<>(match.getPlayers()));
-                    endMatch(match, result);
-                } else if (alive.isEmpty()) {
-                    endMatch(match, buildDrawResult(match));
-                }
-            }
+            case LAST_ALIVE -> checkLastAlive(match, alive, teamed);
             default -> {}
+        }
+    }
+
+    /** Last-one/last-team-standing resolution (also used for KILLS modes with per-player lives). */
+    private void checkLastAlive(Match match, List<UUID> alive, boolean teamed) {
+        Arena arena = match.getArena();
+        if (teamed) {
+            Set<MatchTeam> aliveTeams = new LinkedHashSet<>();
+            for (UUID u : alive) {
+                MatchTeam t = match.getTeam(u);
+                if (t != null) aliveTeams.add(t);
+            }
+            if (aliveTeams.size() == 1) endMatch(match, teamWin(match, aliveTeams.iterator().next()));
+            else if (aliveTeams.isEmpty()) endMatch(match, buildDrawResult(match));
+        } else if (alive.size() == 1) {
+            UUID winnerUuid = alive.get(0);
+            UUID loserUuid = match.getPlayers().stream()
+                    .filter(u -> !u.equals(winnerUuid)).findFirst().orElse(null);
+            MatchResult result = new MatchResult(arena.getName(), winnerUuid, loserUuid, null,
+                    MatchResult.Outcome.WIN, match.getDurationSeconds(),
+                    new ArrayList<>(match.getPlayers()));
+            endMatch(match, result);
+        } else if (alive.isEmpty()) {
+            endMatch(match, buildDrawResult(match));
         }
     }
 
@@ -691,8 +722,17 @@ public class MatchManager {
 
         List<UUID> playerList = new ArrayList<>(match.getPlayers());
         Collections.shuffle(playerList);
-        for (int i = 0; i < playerList.size(); i++) {
-            match.assignTeam(playerList.get(i), teams.get(i % teamCount));
+        // Queued parties arrive with a preset side so they stay together
+        List<UUID> unassigned = new ArrayList<>();
+        for (UUID u : playerList) {
+            Integer side = match.getPresetSides().get(u);
+            if (side != null && teamCount > 0) match.assignTeam(u, teams.get(side % teamCount));
+            else unassigned.add(u);
+        }
+        for (UUID u : unassigned) {
+            MatchTeam smallest = teams.get(0);
+            for (MatchTeam t : teams) if (t.getMembers().size() < smallest.getMembers().size()) smallest = t;
+            match.assignTeam(u, smallest);
         }
     }
 

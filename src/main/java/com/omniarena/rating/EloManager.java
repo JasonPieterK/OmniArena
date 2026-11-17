@@ -161,6 +161,31 @@ public class EloManager {
         saveAll();
     }
 
+    /**
+     * Record a team result: every player's rating is updated against the opposing side's
+     * average rating (computed from pre-match ratings).
+     */
+    public void recordTeamMatch(Collection<UUID> winners, Collection<UUID> losers) {
+        int winAvg = averageRating(winners), loseAvg = averageRating(losers);
+        long now = System.currentTimeMillis();
+        for (UUID u : winners) {
+            getRating(u).recordWin(loseAvg);
+            matchHistory.put(u, (int) (now / 1000));
+        }
+        for (UUID u : losers) {
+            getRating(u).recordLoss(winAvg);
+            matchHistory.put(u, (int) (now / 1000));
+        }
+        saveAll();
+    }
+
+    private int averageRating(Collection<UUID> ids) {
+        if (ids.isEmpty()) return EloRating.DEFAULT_RATING;
+        long sum = 0;
+        for (UUID u : ids) sum += peekElo(u);
+        return (int) Math.round((double) sum / ids.size());
+    }
+
     /** Record a draw between two players. */
     public void recordDraw(UUID a, UUID b, String aName, String bName) {
         EloRating ra = getRating(a, aName);
