@@ -15,12 +15,13 @@ Contents: 1 Quick start, 2 Arenas, 3 Game types, 4 Matches, 5 Regeneration, 6 Ki
 ## 1. Quick start
 
 1. Install the jar for your platform and Minecraft version into `plugins/`, restart.
-2. `/oa wand` gives the selection wand (item set by `tools.wand-material`, default `WOODEN_HOE`;
-   `/oa region wand` always gives a wooden axe, see section 2). Left-click one corner (position 1),
-   right-click the opposite corner (position 2). The wand needs `omniarena.admin.arena`.
+2. `/oa wand` (or `/oa region wand`) gives the selection wand (item set by `tools.wand-material`,
+   default `WOODEN_HOE`). Left-click one corner (position 1), right-click the opposite corner
+   (position 2). The wand needs `omniarena.admin.arena`.
 3. `/oa create <name>`: names are 1-32 characters from `A-Z a-z 0-9 _ -`. A new arena starts
    enabled.
 4. `/oa region set <name>` saves the selection as the arena region and takes the regen snapshot.
+   (Enabling an arena later requires at least one battle spawn.)
 5. `/oa spawn set <name> BATTLE`, once per pad. Also set `LOBBY` and `SPECTATOR` spawns.
 6. `/oa config set <name> game-mode <TYPE>` (default `DEATHMATCH`), plus `min-players`,
    `max-players`, `match-duration`, and so on (section 2).
@@ -44,28 +45,34 @@ mode, optional end commands, signs, and enabled modules. Each is saved to `arena
 ### Commands (admin, `omniarena.admin.arena` unless noted)
 
 - `/oa create <name>`, `/oa delete <arena>`
-- `/oa enable <arena>`, `/oa disable <arena>`
+- `/oa enable <arena>`: refuses when the arena has no battle spawns (warns when it has no region);
+  `/oa disable <arena>` removes every player and spectator from the arena first.
 - `/oa list`, `/oa info <arena>` (player commands)
 - `/oa tp <arena>`: teleport to the arena
 - `/oa debug <arena>`: print match debug state
-- `/oa wand`: selection wand from `tools.wand-material`. `/oa region wand`: gives a wooden axe
-  (the interact listener only reacts to the configured material, so use `/oa wand`).
+- `/oa wand` and `/oa region wand`: the selection wand (`tools.wand-material`).
 - `/oa region set <arena>`: needs both wand points in the same world; replaces the region, clears
   the selection, takes a snapshot. `/oa region info <arena>`.
-- `/oa spawn set <arena> [BATTLE|LOBBY|SPECTATOR]` (default BATTLE) adds a spawn at your position
+- `/oa spawn set <arena> [BATTLE|LOBBY|SPECTATOR]` (default BATTLE; an unknown type is rejected) adds a spawn at your position
   and reports its number. `/oa spawn list <arena>`. `/oa spawn clear <arena> [type] [#]`: clear all
   of a type, or remove one by 1-based number.
-- `/oa goal set <arena> <type> [value]`: see the goal note below.
+- `/oa goal set <arena> <type> [value]`: type is validated (`KILLS`, `LAST_ALIVE`, `OBJECTIVE`,
+  `TIME_LIMIT`), value must be >= 1; see the goal note below.
 - `/oa module <enable|disable> <arena> <module>`: tab-complete suggests `killstreak`, `combo`,
-  `power-up`, `item-spawner`, `environmental`, `leveling`. Only `killstreak`, `combo` and
-  `power-up` have code behind them; the default enabled set is `killstreak`, `combo`.
+  `power-up`, `item-spawner`, `environmental`, `leveling` (other names are rejected). Only
+  `killstreak`, `combo` and `power-up` have code behind them; the default enabled set is
+  `killstreak`, `combo`.
 - `/oa chat set <arena> <ARENA|TEAM|GLOBAL>`: which players see in-arena chat.
 - `/oa announcements set <arena> <enable|disable>`.
 
 ### Per-arena settings: `/oa config get|set <arena> <key> [value]`
 
 Without an arena name, `/oa config set <key> <value>` edits the global `config.yml` (or
-`messages.<key>` for messages). Valid arena keys:
+`messages.<key>` for messages); unknown keys are rejected (a key must be in the settings schema
+or already exist). Arena values are validated strictly: booleans must be `true/false/yes/no/on/off`,
+numbers must be non-negative integers, enums must be exact names, `min-players` must be >= 1 and
+not exceed `max-players` (and vice versa). Setting `enabled false` removes everyone from the arena.
+Valid arena keys:
 
 `enabled`, `game-mode` (alias `gamemode`), `min-players`, `max-players`, `match-duration` (seconds),
 `countdown` (seconds), `goal-type`, `goal-value`, `respawn-type` (`INSTANT|DELAYED|WAVE`),
@@ -90,7 +97,8 @@ if there is no spectator spawn it is the lobby spawn.
 
 ### Goal note
 
-The game type fixes the win condition (`KILLS` or `LAST_ALIVE`). The arena's `goal-value`
+The game type fixes the win condition (`KILLS` or `LAST_ALIVE`). For team-enabled arenas the
+condition is evaluated per team (team kills, or last team standing). The arena's `goal-value`
 overrides the game type's default kill target only when it is greater than 0. The arena's
 `goal-type` is stored and shown in the dashboard but the match engine does not read it. The
 saved default `goal-value` of a new arena is 20, so kill-target modes use 20 unless you set
@@ -142,11 +150,11 @@ efficiency shovel, no armor. Gladiator: no armor, stone sword, shield.
   as eliminated.
 - **Ring-out** (Sumo, Spleef): dropping below the platform counts as a death.
 - Unknown game type names fall back to `DEATHMATCH`.
-- **Team Deathmatch note:** the game type description promises a shared team kill count, but the
-  end check (`MatchManager.checkEndConditions`) compares the *individual* top killer against the
-  target; team kills are tracked (`MatchTeam`) and shown in the dashboard only. Teams also require
-  the arena's `team-enabled` flag (`/oa config set <arena> team-enabled true`), which is not
-  turned on by choosing the game type.
+- **Team Deathmatch note:** teams exist only when the arena's `team-enabled` flag is on
+  (`/oa config set <arena> team-enabled true`, `team-count` 2 by default); choosing the game type
+  does not turn it on. In team arenas `KILLS` modes end when a team's kill count reaches the target
+  and `LAST_ALIVE` modes end when one team has players alive. Without teams the individual top
+  killer decides.
 - When a match was created by the queue with a named admin kit, that kit replaces the game type's
   loadout (for the match and for respawns).
 
@@ -157,45 +165,55 @@ efficiency shovel, no armor. Gladiator: no armor, stone sword, shield.
 State machine: `WAITING -> STARTING -> RUNNING -> ENDING -> RESETTING`, then the match object is
 removed and the arena returns to WAITING.
 
-1. **Join.** `joinArena` rejects when lockdown is on, the player is already in an arena or
-   spectating, the arena is not joinable, or the player is on the arena blacklist. The player's
-   inventory is saved (if `arena.inventory-restore`, default true) and cleared, they are put in
+1. **Join.** `/oa join` first rejects: already in an arena, unknown/disabled arena, the player is
+   queued, not whitelisted (when the arena whitelist is on), arena not joinable, or arena full (the
+   whitelist and full checks are skipped with `omniarena.join.bypass`). `joinArena` itself rejects
+   when lockdown is on, the player is already in an arena or spectating, the arena is not joinable
+   (WAITING/STARTING, or RUNNING when the arena allows mid-match join), or the player is on the
+   arena blacklist. A manual join cancels any queue entry. The player's complete state (location,
+   game mode, health, food, saturation, XP, potion effects, flight, speeds, invisibility and, if
+   `arena.inventory-restore` (default true), inventory and armor) is saved; they are put in
    ADVENTURE mode at the lobby spawn, healed, effects removed, and frozen (walk/fly speed 0) while
    waiting.
-2. **Countdown.** A 1 s repeating task. With fewer than `min-players` the match stays WAITING and
-   players see a "Waiting for players" title; the countdown resets. Otherwise it counts down from
+2. **Countdown.** A 1 s repeating task. With fewer than the minimum players the match stays
+   WAITING and players see a "Waiting for players" title; the countdown resets. The minimum is the
+   arena's `min-players`, except ranked (queue) matches where it is clamped to at most 2. Otherwise it counts down from
    the arena `countdown`, with chat/title/sound at 10 and 5 to 1 seconds. At 0 `startMatch` runs.
 3. **Start.** Teams are assigned for team-enabled arenas (shuffled, round-robin). Each player is
    teleported to a numbered battle spawn, set to SURVIVAL, healed, given the loadout, and given
    spawn protection (`spawn-protection` seconds). Scoreboard and boss-bar timer are created
    unless TAB takeover is on. Betting is notified (`onMatchStart`).
 4. **Running.** A 1 s task ticks the match timer and updates scoreboard/boss bar/action bar. At
-   time 0 the match ends with outcome `TIMEOUT` (treated as a draw).
+   time 0 in a `KILLS` mode with more than one player, the strictly leading player (or team, for
+   team arenas) wins; ties and `LAST_ALIVE` modes end with outcome `TIMEOUT` (treated as a draw).
 5. **Deaths.** Death drops are cleared unless the arena allows item drop, keep-inventory is forced,
    kills are recorded (first blood, kill announcement, revenge, killstreak module, team kills),
    then end conditions are checked. Respawn modes respawn after the arena respawn delay and
    re-equip the loadout; one-life modes eliminate.
-6. **End conditions.** `KILLS`: the leader reaching the target ends the match with that player as
-   winner. `LAST_ALIVE`: one player left alive wins; none alive is a draw.
+6. **End conditions.** `KILLS`: the leader (or team) reaching the target wins. `LAST_ALIVE`: one
+   player (or team) left alive wins; none alive is a draw. Additionally, if a match that started
+   with more than one side drops to a single player or team (others left), that side wins.
 7. **End.** `endMatch` (idempotent) cancels tasks, sets ENDING, then in order: ELO (ranked
    matches only), betting settlement, tournament hook, titles/sounds/fireworks, boss bars
    removed, end commands, stats, optional global announcement (`match.announce-global`), and a
    delayed reset after `match.end-delay` seconds (default 5).
-8. **Reset.** Remaining players are removed (inventory restored, teleported to bed spawn or world
-   spawn, SURVIVAL, speeds restored), boards removed, and the match is cleaned up. Cleanup refunds
-   any still-pending bets and only releases the arena if this match still owns it.
+8. **Reset.** Remaining players and spectators are removed (their saved state is restored,
+   including the original location; without a saved state they go to bed or world spawn in
+   SURVIVAL), boards removed, and the match is cleaned up. Cleanup refunds any still-pending bets
+   and only releases the arena if this match still owns it.
 
 ### Outcomes
 
 `WIN`, `LOSS`, `DRAW`, `FORFEIT`, `TIMEOUT`. `DRAW` and `TIMEOUT` count as draws in stats and ELO.
 Leaving a running **ranked** two-player match is a forfeit: the leaver loses and the opponent
 wins (ELO applied). Leaving an unranked match just removes the player, then end conditions are
-re-checked; an empty match is cleaned up.
+re-checked; an empty match is cleaned up. If a ranked match collapses before it starts, the
+remaining player is returned to the queue they came from.
 
 ### Spectating
 
 `/oa spectate <arena>` (needs the match to exist and `spectator-allowed`). Spectators are in
-SPECTATOR mode and invisible; `/oa leave` returns them to the world spawn.
+SPECTATOR mode and invisible; `/oa leave` restores their saved state and location.
 
 ### End commands
 
@@ -204,6 +222,11 @@ Per-arena `end-commands` (if non-empty) otherwise `match.end-commands`. Placehol
 console; prefix `console:` is accepted explicitly, and `player:` runs the command as the winner.
 No leading slash. Example: `match.end-commands: ["oa regen {arena}"]` rebuilds the arena after
 every match.
+
+### Item drops
+
+Manual item drops (the drop key) are cancelled in arenas whose `item-drop` rule is off
+(`PlayerDropItemListener`); death drops are cleared under the same rule.
 
 ### Chat
 
@@ -234,14 +257,17 @@ instantly finishes running restores, removes preview blocks, and removes falling
 
 ### Commands
 
-- `/oa regen <arena>`: restore now with `regen.animation.type`.
+- `/oa regen <arena>`: restore now with `regen.animation.type`; refused while a match is active
+  in that arena.
 - `/oa regen snapshot <arena>`.
-- `/oa regen style [type]`: set (or list) the default style.
+- `/oa regen style [type]`: set (or list) the default style. The command and the settings GUI
+  accept only the 20 current names (an unknown name is rejected); the legacy aliases below are
+  still honoured when found in `config.yml`.
 - `/oa regen batch [n]`: set (or show) `regen.batch-size`.
 - `/oa regen settings`: show current values. (Its fallback text for an unset style shows a stale
   name, `WAVE_SHUFFLE`; the effective default is `CENTER_OUT` which maps to `RADIATE_OUTWARD`.)
 - `/oa regen progress|particles|sound <true|false>`: toggles `regen.progress.enabled`,
-  `regen.animation.particles`, `regen.animation.sound`.
+  `regen.animation.particles`, `regen.animation.sound`; any other value is rejected.
 
 ### Styles (20)
 
@@ -250,7 +276,7 @@ instantly finishes running restores, removes preview blocks, and removes falling
 `VOID_SHOCKWAVE`, `ICE_CRYSTAL_GROWTH`, `DARK_VORTEX`, `METEOR_STRIKE`, `PRISM_CASCADE`,
 `BINARY_FILL`, `PHOENIX_REBIRTH`, `QUANTUM_MESH`, `DIAMOND_FUSION`, `TSUNAMI_SURGE`.
 
-Legacy names still accepted (config and commands) and what they map to:
+Legacy names still accepted when read from `config.yml` and what they map to:
 
 | Legacy | Current | Legacy | Current |
 |--------|---------|--------|---------|
@@ -284,10 +310,14 @@ blocks are capped at 90 concurrent entities.
 Both open the same combined menu (your kits and public preset kits) or run a subcommand:
 
 - `/kit`: open the menu.
-- `/kit create <name>`: save your inventory and armor as a personal kit.
+- `/kit create <name>`: save your inventory and armor as a personal kit. Names: letters, digits,
+  `_`, `-`, `.` (max 32).
 - `/kit list`: list your kits and slot usage.
-- `/kit equip <name>`: equip a personal kit, or a public preset kit (admins can equip any).
-- `/kit delete <name>`, `/kit rename <old> <new>`, `/kit preview <name>`.
+- `/kit equip <name>`: equip a personal kit, or a public preset kit (admins can equip any). While
+  in an arena this works only in the lobby phase (match WAITING/STARTING); preset kits enforce
+  their permission node and cooldown (holders of `omniarena.admin` bypass the cooldown).
+- `/kit delete <name>`, `/kit rename <old> <new>`, `/kit preview <name>` (personal kits and public
+  preset kits).
 - `/kit share <name> <player>`: send a copy offer; the recipient runs `/kit accept <name>` within
   1 minute (`kits.sharing-enabled`).
 - `/kit help [sub]`.
@@ -308,10 +338,11 @@ Files in `admin-kits/<name>.yml`. On every load OmniArena installs any missing d
 `permission`, `arena`, `items` (slot, material, amount, enchants, unbreakable), `armor`.
 
 Admin metadata commands (permission `omniarena.admin.kit`): `/oa kit setpublic <name>`,
-`setprivate <name>`, `icon <name> <MATERIAL>`, `description <name> <text>`,
-`cooldown <name> <seconds>`, `permission <name> <node>`. Note that `/oa kit create`, `delete`,
-`equip` and `list` are routed to the *player* kit command even for admins; the admin versions are
-unreachable through `/oa`. Create preset kits by placing a YAML file in `admin-kits/` and
+`setprivate <name>`, `icon <name> <MATERIAL>` (must be an item), `description <name> <text>`,
+`cooldown <name> <seconds>` (enforced per player and persisted in `kit-cooldowns.yml`),
+`permission <name> <node>` (`none` or `-` clears it), `rename <old> <new>`. Unknown kit names are
+reported. Note that `/oa kit create`, `delete`, `equip` and `list` are routed to the *player* kit
+command even for admins; the admin versions are unreachable through `/oa`. Create preset kits by placing a YAML file in `admin-kits/` and
 restarting or running `/oa start`.
 
 Queued ranked matches equip the admin kit named by the queue key (if one exists) instead of the
