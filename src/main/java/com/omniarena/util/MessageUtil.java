@@ -1,5 +1,7 @@
 package com.omniarena.util;
 
+import com.omniarena.platform.Platform;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -27,15 +29,32 @@ public final class MessageUtil {
     }
 
     public static void send(CommandSender sender, Component message) {
-        sender.sendMessage(message);
+        Platform.get().send(sender, message);
     }
 
     public static void send(CommandSender sender, String miniMessage) {
-        sender.sendMessage(ColorUtil.parse(miniMessage));
+        Platform.get().send(sender, ColorUtil.parse(miniMessage));
+    }
+
+    /** Server-wide broadcast (all players + console). */
+    public static void broadcast(Component message) {
+        Platform.get().broadcast(message);
+    }
+
+    public static void broadcast(String miniMessage) {
+        Platform.get().broadcast(ColorUtil.parse(miniMessage));
+    }
+
+    public static void showBossBar(Player player, BossBar bar) {
+        Platform.get().showBossBar(player, bar);
+    }
+
+    public static void hideBossBar(Player player, BossBar bar) {
+        Platform.get().hideBossBar(player, bar);
     }
 
     public static void sendTitle(Player player, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
-        player.showTitle(net.kyori.adventure.title.Title.title(
+        Platform.get().title(player, net.kyori.adventure.title.Title.title(
                 ColorUtil.parse(title),
                 ColorUtil.parse(subtitle),
                 net.kyori.adventure.title.Title.Times.times(
@@ -47,6 +66,6 @@ public final class MessageUtil {
     }
 
     public static void sendActionBar(Player player, String miniMessage) {
-        player.sendActionBar(ColorUtil.parse(miniMessage));
+        Platform.get().actionBar(player, ColorUtil.parse(miniMessage));
     }
 }
