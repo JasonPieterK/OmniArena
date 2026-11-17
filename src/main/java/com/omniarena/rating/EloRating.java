@@ -135,6 +135,7 @@ public class EloRating {
     public void setLosses(int losses) { this.losses = losses; }
     public int getDraws() { return draws; }
     public void setDraws(int draws) { this.draws = draws; }
+    public void setHighestRating(int highestRating) { this.highestRating = highestRating; }
     public int getHighestRating() { return highestRating; }
     public long getLastMatchTime() { return lastMatchTime; }
     public int getTotalMatches() { return wins + losses + draws; }

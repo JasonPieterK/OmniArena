@@ -32,12 +32,14 @@ public class PartyManager {
 
     public void start() {
         // Clean up expired invites every 30 seconds
+        stop();
         inviteCleanupTask = Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredInvites, 600L, 600L);
     }
 
     public void stop() {
         if (inviteCleanupTask != null) {
             inviteCleanupTask.cancel();
+            inviteCleanupTask = null;
         }
     }
 
@@ -132,6 +134,11 @@ public class PartyManager {
         PartyInvite invite = pendingInvites.get(player.getUniqueId());
         if (invite == null || invite.isExpired()) {
             MessageUtil.send(player, "<red>You have no pending party invites.");
+            return false;
+        }
+        if (isInParty(player)) {
+            pendingInvites.remove(player.getUniqueId());
+            MessageUtil.send(player, "<red>You are already in a party.");
             return false;
         }
 
@@ -271,7 +278,10 @@ public class PartyManager {
         // Update mappings
         parties.remove(oldLeader);
         parties.put(newLeader.getUniqueId(), party);
-        playerToParty.put(oldLeader, newLeader.getUniqueId());
+        // Every member maps to the leader's UUID, so remap them all
+        for (UUID member : party.getMembers()) {
+            playerToParty.put(member, newLeader.getUniqueId());
+        }
 
         MessageUtil.send(currentLeader, "<green>You transferred leadership to <yellow>" + newLeader.getName() + "</yellow>.");
         MessageUtil.send(newLeader, "<green>You are now the party leader.");
@@ -284,6 +294,16 @@ public class PartyManager {
         }
 
         return true;
+    }
+
+    /**
+     * Called when a player disconnects: leaves/disbands their party and drops invites.
+     */
+    public void handleQuit(Player player) {
+        UUID id = player.getUniqueId();
+        pendingInvites.remove(id);
+        pendingInvites.values().removeIf(inv -> inv.getLeaderUuid().equals(id));
+        if (isInParty(player)) leaveParty(player);
     }
 
     /**

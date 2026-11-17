@@ -31,12 +31,14 @@ public class QueueManager {
     public static QueueManager getInstance() { return instance; }
 
     public void start() {
+        stop();
         matchmakingTask = Bukkit.getScheduler().runTaskTimer(plugin, this::processMatchmaking, 20L, 20L);
     }
 
     public void stop() {
         if (matchmakingTask != null) {
             matchmakingTask.cancel();
+            matchmakingTask = null;
         }
     }
 
@@ -48,6 +50,10 @@ public class QueueManager {
             MessageUtil.send(player, "<red>You are already in a queue.");
             return false;
         }
+        if (plugin.getMatchManager().isInArena(player)) {
+            MessageUtil.send(player, "<red>You cannot queue while in an arena.");
+            return false;
+        }
 
         Queue queue = queues.computeIfAbsent(kitName.toLowerCase(), k -> new Queue(k));
         QueuedPlayer qp = new QueuedPlayer(player.getUniqueId(), player.getName(), kitName);
@@ -57,11 +63,7 @@ public class QueueManager {
         
         MessageUtil.send(player, "<green>Joined queue for <yellow>" + kitName + "</yellow>. <gray>(Position: " + queue.getPosition(qp) + ")");
         
-        if (queue.getSize() >= 2) {
-            processMatchmaking();
-        }
-        
-        return true;
+        return true; // paired on the next matchmaking tick (1s)
     }
 
     /**
@@ -106,86 +108,135 @@ public class QueueManager {
         return new QueueInfo(qp.getKitName(), queue.getPosition(qp), queue.getSize());
     }
 
+    /** Base allowed rating gap, widened over time so nobody waits forever. */
+    private static final int BASE_RANGE = 200;
+    private static final int RANGE_STEP = 50;          // added every RANGE_STEP_SECONDS of waiting
+    private static final int RANGE_STEP_SECONDS = 10;
+    private static final int MAX_RANGE = 1000;
+
+    private static int allowedRange(QueuedPlayer a, QueuedPlayer b, long now) {
+        long waitedMs = Math.max(now - a.getQueueTime(), now - b.getQueueTime());
+        long steps = waitedMs / (RANGE_STEP_SECONDS * 1000L);
+        return (int) Math.min(MAX_RANGE, BASE_RANGE + steps * RANGE_STEP);
+    }
+
+    /** Removes a player's queue entry without messaging (quit/disconnect). */
+    public void removeOnQuit(UUID uuid) {
+        QueuedPlayer qp = queuedPlayers.remove(uuid);
+        if (qp == null) return;
+        String key = qp.getKitName().toLowerCase();
+        Queue queue = queues.get(key);
+        if (queue != null) {
+            queue.removePlayer(qp);
+            if (queue.isEmpty()) queues.remove(key);
+        }
+    }
+
     /**
-     * Process matchmaking - find matches based on ELO proximity
+     * Process matchmaking - pair players with similar ELO. The accepted rating gap
+     * grows with time spent waiting.
      */
     private void processMatchmaking() {
+        if (queues.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        var mm = plugin.getMatchManager();
+
         for (Queue queue : new ArrayList<>(queues.values())) {
+            // Drop players who disconnected or entered an arena by other means
+            for (QueuedPlayer qp : new ArrayList<>(queue.getPlayers())) {
+                Player online = Bukkit.getPlayer(qp.getUuid());
+                if (online == null || !online.isOnline() || mm.isInArena(online)) {
+                    removeOnQuit(qp.getUuid());
+                }
+            }
             if (queue.getSize() < 2) continue;
 
+            // Look up each rating once (not per comparison)
             List<QueuedPlayer> players = new ArrayList<>(queue.getPlayers());
-            
-            // Sort by ELO rating for better matchmaking
-            players.sort(Comparator.comparingInt(p -> {
-                return plugin.getEloManager().getRating(p.getUuid()).getRating();
-            }));
+            Map<UUID, Integer> elo = new HashMap<>();
+            for (QueuedPlayer qp : players) {
+                elo.put(qp.getUuid(), plugin.getEloManager().getRating(qp.getUuid()).getRating());
+            }
+            players.sort(Comparator.comparingInt(p -> elo.get(p.getUuid())));
 
-            // Match players with similar ELO ratings
+            Set<UUID> used = new HashSet<>();
             for (int i = 0; i < players.size() - 1; i++) {
                 QueuedPlayer p1 = players.get(i);
-                if (!queuedPlayers.containsKey(p1.getUuid())) continue; // Player might have left
+                if (used.contains(p1.getUuid())) continue;
 
                 for (int j = i + 1; j < players.size(); j++) {
                     QueuedPlayer p2 = players.get(j);
-                    if (!queuedPlayers.containsKey(p2.getUuid())) continue;
+                    if (used.contains(p2.getUuid())) continue;
 
-                    // Check ELO difference (max 200 points difference for fair match)
-                    int elo1 = plugin.getEloManager().getRating(p1.getUuid()).getRating();
-                    int elo2 = plugin.getEloManager().getRating(p2.getUuid()).getRating();
-                    
-                    if (Math.abs(elo1 - elo2) <= 200) {
-                        // Found a match!
-                        createMatch(p1, p2, queue.getKitName());
-                        queue.removePlayer(p1);
-                        queue.removePlayer(p2);
-                        queuedPlayers.remove(p1.getUuid());
-                        queuedPlayers.remove(p2.getUuid());
-                        
-                        if (queue.isEmpty()) {
-                            queues.remove(queue.getKitName().toLowerCase());
-                        }
-                        break;
-                    }
+                    int diff = elo.get(p2.getUuid()) - elo.get(p1.getUuid()); // sorted ascending: >= 0
+                    if (diff > MAX_RANGE) break;
+                    if (diff > allowedRange(p1, p2, now)) continue;
+
+                    Arena arena = findFreeArena();
+                    if (arena == null) return; // nothing free; keep everyone queued, retry next tick
+
+                    // Take both out of the queue BEFORE creating the match so a failed
+                    // attempt can put them back (previously they were silently lost).
+                    removeFromQueue(queue, p1);
+                    removeFromQueue(queue, p2);
+                    used.add(p1.getUuid());
+                    used.add(p2.getUuid());
+                    createMatch(p1, p2, queue.getKitName(), arena);
+                    break;
                 }
             }
         }
     }
 
+    private void removeFromQueue(Queue queue, QueuedPlayer qp) {
+        queue.removePlayer(qp);
+        queuedPlayers.remove(qp.getUuid());
+        if (queue.isEmpty()) queues.remove(queue.getKitName().toLowerCase());
+    }
+
+    /** Put a player back, keeping their original wait time. Does not trigger matchmaking. */
+    private void requeue(QueuedPlayer qp, String kitName) {
+        Player p = Bukkit.getPlayer(qp.getUuid());
+        if (p == null || !p.isOnline()) return;
+        if (queuedPlayers.putIfAbsent(qp.getUuid(), qp) != null) return;
+        queues.computeIfAbsent(kitName.toLowerCase(), Queue::new).addPlayer(qp);
+    }
+
+    private Arena findFreeArena() {
+        var mm = plugin.getMatchManager();
+        for (Arena a : plugin.getArenaManager().getEnabled()) {
+            if (a.getState() == com.omniarena.arena.ArenaState.WAITING
+                    && a.isJoinable()
+                    && mm.getMatch(a).isEmpty()) {
+                return a;
+            }
+        }
+        return null;
+    }
+
     /**
      * Create a match from queue
      */
-    private void createMatch(QueuedPlayer p1, QueuedPlayer p2, String kitName) {
+    private void createMatch(QueuedPlayer p1, QueuedPlayer p2, String kitName, Arena arena) {
         Player player1 = Bukkit.getPlayer(p1.getUuid());
         Player player2 = Bukkit.getPlayer(p2.getUuid());
 
         if (player1 == null || player2 == null || !player1.isOnline() || !player2.isOnline()) {
             // One player went offline, re-queue the other
-            if (player1 != null && player1.isOnline()) {
-                joinQueue(player1, kitName);
-            }
-            if (player2 != null && player2.isOnline()) {
-                joinQueue(player2, kitName);
-            }
+            requeue(p1, kitName);
+            requeue(p2, kitName);
             return;
         }
 
-        // Find available arena
-        Arena arena = plugin.getArenaManager().getEnabled().stream()
-                .filter(a -> a.getState() == com.omniarena.arena.ArenaState.WAITING)
-                .findFirst()
-                .orElse(null);
-
-        if (arena == null) {
-            MessageUtil.send(player1, "<red>No available arenas. Re-queued...");
-            MessageUtil.send(player2, "<red>No available arenas. Re-queued...");
-            joinQueue(player1, kitName);
-            joinQueue(player2, kitName);
+        var mm = plugin.getMatchManager();
+        boolean ok1 = mm.joinArena(player1, arena);
+        boolean ok2 = ok1 && mm.joinArena(player2, arena);
+        if (!ok2) {
+            if (ok1) mm.leaveArena(player1);
+            requeue(p1, kitName);
+            requeue(p2, kitName);
             return;
         }
-
-        // Join both players to arena
-        plugin.getMatchManager().joinArena(player1, arena);
-        plugin.getMatchManager().joinArena(player2, arena);
 
         MessageUtil.send(player1, "<green>Match found! vs <yellow>" + p2.getName());
         MessageUtil.send(player2, "<green>Match found! vs <yellow>" + p1.getName());

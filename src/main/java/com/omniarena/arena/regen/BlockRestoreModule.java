@@ -77,16 +77,28 @@ public class BlockRestoreModule {
             if (onComplete != null) onComplete.run();
             return;
         }
-        List<BlockEntry> entries = new ArrayList<>();
+        long volume = (long) (region.getMaxX() - region.getMinX() + 1)
+                * (region.getMaxY() - region.getMinY() + 1) * (region.getMaxZ() - region.getMinZ() + 1);
+        List<BlockEntry> entries = new ArrayList<>((int) Math.min(volume, 5_000_000L));
+        // Share identical block-data strings (one per distinct state instead of one per block)
+        Map<BlockData, String> strCache = new HashMap<>();
         for (int x = region.getMinX(); x <= region.getMaxX(); x++)
             for (int y = region.getMinY(); y <= region.getMaxY(); y++)
                 for (int z = region.getMinZ(); z <= region.getMaxZ(); z++) {
                     Block b = world.getBlockAt(x, y, z);
-                    entries.add(new BlockEntry(x, y, z, b.getType(), b.getBlockData().getAsString()));
+                    BlockData bd = b.getBlockData();
+                    entries.add(new BlockEntry(x, y, z, b.getType(), strCache.computeIfAbsent(bd, BlockData::getAsString)));
                 }
-        saveSnapshot(arena.getName(), region.getWorldName(), entries);
-        plugin.getLogger().info("Snapshot saved for arena " + arena.getName() + " (" + entries.size() + " blocks).");
-        if (onComplete != null) onComplete.run();
+        // Serialise + write the file off the main thread
+        final String arenaName = arena.getName();
+        final String worldName = region.getWorldName();
+        AsyncUtil.runAsyncThenSync(() -> {
+            saveSnapshot(arenaName, worldName, entries);
+            return entries.size();
+        }, count -> {
+            plugin.getLogger().info("Snapshot saved for arena " + arenaName + " (" + count + " blocks).");
+            if (onComplete != null) onComplete.run();
+        });
     }
 
     public void restore(Arena arena, Runnable onComplete, Runnable onFail) {
@@ -100,7 +112,10 @@ public class BlockRestoreModule {
         AsyncUtil.runAsyncThenSync(
             () -> {
                 FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-                return new LoadResult(cfg.getString("world"), loadEntries(cfg));
+                List<BlockEntry> loaded = loadEntries(cfg);
+                // Sort off the main thread: ordering a large region is O(n log n)
+                RegenAnimationType t = getAnimationType();
+                return new LoadResult(cfg.getString("world"), orderEntries(loaded, arena.getRegion(), t), t);
             },
             result -> {
                 World world = result.worldName() != null ? Bukkit.getWorld(result.worldName()) : null;
@@ -109,8 +124,8 @@ public class BlockRestoreModule {
                     if (onFail != null) onFail.run();
                     return;
                 }
-                RegenAnimationType type = getAnimationType();
-                List<BlockEntry> ordered = orderEntries(result.entries(), arena.getRegion(), type);
+                RegenAnimationType type = result.type();
+                List<BlockEntry> ordered = result.entries();
                 startPlacing(world, ordered.iterator(), ordered.size(), type, onProgress, onComplete);
             }
         );
@@ -143,6 +158,7 @@ public class BlockRestoreModule {
 
         // Queue: each AnimBatch holds the preview block locations + the real entries
         Deque<AnimBatch> queue = new ArrayDeque<>();
+        Map<String, BlockData> dataCache = new HashMap<>();
 
         taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
 
@@ -153,19 +169,15 @@ public class BlockRestoreModule {
                 // Remove preview blocks (always remove to prevent permanent blocks)
                 for (PreviewBlock pb : prev.preview()) {
                     Block b = world.getBlockAt(pb.loc());
-                    // Remove if it's still the preview material OR if it's a temporary block
-                    // that shouldn't be there (prevents trash blocks)
-                    if (b.getType() == pb.mat() || isTemporaryBlock(b.getType())) {
+                    // Only remove previews we actually placed (never touch real restored blocks)
+                    if (b.getType() == pb.mat()) {
                         b.setType(Material.AIR, false);
                     }
                 }
 
                 // Place real blocks
                 for (BlockEntry e : prev.entries()) {
-                    Block b = world.getBlockAt(e.x, e.y, e.z);
-                    b.setType(e.material, false);
-                    if (e.material != Material.AIR && e.blockData != null)
-                        b.setBlockData(Bukkit.createBlockData(e.blockData), false);
+                    placeEntry(world, e, dataCache);
                     restored[0]++;
                 }
                 if (onProgress != null) onProgress.accept(restored[0], total);
@@ -180,13 +192,14 @@ public class BlockRestoreModule {
 
                 List<PreviewBlock> preview = buildPreview(world, batch, type);
 
-                // Place preview blocks
-                for (PreviewBlock pb : preview) {
+                // Place preview blocks; keep only those really placed so cleanup is exact
+                preview.removeIf(pb -> {
                     Block b = world.getBlockAt(pb.loc());
                     // Only place preview if the block is currently air (don't overwrite already-restored blocks)
-                    if (b.getType() == Material.AIR)
-                        b.setType(pb.mat(), false);
-                }
+                    if (b.getType() != Material.AIR) return true;
+                    b.setType(pb.mat(), false);
+                    return false;
+                });
 
                 // Descent types: spawn real falling-block entities that streak
                 // down from the sky and vanish on impact (meteors, suit pieces…).
@@ -204,21 +217,46 @@ public class BlockRestoreModule {
         }, 1L, 1L);
     }
 
-    /** Fast path for INSTANT — no preview, no delay, truly instant */
+    /** Fast path for INSTANT: no preview, but still spread across ticks so big arenas never freeze the server. */
     private void fastPlace(World world, Iterator<BlockEntry> iterator, int total,
                            BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
-        // Place ALL blocks in a single tick - truly instant
-        int restored = 0;
-        while (iterator.hasNext()) {
-            BlockEntry e = iterator.next();
-            Block b = world.getBlockAt(e.x, e.y, e.z);
+        int batchSize = Math.max(1, ConfigManager.getInstance().getConfig()
+                .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
+        BukkitTask[] taskHolder = new BukkitTask[1];
+        int[] restored = {0};
+        Map<String, BlockData> dataCache = new HashMap<>();
+
+        taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
+            for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
+                placeEntry(world, iterator.next(), dataCache);
+                restored[0]++;
+            }
+            if (onProgress != null) onProgress.accept(restored[0], total);
+            if (!iterator.hasNext()) {
+                taskHolder[0].cancel();
+                if (onComplete != null) onComplete.run();
+            }
+        }, 1L, 1L);
+        if (taskHolder[0] == null && onComplete != null) onComplete.run();
+    }
+
+    /** Places one snapshot block with a single block-data application (parsed data is cached). */
+    private void placeEntry(World world, BlockEntry e, Map<String, BlockData> cache) {
+        Block b = world.getBlockAt(e.x, e.y, e.z);
+        if (e.material == Material.AIR || e.blockData == null) {
             b.setType(e.material, false);
-            if (e.material != Material.AIR && e.blockData != null)
-                b.setBlockData(Bukkit.createBlockData(e.blockData), false);
-            restored++;
+            return;
         }
-        if (onProgress != null) onProgress.accept(restored, total);
-        if (onComplete != null) onComplete.run();
+        BlockData data = cache.get(e.blockData);
+        if (data == null) {
+            try {
+                data = Bukkit.createBlockData(e.blockData);
+            } catch (IllegalArgumentException ex) {
+                data = e.material.createBlockData();
+            }
+            cache.put(e.blockData, data);
+        }
+        b.setBlockData(data, false);
     }
 
     // ── Preview builders ───────────────────────────────────────────────────────
@@ -681,7 +719,7 @@ public class BlockRestoreModule {
     // ── Records ────────────────────────────────────────────────────────────────
 
     private record BlockEntry(int x, int y, int z, Material material, String blockData) {}
-    private record LoadResult(String worldName, List<BlockEntry> entries) {}
+    private record LoadResult(String worldName, List<BlockEntry> entries, RegenAnimationType type) {}
     private record PreviewBlock(Location loc, Material mat) {}
     private record AnimBatch(List<BlockEntry> entries, List<PreviewBlock> preview) {}
 }

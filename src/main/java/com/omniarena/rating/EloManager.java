@@ -46,9 +46,8 @@ public class EloManager {
                     rating.setLosses(cfg.getInt(path + ".losses"));
                     rating.setDraws(cfg.getInt(path + ".draws"));
                     // Note: highestRating not persisted, recalculated on load
-                    if (rating.getRating() > rating.getHighestRating()) {
-                        rating.getClass().getDeclaredField("highestRating").setInt(rating, rating.getRating());
-                    }
+                    rating.setHighestRating(Math.max(rating.getRating(),
+                            cfg.getInt(path + ".highestRating", rating.getRating())));
                     ratings.put(uuid, rating);
                 } catch (Exception e) {
                     plugin.getLogger().warning("Failed to load ELO for " + uuidStr + ": " + e.getMessage());
