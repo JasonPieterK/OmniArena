@@ -126,6 +126,9 @@ public class Arena {
     public void setAnnouncements(boolean announcements) { this.announcements = announcements; }
     public Set<String> getEnabledModules() { return enabledModules; }
     public List<ArenaSign> getSigns() { return signs; }
+    /** Sign entries that could not be parsed on load (unloaded world, bad format); written back verbatim on save. */
+    private final List<String> unparsedSigns = new ArrayList<>();
+    public List<String> getUnparsedSigns() { return unparsedSigns; }
     public boolean isMidMatchJoin() { return midMatchJoin; }
     public void setMidMatchJoin(boolean midMatchJoin) { this.midMatchJoin = midMatchJoin; }
     public boolean isSpectatorAllowed() { return spectatorAllowed; }

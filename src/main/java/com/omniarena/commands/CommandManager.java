@@ -264,9 +264,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                     "Unexpected error while " + sender.getName() + " ran '/oa " + sub + " " + String.join(" ", subArgs)
                             + "' (" + e.getClass().getSimpleName() + ": " + e.getMessage() + "). Full stack trace follows; "
                             + "please report it with your server version and plugin version.", e);
-            MessageUtil.send(sender, "<red>Something went wrong while running <yellow>/oa " + sub
-                    + "</yellow>. <gray>It was not your fault: ask an admin to check the server console for the full error. "
-                    + "Usage: <white>" + cmd.getUsage() + "</white>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("error-internal")
+                    .replace("{command}", "/oa " + sub)
+                    + " <gray>Usage: <white>" + cmd.getUsage() + "</white>");
         }
     }
 

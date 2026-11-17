@@ -125,7 +125,10 @@ public class ArenaConfig {
         for (String signStr : signList) {
             Location loc = LocationUtil.deserialize(signStr);
             if (loc != null) arena.getSigns().add(new ArenaSign(loc, name));
-            else com.omniarena.OmniArena.getInstance().getLogger().warning("Arena '" + name + "': skipped invalid sign entry '" + signStr + "' (bad format or world not loaded). Fix: edit the 'signs' list in arenas/" + name + ".yml, or re-create the sign with /oa sign create " + name + ".");
+            else {
+                arena.getUnparsedSigns().add(signStr); // preserved verbatim on save
+                com.omniarena.OmniArena.getInstance().getLogger().warning("Arena '" + name + "': sign entry '" + signStr + "' is not active (bad format or world not loaded) but is kept in the file. Fix: edit the 'signs' list in arenas/" + name + ".yml, or re-create the sign with /oa sign create " + name + ".");
+            }
         }
 
         // End commands
@@ -210,9 +213,10 @@ public class ArenaConfig {
         saveSpawnList(cfg, arena, "spawns.spectator", SpawnType.SPECTATOR);
 
         // Signs
-        List<String> signStrs = arena.getSigns().stream()
+        List<String> signStrs = new java.util.ArrayList<>(arena.getSigns().stream()
                 .map(s -> LocationUtil.serialize(s.getLocation()))
-                .toList();
+                .toList());
+        signStrs.addAll(arena.getUnparsedSigns()); // entries we could not load stay in the file
         cfg.set("signs", signStrs);
 
         cfg.set("end-commands", arena.getEndCommands());

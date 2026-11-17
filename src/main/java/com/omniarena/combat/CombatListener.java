@@ -76,7 +76,27 @@ public class CombatListener implements Listener {
     }
 
     private Player resolveAttacker(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof org.bukkit.entity.EnderCrystal crystal) {
+            java.util.UUID id = cm().getCrystalDamager(crystal.getUniqueId());
+            return id == null ? null : Bukkit.getPlayer(id);
+        }
         return resolveSource(event.getDamager());
+    }
+
+    // ── End crystal attribution: remember who hit the crystal ───────────────────
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCrystalHit(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.EnderCrystal crystal)) return;
+        Player source = resolveSource(event.getDamager());
+        if (source != null) cm().recordCrystalDamager(crystal.getUniqueId(), source.getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onCrystalExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.EnderCrystal crystal)) return;
+        java.util.UUID id = crystal.getUniqueId();
+        // explosion damage may be applied after this event: clear next tick
+        Bukkit.getScheduler().runTask(plugin, () -> cm().clearCrystal(id));
     }
 
     /** Credits the human behind a damager: shooter, tamed-pet owner, TNT igniter, lingering-cloud thrower. */
@@ -180,20 +200,40 @@ public class CombatListener implements Listener {
         }
     }
 
-    // ── Block teleport / enderpearls while tagged ────────────────────────────────
+    // ── Block teleport / enderpearls / elytra while tagged ───────────────────────
     @EventHandler(ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         Player player = event.getPlayer();
         if (!enabled() || !cm().isTagged(player)) return;
         PlayerTeleportEvent.TeleportCause cause = event.getCause();
-        if (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
-                && !cfg().getConfig().getBoolean("pvp.combat.block-enderpearls", true)) return;
-        if (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
+        // OmniArena's own teleports (and other plugins' API teleports) are never blocked.
+        if (cause == PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+        boolean block = (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
+                    && cfg().getConfig().getBoolean("pvp.combat.block-ender-pearl", false))
                 || (cause == PlayerTeleportEvent.TeleportCause.COMMAND
-                    && cfg().getConfig().getBoolean("pvp.combat.cancel-teleport", true))) {
+                    && cfg().getConfig().getBoolean("pvp.combat.block-teleport", true));
+        if (block) {
             event.setCancelled(true);
-            MessageUtil.send(player, cfg().getMessage("combat-no-teleport"));
+            MessageUtil.send(player, "<red>You can't teleport while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
         }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onGlide(org.bukkit.event.entity.EntityToggleGlideEvent event) {
+        if (!(event.getEntity() instanceof Player player) || !event.isGliding()) return;
+        if (!enabled() || !cm().isTagged(player) || inArena(player)) return;
+        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return;
+        event.setCancelled(true);
+        MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onElytraBoost(com.destroystokyo.paper.event.player.PlayerElytraBoostEvent event) {
+        Player player = event.getPlayer();
+        if (!enabled() || !cm().isTagged(player) || inArena(player)) return;
+        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return;
+        event.setCancelled(true);
+        MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
     }
 
     // ── Block placement while tagged + auto-soup ─────────────────────────────────
@@ -328,6 +368,10 @@ public class CombatListener implements Listener {
         Player victim = event.getEntity();
         if (inArena(victim)) return; // arena death handled elsewhere
         Player killer = victim.getKiller();
+        if (killer == null && victim.getLastDamageCause() instanceof EntityDamageByEntityEvent last) {
+            killer = resolveAttacker(last);
+            if (victim.equals(killer)) killer = null;
+        }
         cm().untag(victim);
 
         if (killer != null) {

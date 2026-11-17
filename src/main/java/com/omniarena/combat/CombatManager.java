@@ -47,6 +47,7 @@ public class CombatManager {
         instance = this;
         this.globalPvp = cfg().getConfig().getBoolean("pvp.global.pvp-enabled", true);
         loadNewbies();
+        loadToggles();
         start();
     }
 
@@ -120,6 +121,9 @@ public class CombatManager {
             player.setFlying(false);
             player.setAllowFlight(false);
         }
+        if (cfg().getConfig().getBoolean("pvp.combat.block-elytra", true) && player.isGliding()) {
+            player.setGliding(false);
+        }
         if (cfg().getConfig().getBoolean("pvp.combat.disable-gamemode", true)
                 && (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR)) {
             player.setGameMode(GameMode.SURVIVAL);
@@ -155,7 +159,65 @@ public class CombatManager {
 
     public void setPvp(Player player, boolean enabled) {
         pvpToggle.put(player.getUniqueId(), enabled);
+        saveTogglesAsync();
     }
+
+    // PvP-off players survive restarts (plugins/OmniArena/pvp-toggles.yml); only "off" players are stored
+    private java.io.File toggleFile() { return new java.io.File(plugin.getDataFolder(), "pvp-toggles.yml"); }
+
+    private void loadToggles() {
+        try {
+            java.io.File f = toggleFile();
+            if (!f.exists()) return;
+            org.bukkit.configuration.file.YamlConfiguration y = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(f);
+            for (String k : y.getStringList("pvp-off")) {
+                try { pvpToggle.put(UUID.fromString(k), false); } catch (IllegalArgumentException ignored) { }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Could not load pvp-toggles.yml: " + e.getMessage());
+        }
+    }
+
+    private void saveTogglesAsync() {
+        if (!plugin.isEnabled()) { saveTogglesNow(); return; }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::saveTogglesNow);
+    }
+
+    private synchronized void saveTogglesNow() {
+        try {
+            java.util.List<String> off = new java.util.ArrayList<>();
+            for (Map.Entry<UUID, Boolean> e : pvpToggle.entrySet()) {
+                if (Boolean.FALSE.equals(e.getValue())) off.add(e.getKey().toString());
+            }
+            org.bukkit.configuration.file.YamlConfiguration y = new org.bukkit.configuration.file.YamlConfiguration();
+            y.set("pvp-off", off);
+            java.io.File f = toggleFile();
+            if (f.getParentFile() != null) f.getParentFile().mkdirs();
+            y.save(f);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Could not save pvp-toggles.yml: " + e.getMessage());
+        }
+    }
+
+    // ── End crystal attribution ───────────────────────────────────────────────
+
+    private static final long CRYSTAL_TTL_MS = 10_000L;
+    // crystal entity -> {last player to damage it, expiry}
+    private final Map<UUID, Object[]> crystalDamagers = new ConcurrentHashMap<>();
+
+    public void recordCrystalDamager(UUID crystal, UUID player) {
+        crystalDamagers.put(crystal, new Object[]{player, System.currentTimeMillis() + CRYSTAL_TTL_MS});
+    }
+
+    /** Player who last damaged this crystal within ~10s, or null. */
+    public UUID getCrystalDamager(UUID crystal) {
+        Object[] e = crystalDamagers.get(crystal);
+        if (e == null) return null;
+        if ((Long) e[1] < System.currentTimeMillis()) { crystalDamagers.remove(crystal); return null; }
+        return (UUID) e[0];
+    }
+
+    public void clearCrystal(UUID crystal) { crystalDamagers.remove(crystal); }
 
     private final java.util.Map<UUID, Long> lastToggle = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -340,6 +402,7 @@ public class CombatManager {
         long windowMs = cfg().getConfig().getInt("pvp.killabuse.time-window", 300) * 1000L;
         killLedger.entrySet().removeIf(e -> now - e.getValue()[1] > windowMs);
         respawnProtUntil.entrySet().removeIf(e -> e.getValue() < now);
+        crystalDamagers.entrySet().removeIf(e -> (Long) e.getValue()[1] < now);
     }
 
     public int trackedPlayers() {
@@ -371,5 +434,6 @@ public class CombatManager {
     public void shutdown() {
         stop();
         saveNewbiesNow();
+        saveTogglesNow();
     }
 }

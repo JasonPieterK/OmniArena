@@ -50,7 +50,9 @@ pvp:
     tag-duration: 15          # seconds you stay "in combat" after a hit
     tag-on-damage: true
     tag-on-attack: true
-    cancel-teleport: true     # block /tp-style teleports while tagged
+    block-teleport: true      # block non-plugin teleports (/tpa, /tp, /home...) while tagged; OmniArena's own are allowed
+    block-elytra: true        # no elytra gliding / firework boost while tagged
+    block-ender-pearl: false  # block ender pearl teleports while tagged
     block-commands: true      # block commands while tagged (except allowed list)
     allowed-commands:
       - /oa
@@ -60,7 +62,6 @@ pvp:
       - /msg
       - /r
       - /helpop
-    block-enderpearls: true
     block-block-place: true
     disable-fly: true         # drop flight the moment combat starts
     disable-gamemode: true    # force survival on combat

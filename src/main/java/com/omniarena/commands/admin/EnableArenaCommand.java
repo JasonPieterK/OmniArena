@@ -36,7 +36,9 @@ public class EnableArenaCommand extends SubCommand {
             return;
         }
         if (a.getBattleSpawns().isEmpty()) {
-            MessageUtil.send(sender, "<red>Cannot enable arena <yellow>" + a.getName() + "</yellow>: it has no BATTLE spawns, so players would have nowhere to fight. <gray>Stand where players should spawn and run <white>/oa spawn set " + a.getName() + " BATTLE</white>, then retry <white>/oa enable " + a.getName() + "</white>.");
+            MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("arena-no-spawns")
+                    .replace("{arena}", a.getName()).replace("{type}", "BATTLE")
+                    + " <gray>Then retry <white>/oa enable " + a.getName() + "</white>.");
             return;
         }
         if (!a.getRegion().isDefined()) {

@@ -450,7 +450,7 @@ now `/oa` (`/oa pmr` remains for admin actions).
 - **Combat tag.** Hits tag both players for `pvp.combat.tag-duration` seconds (default 15).
 - **Restrictions while tagged:** drop flight (`disable-fly`), force survival (`disable-gamemode`),
   strip invisibility, undisguise via LibsDisguises, block commands except the
-  `allowed-commands` list (`block-commands`), enderpearls, teleports (`cancel-teleport`) and block
+  `allowed-commands` list (`block-commands`), enderpearls, teleports (`block-teleport`) and block
   placement (`block-block-place`).
 - **Combat-log** (`punish-combat-log`, `combat-log-action` KILL | COMMAND | NOTHING,
   `combat-log-commands` with `{player}`, `broadcast-combat-log`).
