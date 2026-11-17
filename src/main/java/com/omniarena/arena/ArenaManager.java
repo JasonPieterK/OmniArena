@@ -77,6 +77,14 @@ public class ArenaManager {
         arena.setMidMatchJoin(c.getBoolean("arena.mid-match-join", arena.isMidMatchJoin()));
         arena.setRespawnDelay(Math.max(0, c.getInt("arena.respawn-delay", arena.getRespawnDelay())));
         arena.setSpawnProtection(Math.max(0, c.getInt("arena.spawn-protection", arena.getSpawnProtection())));
+        var v = arena.getVisual();
+        v.setTitles(c.getBoolean("visual.titles", v.isTitles()));
+        v.setSounds(c.getBoolean("visual.sounds", v.isSounds()));
+        v.setParticles(c.getBoolean("visual.particles", v.isParticles()));
+        v.setScoreboard(c.getBoolean("visual.scoreboard", v.isScoreboard()));
+        v.setBossBar(c.getBoolean("visual.boss-bar", v.isBossBar()));
+        v.setActionBar(c.getBoolean("visual.action-bar", v.isActionBar()));
+        v.setHolograms(c.getBoolean("visual.holograms", v.isHolograms()));
     }
 
     public boolean delete(String name) {

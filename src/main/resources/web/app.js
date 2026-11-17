@@ -2,8 +2,26 @@
 (function () {
   'use strict';
 
+  // Token comes from the /oa website link (?token=...). Keep it in sessionStorage and strip it
+  // from the address bar so it does not linger in history / screenshots.
+  function initToken() {
+    let t = new URLSearchParams(location.search).get('token') || '';
+    try {
+      if (t) {
+        sessionStorage.setItem('omniarena-token', t);
+        history.replaceState(null, '', location.pathname);
+      } else {
+        t = sessionStorage.getItem('omniarena-token') || '';
+      }
+    } catch (e) { /* storage blocked: token lives in memory only */ }
+    return t;
+  }
+
   const S = {
-    token: new URLSearchParams(location.search).get('token') || '',
+    token: initToken(),
+    liveByArena: {},
+    busy: false,
+    expired: false,
     snapshot: null,
     selectedArena: null,
     draftGlobals: {},
@@ -19,24 +37,36 @@
 
   // ── API ──────────────────────────────────────────────────────────────
   async function api(path, opts = {}) {
-    const sep = path.includes('?') ? '&' : '?';
-    const url = path + sep + 'token=' + encodeURIComponent(S.token);
+    let res;
     try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' }, ...opts,
+      res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.token, ...(opts.headers || {}) },
+        cache: 'no-store',
       });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || `HTTP ${res.status}`);
-      }
-      const txt = await res.text();
-      return txt ? JSON.parse(txt) : {};
     } catch (e) {
-      if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
-        throw new Error('Cannot connect to server. Make sure the web dashboard is running.');
-      }
-      throw e;
+      throw new Error('Cannot connect to server. Make sure the web dashboard is running (/oa start).');
     }
+    const txt = await res.text();
+    if (!res.ok) {
+      let msg = '';
+      try { const j = JSON.parse(txt); msg = j.error || (Array.isArray(j.errors) ? j.errors.join('; ') : ''); } catch (e) { msg = txt; }
+      const err = new Error(msg || `HTTP ${res.status}`);
+      err.status = res.status;
+      if (res.status === 401) sessionExpired();
+      throw err;
+    }
+    if (opts.text) return txt;
+    try { return txt ? JSON.parse(txt) : {}; } catch (e) { throw new Error('Server sent an unreadable response.'); }
+  }
+
+  function sessionExpired() {
+    if (S.expired) return;
+    S.expired = true;
+    stopLivePolling();
+    setStatus(false, 'Session expired');
+    $('applyBtn').disabled = true;
+    toast('Session expired or logged out. Run /oa website in-game for a new link.', 'error');
   }
 
   // ── Toast + confetti ───────────────────────────────────────────────────
@@ -45,7 +75,7 @@
     t.className = `toast ${type}`;
     t.innerHTML = `<span class="toast-ico">${type === 'success' ? '✓' : '✕'}</span><span>${esc(msg)}</span>`;
     $('toastContainer').appendChild(t);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, 3000);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, type === 'error' ? 6000 : 3000);
   }
 
   function confettiBurst() {
@@ -97,6 +127,7 @@
         link.classList.add('active');
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         $('tab-' + tab).classList.add('active');
+        stopLivePolling();
         if (tab === 'docs' && !S.docsRaw) loadDocs();
         if (tab === 'live') loadLiveMatches();
         if (tab === 'players') loadPlayers();
@@ -107,31 +138,45 @@
 
   // ── Load ─────────────────────────────────────────────────────────────
   async function load() {
-    if (!S.token) { setStatus(false, 'No token in URL'); renderAll(); return; }
+    if (!S.token) { setStatus(false, 'No token - run /oa website'); $('statGrid').innerHTML = ''; $('arenaGrid').innerHTML = emptyState('ph-key', 'Not logged in', 'Run /oa website in-game and open the link it prints.'); return; }
+    if (S.expired) return;
     setStatus(false, 'Loading…');
+    $('arenaGrid').innerHTML = $('arenaGrid').innerHTML || '<div class="empty"><i class="ph-bold ph-circle-notch"></i><p>Loading…</p></div>';
     try {
-      S.snapshot = await api('/api/state');
+      const [snapshot, live] = await Promise.all([
+        api('/api/state'),
+        api('/api/live-matches').catch(() => []),
+      ]);
+      S.snapshot = snapshot;
+      S.snapshot.arenas = S.snapshot.arenas || [];
+      S.snapshot.globals = S.snapshot.globals || {};
+      S.snapshot.settings = S.snapshot.settings || [];
+      S.liveByArena = {};
+      (Array.isArray(live) ? live : []).forEach(m => { S.liveByArena[String(m.arena).toLowerCase()] = m; });
       S.draftGlobals = { ...S.snapshot.globals };
+      if (S.selectedArena && !S.snapshot.arenas.some(a => a.name === S.selectedArena)) S.selectedArena = null;
       if (!S.selectedArena && S.snapshot.arenas.length)
         S.selectedArena = S.snapshot.arenas[0].name;
       const arena = S.snapshot.arenas.find(a => a.name === S.selectedArena);
       S.draftArena = arena ? cloneArena(arena) : {};
+      S.dirty = false; $('applyBtn').disabled = true;
       setStatus(true, `${S.snapshot.arenas.length} arena${S.snapshot.arenas.length === 1 ? '' : 's'}`);
       renderAll();
     } catch (e) {
+      if (e.status === 401) return;
       const msg = e.message || 'Unknown error';
-      setStatus(false, msg.includes('401') ? 'Invalid token' : msg.includes('Cannot connect') ? 'Server offline' : 'Error');
+      setStatus(false, msg.includes('Cannot connect') ? 'Server offline' : 'Error');
       toast('Failed to load: ' + msg, 'error');
+      if (!S.snapshot) $('arenaGrid').innerHTML = emptyState('ph-warning-circle', 'Could not load', msg);
     }
   }
 
   async function loadDocs() {
     try {
-      const res = await fetch('/api/docs?token=' + encodeURIComponent(S.token));
-      S.docsRaw = await res.text();
+      S.docsRaw = await api('/api/docs', { text: true });
       renderDocs();
     } catch (e) {
-      $('docsBody').innerHTML = '<p>Couldn\'t load docs.</p>';
+      $('docsBody').innerHTML = '<p>Couldn\'t load docs: ' + esc(e.message) + '</p>';
     }
   }
 
@@ -143,12 +188,22 @@
     renderConfig();
   }
 
+  // ArenaView.state is the Java ArenaState name (WAITING, STARTING, RUNNING, ...).
+  function stateOf(a) {
+    if (a.enabled === false) return 'disabled';
+    return String(a.state || 'waiting').toLowerCase();
+  }
+  function arenaPlayers(a) {
+    const m = S.liveByArena[String(a.name).toLowerCase()];
+    return m ? (m.totalPlayers ?? 0) : 0;
+  }
+
   // ── Stats ────────────────────────────────────────────────────────────
   function renderStats() {
     const sn = S.snapshot;
     const arenas = sn?.arenas || [];
-    const live = arenas.filter(a => a.state === 'in_game').length;
-    const players = arenas.reduce((n, a) => n + (a.players ?? 0), 0);
+    const live = arenas.filter(a => stateOf(a) === 'running').length;
+    const players = arenas.reduce((n, a) => n + arenaPlayers(a), 0);
     const cfgCount = sn ? Object.keys(sn.globals || {}).length : 0;
     const cards = [
       { cls: 's-mean',   label: 'Arenas',      val: arenas.length, foot: 'configured' },
@@ -176,19 +231,19 @@
     }
     grid.innerHTML = arenas.map(a => {
       const enabled = a.enabled !== false;
-      const state = enabled ? (a.state || 'idle') : 'disabled';
-      const badgeCls = { in_game:'badge-live', starting:'badge-starting', waiting:'badge-waiting', idle:'badge-idle', disabled:'badge-disabled' }[state] || 'badge-idle';
-      const badgeLabel = { in_game:'LIVE', starting:'STARTING', waiting:'WAITING', idle:'IDLE', disabled:'OFF' }[state] || state.toUpperCase();
-      const dot = state === 'in_game' ? '<span class="live-dot"></span>' : '';
-      const cardCls = state === 'in_game' ? 'arena-card live' : state === 'starting' ? 'arena-card starting' : 'arena-card';
-      const players = a.players ?? 0;
+      const state = stateOf(a);
+      const badgeCls = { running:'badge-live', starting:'badge-starting', waiting:'badge-waiting', ending:'badge-starting', resetting:'badge-starting', disabled:'badge-disabled', maintenance:'badge-disabled' }[state] || 'badge-idle';
+      const badgeLabel = { running:'LIVE', starting:'STARTING', waiting:'WAITING', ending:'ENDING', resetting:'RESETTING', disabled:'OFF', maintenance:'MAINT' }[state] || state.toUpperCase();
+      const dot = state === 'running' ? '<span class="live-dot"></span>' : '';
+      const cardCls = state === 'running' ? 'arena-card live' : state === 'starting' ? 'arena-card starting' : 'arena-card';
+      const players = arenaPlayers(a);
       const maxP = a.maxPlayers ?? '?';
       const pct = (a.maxPlayers ? Math.round(players / a.maxPlayers * 100) : 0);
       return `<div class="${esc(cardCls)}">
         <div class="arena-card-top">
           <div>
             <div class="arena-card-name">${esc(a.name)}</div>
-            <div class="arena-card-world">${esc(a.regionWorld || a.world || '—')}</div>
+            <div class="arena-card-world">${esc(a.regionWorld || '—')}</div>
           </div>
           <span class="badge ${esc(badgeCls)}">${dot}${esc(badgeLabel)}</span>
         </div>
@@ -206,7 +261,7 @@
     const sn = S.snapshot;
     const list = $('arenaList');
     const arenas = sn?.arenas || [];
-    if (!arenas.length) { list.innerHTML = '<div class="card">No arenas.</div>'; return; }
+    if (!arenas.length) { list.innerHTML = '<div class="card">No arenas yet. Click <b>New arena</b> to create one.</div>'; return; }
     list.innerHTML = arenas.map(a => {
       const sel = a.name === S.selectedArena ? ' selected' : '';
       return `<div class="arena-list-item${sel}" data-arena="${esc(a.name)}">
@@ -300,7 +355,7 @@
     editor.querySelectorAll('[data-key]').forEach(el => {
       el.addEventListener('change', () => {
         const key = el.dataset.key;
-        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value);
         setNested(S.draftArena, key, val);
         markDirty();
       });
@@ -346,7 +401,7 @@
     container.querySelectorAll('[data-key]').forEach(el => {
       el.addEventListener('change', () => {
         const rawKey = el.dataset.key.replace(/^cfg\./, '');
-        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value);
         S.draftGlobals[rawKey] = val;
         markDirty();
       });
