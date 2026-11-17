@@ -178,7 +178,15 @@ public class WebDashboardServer {
             return;
         }
         JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
-        onMain(() -> { applyService.apply(payload, schemaService); return null; });
+        List<String> errors = onMain(() -> applyService.apply(payload, schemaService));
+        if (!errors.isEmpty()) {
+            JsonObject body = new JsonObject();
+            body.addProperty("ok", false);
+            body.addProperty("error", String.join("; ", errors));
+            body.add("errors", gson.toJsonTree(errors));
+            send(exchange, 400, gson.toJson(body), "application/json; charset=utf-8");
+            return;
+        }
         send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
     }
 

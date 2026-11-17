@@ -110,4 +110,13 @@ public class PlaceholderAPIIntegration extends PlaceholderExpansion {
     public boolean tryRegister() {
         return super.register();
     }
+
+    /** Unregisters this expansion from PlaceholderAPI (safe to call more than once). */
+    public void unregisterExpansion() {
+        try {
+            if (isRegistered()) unregister();
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Integrations] Failed to unregister PlaceholderAPI expansion: " + t.getMessage());
+        }
+    }
 }

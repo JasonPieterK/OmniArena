@@ -22,6 +22,10 @@ public class PlayerQuitListener implements Listener {
             plugin.getVisual().getBossBarManager().removePlayer(player);
             plugin.getVisual().getScoreboardManager().removeBoard(player);
         }
+        com.omniarena.queue.QueueManager qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null) qm.removeOnQuit(player.getUniqueId());
+        com.omniarena.party.PartyManager pm = com.omniarena.party.PartyManager.getInstance();
+        if (pm != null) pm.handleQuit(player);
         MatchManager mm = MatchManager.getInstance();
 
         if (mm.isSpectating(player)) {

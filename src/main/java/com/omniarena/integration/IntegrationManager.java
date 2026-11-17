@@ -45,6 +45,17 @@ public class IntegrationManager {
         }
     }
 
+    /** Releases all hooks. Call from OmniArena#onDisable (and before re-running load() on reload). */
+    public void shutdown() {
+        if (placeholderAPI != null) {
+            placeholderAPI.unregisterExpansion();
+            placeholderAPI = null;
+        }
+        vault = null;
+        worldGuard = null;
+        luckPerms = null;
+    }
+
     public boolean hasVault()          { return vault != null; }
     public boolean hasPlaceholderAPI() { return placeholderAPI != null; }
     public boolean hasWorldGuard()     { return worldGuard != null; }

@@ -283,7 +283,7 @@ public final class OmniArena extends JavaPlugin {
         try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed: " + e.getMessage()); }
         try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed: " + e.getMessage()); }
         try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed: " + e.getMessage()); }
-        try { if (eloManager != null) eloManager.saveAll(); } catch (Exception e) { getLogger().severe("Elo save failed: " + e.getMessage()); }
+        try { if (eloManager != null) { eloManager.shutdown(); eloManager.saveAll(); } } catch (Exception e) { getLogger().severe("Elo save failed: " + e.getMessage()); }
 
         // Shutdown visual systems
         try { if (visual != null) visual.shutdown(); } catch (Exception e) { getLogger().warning("Visual shutdown failed: " + e.getMessage()); }
