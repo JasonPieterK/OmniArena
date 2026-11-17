@@ -209,9 +209,9 @@ public class CombatListener implements Listener {
         // OmniArena's own teleports (and other plugins' API teleports) are never blocked.
         if (cause == PlayerTeleportEvent.TeleportCause.PLUGIN) return;
         boolean block = (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
-                    && cfg().getConfig().getBoolean("pvp.combat.block-ender-pearl", false))
+                    && cfg().getConfig().getBoolean("pvp.combat.block-ender-pearl", cfg().getConfig().getBoolean("pvp.combat.block-enderpearls", false)))
                 || (cause == PlayerTeleportEvent.TeleportCause.COMMAND
-                    && cfg().getConfig().getBoolean("pvp.combat.block-teleport", true));
+                    && cfg().getConfig().getBoolean("pvp.combat.block-teleport", cfg().getConfig().getBoolean("pvp.combat.cancel-teleport", true)));
         if (block) {
             event.setCancelled(true);
             MessageUtil.send(player, "<red>You can't teleport while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
@@ -367,11 +367,12 @@ public class CombatListener implements Listener {
         if (!enabled()) return;
         Player victim = event.getEntity();
         if (inArena(victim)) return; // arena death handled elsewhere
-        Player killer = victim.getKiller();
-        if (killer == null && victim.getLastDamageCause() instanceof EntityDamageByEntityEvent last) {
-            killer = resolveAttacker(last);
-            if (victim.equals(killer)) killer = null;
+        Player k = victim.getKiller();
+        if (k == null && victim.getLastDamageCause() instanceof EntityDamageByEntityEvent last) {
+            k = resolveAttacker(last);
+            if (victim.equals(k)) k = null;
         }
+        final Player killer = k;
         cm().untag(victim);
 
         if (killer != null) {
