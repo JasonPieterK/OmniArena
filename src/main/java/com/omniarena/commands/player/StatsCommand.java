@@ -54,7 +54,7 @@ public class StatsCommand extends SubCommand {
             target = player;
         }
 
-        PlayerStats stats = StatsManager.getInstance().getStats(target.getUniqueId());
+        PlayerStats stats = StatsManager.getInstance().peekStats(target.getUniqueId());
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-header").replace("{player}", target.getName() != null ? target.getName() : "Unknown"));
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-kills").replace("{kills}", String.valueOf(stats.getKills())));
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-deaths").replace("{deaths}", String.valueOf(stats.getDeaths())));

@@ -133,6 +133,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) { return partyCmd.onTabComplete(sender, null, "party", args); }
         });
         reg(playerCommands, "bet",      new BetCommand(plugin));
+        reg(playerCommands, "tournament", new TournamentCommand(plugin));
         reg(playerCommands, "help",     new HelpCommand(plugin, adminCommands, playerCommands));
 
         // ── PvP / combat commands (PvPManager-style; /pmr is now /oa) ──

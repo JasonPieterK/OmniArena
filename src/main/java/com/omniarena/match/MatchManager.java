@@ -400,6 +400,7 @@ public class MatchManager {
         // Betting payout
         plugin.getBettingManager().processMatchResults(
                 match.getArena().getName(), result.getWinnerId(), result.getLoserId());
+        plugin.getTournamentManager().onMatchEnd(result);
 
         plugin.getVisual().getTitleManager().sendMatchEndTitle(match, result);
         plugin.getVisual().getSoundManager().playMatchEnd(match, result);

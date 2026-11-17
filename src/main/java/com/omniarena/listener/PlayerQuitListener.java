@@ -26,6 +26,8 @@ public class PlayerQuitListener implements Listener {
         if (qm != null) qm.removeOnQuit(player.getUniqueId());
         com.omniarena.party.PartyManager pm = com.omniarena.party.PartyManager.getInstance();
         if (pm != null) pm.handleQuit(player);
+        com.omniarena.kit.KitManager km = com.omniarena.kit.KitManager.getInstance();
+        if (km != null) km.evict(player.getUniqueId());
         MatchManager mm = MatchManager.getInstance();
 
         if (mm.isSpectating(player)) {

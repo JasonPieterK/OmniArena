@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
 public class TournamentManager {
@@ -120,6 +121,7 @@ public class TournamentManager {
                 t.getParticipants().size() + " players competing."));
 
         launchPendingMatches(t);
+        saveAll();
     }
 
     public boolean deleteTournament(String name, Player admin) {
@@ -138,24 +140,29 @@ public class TournamentManager {
     // ── Bracket progression ───────────────────────────────────────
 
     public void onMatchEnd(MatchResult result) {
-        if (result.getWinnerId() == null) return; // draw/timeout — skip
+        UUID resWinner = result.getWinnerId();
+        List<UUID> parts = result.getParticipants() == null ? List.of() : result.getParticipants();
 
         for (Tournament t : tournaments.values()) {
-            if (t.getState() != TournamentState.IN_PROGRESS) continue;
+            if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
             if (result.getArenaName() != null && !result.getArenaName().equalsIgnoreCase(t.getArenaName())) continue;
             TournamentBracket bracket = t.getBracket();
 
             Optional<TournamentMatch> matchOpt = bracket.getCurrentRound().stream()
                     .filter(m -> !m.isCompleted() && !m.isBye()
-                            && (m.involves(result.getWinnerId())
-                            || (result.getLoserId() != null && m.involves(result.getLoserId()))))
+                            && ((resWinner != null && m.involves(resWinner))
+                            || (result.getLoserId() != null && m.involves(result.getLoserId()))
+                            || (parts.contains(m.getPlayer1()) && parts.contains(m.getPlayer2()))))
                     .findFirst();
             if (matchOpt.isEmpty()) continue;
 
             TournamentMatch tm = matchOpt.get();
 
-            bracket.recordWinner(tm, result.getWinnerId());
-            String winnerName = Bukkit.getOfflinePlayer(result.getWinnerId()).getName();
+            // Draw/timeout: decide by rule so the bracket never stalls
+            // (higher health advances; equal/unknown -> random).
+            UUID winner = resWinner != null && tm.involves(resWinner) ? resWinner : decideDraw(tm);
+            bracket.recordWinner(tm, winner);
+            String winnerName = Bukkit.getOfflinePlayer(winner).getName();
             Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
                     "<gold>[Tournament] <white>" + t.getName() +
                     " R" + bracket.getCurrentRoundNumber() +
@@ -169,13 +176,35 @@ public class TournamentManager {
                     Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
                             "<gold>[Tournament] <white>" + t.getName() +
                             " <yellow>Round " + bracket.getCurrentRoundNumber() + " begins!"));
-                    launchPendingMatches(t);
+                    scheduleLaunch(t);
                 }
             } else {
-                launchPendingMatches(t);
+                scheduleLaunch(t);
             }
+            saveAll();
             return;
         }
+    }
+
+    /** Launch next match after the arena has finished resetting. */
+    private void scheduleLaunch(Tournament t) {
+        long delay = (com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) + 2) * 20L;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!plugin.isStopped() && tournaments.get(t.getName().toLowerCase()) == t
+                    && t.getState() == TournamentState.IN_PROGRESS) { launchPendingMatches(t); saveAll(); }
+        }, delay);
+    }
+
+    private UUID decideDraw(TournamentMatch tm) {
+        Player p1 = Bukkit.getPlayer(tm.getPlayer1());
+        Player p2 = Bukkit.getPlayer(tm.getPlayer2());
+        if (p1 != null && p2 == null) return tm.getPlayer1();
+        if (p2 != null && p1 == null) return tm.getPlayer2();
+        if (p1 != null) {
+            if (p1.getHealth() > p2.getHealth()) return tm.getPlayer1();
+            if (p2.getHealth() > p1.getHealth()) return tm.getPlayer2();
+        }
+        return ThreadLocalRandom.current().nextBoolean() ? tm.getPlayer1() : tm.getPlayer2();
     }
 
     private void launchPendingMatches(Tournament t) {
@@ -234,22 +263,30 @@ public class TournamentManager {
                 "<gold>★ [Tournament] <white>" + t.getName() +
                 " <yellow>finished! Champion: <green>" + winnerName + " <yellow>★"));
 
-        // Pay prizes via Vault (ponytail: deposit only if online; offline prize delivery not in scope)
-        if (winner != null && t.getPrizeFirst() > 0) {
-            Player winnerOnline = Bukkit.getPlayer(winner);
-            if (winnerOnline == null) {
-                plugin.getLogger().warning("Tournament " + t.getName() + ": champion " + winnerName
-                        + " is offline, prize of " + t.getPrizeFirst() + " not paid.");
-            } else {
-                plugin.getIntegrationManager().getVault().deposit(winnerOnline, t.getPrizeFirst());
-                MessageUtil.send(winnerOnline,
-                        "<green>You won <yellow>" + plugin.getIntegrationManager().getVault()
-                                .format(t.getPrizeFirst()) + " <green>as tournament champion!");
-            }
+        pay(t, winner, t.getPrizeFirst(), "1st");
+        pay(t, t.getBracket().getFinalLoser(), t.getPrizeSecond(), "2nd");
+        List<UUID> thirds = t.getBracket().getSemifinalLosers();
+        if (!thirds.isEmpty()) {
+            double share = t.getPrizeThird() / thirds.size(); // no 3rd-place match: split among semifinal losers
+            for (UUID u : thirds) pay(t, u, share, "3rd");
         }
 
         tournaments.remove(t.getName().toLowerCase());
         saveAll();
+    }
+
+    private void pay(Tournament t, UUID uuid, double amount, String place) {
+        if (uuid == null || amount <= 0) return;
+        var vault = plugin.getIntegrationManager() != null ? plugin.getIntegrationManager().getVault() : null;
+        if (vault == null) {
+            plugin.getLogger().warning("Tournament " + t.getName() + ": no economy, " + place + " prize not paid.");
+            return;
+        }
+        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+        vault.depositOffline(op, amount);
+        Player online = op.getPlayer();
+        if (online != null) MessageUtil.send(online, "<green>You received <yellow>" + vault.format(amount)
+                + " <green>for " + place + " place in tournament " + t.getName() + "!");
     }
 
     // ── Status ────────────────────────────────────────────────────
@@ -284,37 +321,89 @@ public class TournamentManager {
         if (section == null) return;
 
         for (String key : section.getKeys(false)) {
-            String arenaName  = section.getString(key + ".arena");
-            int maxPlayers    = section.getInt(key + ".maxPlayers");
-            UUID creatorUuid  = UUID.fromString(section.getString(key + ".creator"));
-            String stateStr   = section.getString(key + ".state", "REGISTRATION");
-
-            Tournament t = new Tournament(key, arenaName, maxPlayers, creatorUuid);
-            try { t.setState(TournamentState.valueOf(stateStr)); }
-            catch (IllegalArgumentException ignored) {}
-
-            // Only restore REGISTRATION-state tournaments
-            if (t.getState() != TournamentState.REGISTRATION) continue;
-
-            for (String uuidStr : section.getStringList(key + ".participants")) {
-                try { t.getParticipants().add(UUID.fromString(uuidStr)); }
+            try {
+                String arenaName  = section.getString(key + ".arena");
+                int maxPlayers    = section.getInt(key + ".maxPlayers");
+                UUID creatorUuid  = UUID.fromString(section.getString(key + ".creator"));
+                Tournament t = new Tournament(section.getString(key + ".name", key), arenaName, maxPlayers, creatorUuid);
+                try { t.setState(TournamentState.valueOf(section.getString(key + ".state", "REGISTRATION"))); }
                 catch (IllegalArgumentException ignored) {}
+                if (t.getState() == TournamentState.FINISHED || t.getState() == TournamentState.CANCELLED) continue;
+
+                for (String uuidStr : section.getStringList(key + ".participants")) {
+                    try { t.getParticipants().add(UUID.fromString(uuidStr)); }
+                    catch (IllegalArgumentException ignored) {}
+                }
+                t.setPrizeFirst(section.getDouble(key + ".prizes.first"));
+                t.setPrizeSecond(section.getDouble(key + ".prizes.second"));
+                t.setPrizeThird(section.getDouble(key + ".prizes.third"));
+
+                if (t.getState() == TournamentState.IN_PROGRESS) {
+                    TournamentBracket br = loadBracket(section.getConfigurationSection(key + ".bracket"), arenaName);
+                    if (br == null) { // unusable bracket -> back to registration
+                        t.setState(TournamentState.REGISTRATION);
+                    } else {
+                        t.setBracket(br);
+                    }
+                }
+                tournaments.put(t.getName().toLowerCase(), t);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Skipping invalid tournament '" + key + "': " + e.getMessage());
             }
-
-            t.setPrizeFirst(section.getDouble(key + ".prizes.first"));
-            t.setPrizeSecond(section.getDouble(key + ".prizes.second"));
-            t.setPrizeThird(section.getDouble(key + ".prizes.third"));
-
-            tournaments.put(key.toLowerCase(), t);
         }
         plugin.getLogger().info("Loaded " + tournaments.size() + " tournament(s).");
+
+        // Resume in-progress brackets once the server finished starting
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Tournament t : tournaments.values()) {
+                if (t.getState() == TournamentState.IN_PROGRESS) {
+                    try { resume(t); } catch (Exception e) {
+                        plugin.getLogger().warning("Failed to resume tournament " + t.getName() + ": " + e.getMessage());
+                    }
+                }
+            }
+        });
+    }
+
+    private void resume(Tournament t) {
+        TournamentBracket br = t.getBracket();
+        if (br.isRoundComplete()) {
+            if (br.isFinished()) { finishTournament(t); return; }
+            br.advanceRound();
+        }
+        launchPendingMatches(t);
+    }
+
+    private TournamentBracket loadBracket(org.bukkit.configuration.ConfigurationSection sec, String arenaName) {
+        if (sec == null) return null;
+        List<List<TournamentMatch>> rounds = new ArrayList<>();
+        int roundNum = 1;
+        for (Object ro : sec.getList("rounds", List.of())) {
+            List<TournamentMatch> round = new ArrayList<>();
+            if (!(ro instanceof List<?> list)) return null;
+            for (Object mo : list) {
+                if (!(mo instanceof Map<?, ?> m)) return null;
+                UUID p1 = UUID.fromString(String.valueOf(m.get("p1")));
+                Object p2o = m.get("p2");
+                UUID p2 = p2o == null ? null : UUID.fromString(String.valueOf(p2o));
+                TournamentMatch tm = new TournamentMatch(p1, p2, arenaName, roundNum);
+                Object w = m.get("winner");
+                if (w != null) tm.restoreWinner(UUID.fromString(String.valueOf(w)));
+                round.add(tm);
+            }
+            rounds.add(round);
+            roundNum++;
+        }
+        if (rounds.isEmpty()) return null;
+        return new TournamentBracket(arenaName, rounds, sec.getInt("currentRound", 0));
     }
 
     public void saveAll() {
         YamlConfiguration cfg = new YamlConfiguration();
         for (Tournament t : tournaments.values()) {
-            if (t.getState() != TournamentState.REGISTRATION) continue; // only persist open ones
+            if (t.getState() == TournamentState.FINISHED || t.getState() == TournamentState.CANCELLED) continue;
             String key = "tournaments." + t.getName().replace(".", "_");
+            cfg.set(key + ".name", t.getName());
             cfg.set(key + ".arena", t.getArenaName());
             cfg.set(key + ".maxPlayers", t.getMaxPlayers());
             cfg.set(key + ".creator", t.getCreatorUuid().toString());
@@ -324,9 +413,31 @@ public class TournamentManager {
             cfg.set(key + ".prizes.first",  t.getPrizeFirst());
             cfg.set(key + ".prizes.second", t.getPrizeSecond());
             cfg.set(key + ".prizes.third",  t.getPrizeThird());
+            if (t.getState() == TournamentState.IN_PROGRESS && t.getBracket() != null) {
+                List<List<Map<String, Object>>> rounds = new ArrayList<>();
+                for (List<TournamentMatch> round : t.getBracket().getAllRounds()) {
+                    List<Map<String, Object>> rl = new ArrayList<>();
+                    for (TournamentMatch m : round) {
+                        Map<String, Object> mm = new LinkedHashMap<>();
+                        mm.put("p1", m.getPlayer1().toString());
+                        if (m.getPlayer2() != null) mm.put("p2", m.getPlayer2().toString());
+                        if (m.getWinner() != null) mm.put("winner", m.getWinner().toString());
+                        rl.add(mm);
+                    }
+                    rounds.add(rl);
+                }
+                cfg.set(key + ".bracket.rounds", rounds);
+                cfg.set(key + ".bracket.currentRound", t.getBracket().getCurrentRoundIndex());
+            }
         }
         try { cfg.save(dataFile); }
         catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Failed to save tournaments.yml", e); }
+    }
+
+    /** Persist state and drop in-memory tournaments (used by /oa stop and onDisable). */
+    public void stop() {
+        saveAll();
+        tournaments.clear();
     }
 
     // ── Lookup ────────────────────────────────────────────────────

@@ -58,6 +58,16 @@ public class BlockRestoreModule {
     // Counter used to throttle how many blocks in a batch spawn a descender.
     private int descenderTick = 0;
 
+    // Active regens per arena (lowercase name) -> finalizer that cancels and completes instantly.
+    private final Map<String, Runnable> activeRegens = new java.util.concurrent.ConcurrentHashMap<>();
+    // Callbacks of restore() calls made while the same arena was already restoring.
+    private final Map<String, List<Runnable>> queuedCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Set<BukkitTask> snapshotTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Set<FallingBlock> descenderEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private volatile boolean shuttingDown = false;
+    // Columns*height scanned per tick while snapshotting
+    private static final int SNAPSHOT_BLOCKS_PER_TICK = 30000;
+
     public BlockRestoreModule(OmniArena plugin) {
         this.plugin = plugin;
         this.snapshotsDir = new File(plugin.getDataFolder(), "snapshots");
@@ -77,29 +87,91 @@ public class BlockRestoreModule {
             if (onComplete != null) onComplete.run();
             return;
         }
-        long volume = (long) (region.getMaxX() - region.getMinX() + 1)
-                * (region.getMaxY() - region.getMinY() + 1) * (region.getMaxZ() - region.getMinZ() + 1);
-        List<BlockEntry> entries = new ArrayList<>((int) Math.min(volume, 5_000_000L));
-        // Share identical block-data strings (one per distinct state instead of one per block)
-        Map<BlockData, String> strCache = new HashMap<>();
-        for (int x = region.getMinX(); x <= region.getMaxX(); x++)
-            for (int y = region.getMinY(); y <= region.getMaxY(); y++)
-                for (int z = region.getMinZ(); z <= region.getMaxZ(); z++) {
-                    Block b = world.getBlockAt(x, y, z);
-                    BlockData bd = b.getBlockData();
-                    entries.add(new BlockEntry(x, y, z, b.getType(), strCache.computeIfAbsent(bd, BlockData::getAsString)));
-                }
-        // Serialise + write the file off the main thread
+        shuttingDown = false;
+        final int minX = region.getMinX(), maxX = region.getMaxX();
+        final int minY = region.getMinY(), maxY = region.getMaxY();
+        final int minZ = region.getMinZ(), maxZ = region.getMaxZ();
+        final int height = maxY - minY + 1;
+        final int columnsPerTick = Math.max(1, SNAPSHOT_BLOCKS_PER_TICK / Math.max(1, height));
         final String arenaName = arena.getName();
         final String worldName = region.getWorldName();
-        AsyncUtil.runAsyncThenSync(() -> {
-            saveSnapshot(arenaName, worldName, entries);
-            return entries.size();
-        }, count -> {
-            plugin.getLogger().info("Snapshot saved for arena " + arenaName + " (" + count + " blocks).");
-            if (onComplete != null) onComplete.run();
-        });
+
+        // Palette + vertical run-length encoding: identical consecutive blocks in a column share one run.
+        final Map<String, Integer> paletteIndex = new HashMap<>();
+        final List<String> palette = new ArrayList<>();
+        final Map<BlockData, Integer> bdCache = new HashMap<>();
+        final List<int[]> runs = new ArrayList<>(); // x, z, y0, len, paletteIdx
+        final int[] cursor = {minX, minZ};
+        final BukkitTask[] holder = new BukkitTask[1];
+
+        Runnable step = () -> {
+            int cols = 0;
+            while (cols < columnsPerTick && cursor[0] <= maxX) {
+                int x = cursor[0], z = cursor[1];
+                int runStart = minY, runIdx = -1;
+                for (int y = minY; y <= maxY; y++) {
+                    Block b = world.getBlockAt(x, y, z);
+                    BlockData bd = b.getBlockData();
+                    Integer idx = bdCache.get(bd);
+                    if (idx == null) {
+                        String key = b.getType().name() + "|" + bd.getAsString();
+                        idx = paletteIndex.get(key);
+                        if (idx == null) { idx = palette.size(); palette.add(key); paletteIndex.put(key, idx); }
+                        bdCache.put(bd, idx);
+                    }
+                    if (idx != runIdx) {
+                        if (runIdx >= 0) runs.add(new int[]{x, z, runStart, y - runStart, runIdx});
+                        runStart = y; runIdx = idx;
+                    }
+                }
+                if (runIdx >= 0) runs.add(new int[]{x, z, runStart, maxY - runStart + 1, runIdx});
+                cols++;
+                if (++cursor[1] > maxZ) { cursor[1] = minZ; cursor[0]++; }
+            }
+            if (cursor[0] <= maxX) return;
+            if (holder[0] != null) { holder[0].cancel(); snapshotTasks.remove(holder[0]); }
+            cursor[0] = Integer.MAX_VALUE;
+            // Serialise + write the file off the main thread
+            AsyncUtil.runAsyncThenSync(() -> {
+                saveSnapshot(arenaName, worldName, palette, runs);
+                return runs.size();
+            }, count -> {
+                plugin.getLogger().info("Snapshot saved for arena " + arenaName + " (" + count + " runs).");
+                if (onComplete != null) onComplete.run();
+            });
+        };
+
+        BukkitTask task = AsyncUtil.runSyncRepeating(step, 0L, 1L);
+        if (task == null) { // plugin not enabled: nothing to slice against
+            plugin.getLogger().warning("Cannot snapshot arena " + arenaName + ": plugin disabled.");
+            return;
+        }
+        holder[0] = task;
+        snapshotTasks.add(task);
     }
+
+    /**
+     * Cancels all running regen/snapshot tasks and finalizes them: remaining blocks are
+     * placed instantly and preview blocks are removed so no previews are left in the world.
+     * Call on plugin disable and /oa stop.
+     */
+    public void cancelAll() {
+        shuttingDown = true;
+        for (BukkitTask t : new ArrayList<>(snapshotTasks)) { try { t.cancel(); } catch (Exception ignored) {} }
+        snapshotTasks.clear();
+        for (Map.Entry<String, Runnable> en : new ArrayList<>(activeRegens.entrySet())) {
+            try { en.getValue().run(); }
+            catch (Exception ex) { plugin.getLogger().warning("Regen finalize failed for " + en.getKey() + ": " + ex.getMessage()); }
+        }
+        activeRegens.clear();
+        queuedCallbacks.clear();
+        for (FallingBlock fb : new ArrayList<>(descenderEntities)) { try { fb.remove(); } catch (Exception ignored) {} }
+        descenderEntities.clear();
+        liveDescenders.set(0);
+    }
+
+    /** Alias for {@link #cancelAll()}. */
+    public void shutdown() { cancelAll(); }
 
     public void restore(Arena arena, Runnable onComplete, Runnable onFail) {
         restore(arena, null, onComplete, onFail);
@@ -109,6 +181,26 @@ public class BlockRestoreModule {
                         Runnable onComplete, Runnable onFail) {
         File file = snapshotFile(arena.getName());
         if (!file.exists()) { if (onFail != null) onFail.run(); return; }
+        final String key = arena.getName().toLowerCase();
+        shuttingDown = false;
+        // Guard: a second restore for the same arena just runs its completion when the first finishes
+        if (activeRegens.putIfAbsent(key, () -> {}) != null) {
+            if (onComplete != null) queuedCallbacks.computeIfAbsent(key, k -> new ArrayList<>()).add(onComplete);
+            return;
+        }
+        final Runnable origComplete = onComplete, origFail = onFail;
+        onComplete = () -> {
+            activeRegens.remove(key);
+            if (origComplete != null) origComplete.run();
+            List<Runnable> q = queuedCallbacks.remove(key);
+            if (q != null) q.forEach(Runnable::run);
+        };
+        onFail = () -> {
+            activeRegens.remove(key);
+            queuedCallbacks.remove(key);
+            if (origFail != null) origFail.run();
+        };
+        final Runnable fComplete = onComplete, fFail = onFail;
         AsyncUtil.runAsyncThenSync(
             () -> {
                 FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
@@ -119,27 +211,28 @@ public class BlockRestoreModule {
             },
             result -> {
                 World world = result.worldName() != null ? Bukkit.getWorld(result.worldName()) : null;
+                if (shuttingDown) { fFail.run(); return; }
                 if (world == null || result.entries().isEmpty()) {
                     plugin.getLogger().warning("Cannot restore arena " + arena.getName());
-                    if (onFail != null) onFail.run();
+                    fFail.run();
                     return;
                 }
                 RegenAnimationType type = result.type();
                 List<BlockEntry> ordered = result.entries();
-                startPlacing(world, ordered.iterator(), ordered.size(), type, onProgress, onComplete);
+                startPlacing(key, world, ordered.iterator(), ordered.size(), type, onProgress, fComplete);
             }
         );
     }
 
     // ── Placement engine ───────────────────────────────────────────────────────
 
-    private void startPlacing(World world, Iterator<BlockEntry> iterator, int total,
+    private void startPlacing(String key, World world, Iterator<BlockEntry> iterator, int total,
                               RegenAnimationType type,
                               BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
 
         // Non-animated types: fast direct placement, no preview
         if (type == RegenAnimationType.INSTANT_RESTORE) {
-            fastPlace(world, iterator, total, onProgress, onComplete);
+            fastPlace(key, world, iterator, total, onProgress, onComplete);
             return;
         }
 
@@ -159,6 +252,19 @@ public class BlockRestoreModule {
         // Queue: each AnimBatch holds the preview block locations + the real entries
         Deque<AnimBatch> queue = new ArrayDeque<>();
         Map<String, BlockData> dataCache = new HashMap<>();
+
+        activeRegens.put(key, () -> {
+            if (taskHolder[0] != null) taskHolder[0].cancel();
+            for (AnimBatch ab : queue) {
+                for (PreviewBlock pb : ab.preview()) {
+                    Block b = world.getBlockAt(pb.loc());
+                    if (b.getType() == pb.mat()) b.setType(Material.AIR, false);
+                }
+                for (BlockEntry e : ab.entries()) placeEntry(world, e, dataCache);
+            }
+            queue.clear();
+            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
+        });
 
         taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
 
@@ -215,10 +321,15 @@ public class BlockRestoreModule {
             }
 
         }, 1L, 1L);
+        if (taskHolder[0] == null) { // plugin disabled: finish synchronously so nothing is left half-restored
+            activeRegens.remove(key);
+            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
+            if (onComplete != null) onComplete.run();
+        }
     }
 
     /** Fast path for INSTANT: no preview, but still spread across ticks so big arenas never freeze the server. */
-    private void fastPlace(World world, Iterator<BlockEntry> iterator, int total,
+    private void fastPlace(String key, World world, Iterator<BlockEntry> iterator, int total,
                            BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
         int batchSize = Math.max(1, ConfigManager.getInstance().getConfig()
                 .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
@@ -226,6 +337,10 @@ public class BlockRestoreModule {
         int[] restored = {0};
         Map<String, BlockData> dataCache = new HashMap<>();
 
+        activeRegens.put(key, () -> {
+            if (taskHolder[0] != null) taskHolder[0].cancel();
+            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
+        });
         taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
             for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
                 placeEntry(world, iterator.next(), dataCache);
@@ -237,7 +352,11 @@ public class BlockRestoreModule {
                 if (onComplete != null) onComplete.run();
             }
         }, 1L, 1L);
-        if (taskHolder[0] == null && onComplete != null) onComplete.run();
+        if (taskHolder[0] == null) {
+            activeRegens.remove(key);
+            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
+            if (onComplete != null) onComplete.run();
+        }
     }
 
     /** Places one snapshot block with a single block-data application (parsed data is cached). */
@@ -457,6 +576,7 @@ public class BlockRestoreModule {
         fb.setHurtEntities(false);
         fb.setVelocity(new Vector((RNG.nextDouble() - 0.5) * 0.04, downVel, (RNG.nextDouble() - 0.5) * 0.04));
         liveDescenders.incrementAndGet();
+        descenderEntities.add(fb);
 
         new BukkitRunnable() {
             int ticks = 0;
@@ -478,6 +598,7 @@ public class BlockRestoreModule {
                 if (!fb.isDead()) fb.remove();
                 playImpact(world, crater, type);
                 liveDescenders.decrementAndGet();
+                descenderEntities.remove(fb);
                 cancel();
             }
         }.runTaskTimer(plugin, 1L, 1L);
@@ -686,19 +807,45 @@ public class BlockRestoreModule {
         return new File(snapshotsDir, arenaName.toLowerCase() + ".yml");
     }
 
-    private void saveSnapshot(String arenaName, String worldName, List<BlockEntry> entries) {
+    private void saveSnapshot(String arenaName, String worldName, List<String> palette, List<int[]> runs) {
         FileConfiguration cfg = new YamlConfiguration();
         cfg.set("world", worldName);
-        cfg.set("count", entries.size());
-        List<String> serialized = new ArrayList<>(entries.size());
-        for (BlockEntry e : entries)
-            serialized.add(e.x + "," + e.y + "," + e.z + "|" + e.material.name() + "|" + e.blockData);
-        cfg.set("blocks", serialized);
+        cfg.set("format", 2);
+        cfg.set("palette", palette);
+        List<String> serialized = new ArrayList<>(runs.size());
+        for (int[] r : runs) // x,z,y0,len,paletteIdx
+            serialized.add(r[0] + "," + r[1] + "," + r[2] + "," + r[3] + "," + r[4]);
+        cfg.set("runs", serialized);
         YamlUtil.save(cfg, snapshotFile(arenaName), plugin.getLogger());
     }
 
     private List<BlockEntry> loadEntries(FileConfiguration cfg) {
         List<BlockEntry> entries = new ArrayList<>();
+        // Format 2: palette + vertical runs
+        if (cfg.isList("palette") && cfg.isList("runs")) {
+            List<String> palette = cfg.getStringList("palette");
+            Material[] mats = new Material[palette.size()];
+            String[] datas = new String[palette.size()];
+            for (int i = 0; i < mats.length; i++) {
+                String[] pp = palette.get(i).split("\\|", 2);
+                try { mats[i] = Material.valueOf(pp[0]); } catch (Exception ex) { mats[i] = Material.AIR; }
+                datas[i] = pp.length > 1 ? pp[1] : null;
+            }
+            for (String line : cfg.getStringList("runs")) {
+                String[] p = line.split(",");
+                if (p.length != 5) continue;
+                try {
+                    int x = Integer.parseInt(p[0]), z = Integer.parseInt(p[1]);
+                    int y0 = Integer.parseInt(p[2]), len = Integer.parseInt(p[3]);
+                    int idx = Integer.parseInt(p[4]);
+                    if (idx < 0 || idx >= mats.length) continue;
+                    for (int y = y0; y < y0 + len; y++)
+                        entries.add(new BlockEntry(x, y, z, mats[idx], datas[idx]));
+                } catch (Exception ignored) {}
+            }
+            return entries;
+        }
+        // Legacy format 1: one line per block "x,y,z|MATERIAL|blockdata"
         for (String line : cfg.getStringList("blocks")) {
             String[] parts = line.split("\\|", 3);
             if (parts.length < 2) continue;

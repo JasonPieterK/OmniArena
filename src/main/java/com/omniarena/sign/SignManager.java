@@ -123,18 +123,51 @@ public class SignManager {
         return block.getState() instanceof Sign;
     }
 
+    // Glowstone blocks this plugin placed behind signs (never remove foreign glowstone)
+    private final java.util.Set<org.bukkit.Location> placedGlowstone = new java.util.HashSet<>();
+    private java.io.File glowFile() { return new java.io.File(plugin.getDataFolder(), "sign-glowstone.yml"); }
+
+    private void saveGlow() {
+        try {
+            org.bukkit.configuration.file.YamlConfiguration cfg = new org.bukkit.configuration.file.YamlConfiguration();
+            java.util.List<String> out = new java.util.ArrayList<>();
+            for (org.bukkit.Location l : placedGlowstone)
+                if (l.getWorld() != null) out.add(l.getWorld().getName() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ());
+            cfg.set("locations", out);
+            cfg.save(glowFile());
+        } catch (Exception e) { plugin.getLogger().warning("Failed to save sign glowstone: " + e.getMessage()); }
+    }
+
+    private void loadGlow() {
+        if (!glowFile().exists()) return;
+        for (String s : org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(glowFile()).getStringList("locations")) {
+            String[] p = s.split(",");
+            if (p.length != 4) continue;
+            org.bukkit.World w = org.bukkit.Bukkit.getWorld(p[0]);
+            if (w == null) continue;
+            try { placedGlowstone.add(new org.bukkit.Location(w, Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]))); }
+            catch (NumberFormatException ignored) {}
+        }
+    }
+
     private void placeGlowstone(Block block) {
         if (!plugin.getConfig().getBoolean("signs.glow-effect", true)) return;
         Block behind = block.getRelative(getOppositeDirection(block));
         if (behind.getType() == Material.AIR) {
             behind.setType(Material.GLOWSTONE);
+            if (placedGlowstone.isEmpty()) loadGlow();
+            placedGlowstone.add(behind.getLocation());
+            saveGlow();
         }
     }
 
     private void removeGlowstone(Block block) {
         Block behind = block.getRelative(getOppositeDirection(block));
-        if (behind.getType() == Material.GLOWSTONE) {
-            behind.setType(Material.AIR);
+        if (placedGlowstone.isEmpty()) loadGlow();
+        // Only remove glowstone the plugin placed itself
+        if (placedGlowstone.remove(behind.getLocation())) {
+            if (behind.getType() == Material.GLOWSTONE) behind.setType(Material.AIR);
+            saveGlow();
         }
     }
 

@@ -77,6 +77,11 @@ public class KitManager {
         }
     }
 
+    /** Drops the cached kits of a player (call on quit); they reload from disk on demand. */
+    public void evict(UUID playerId) {
+        if (playerId != null) playerKits.remove(playerId);
+    }
+
     public List<PlayerKit> getPlayerKits(UUID playerId) {
         return playerKitsDir.exists()
                 ? loadPlayerKitsFromDisk(playerId)

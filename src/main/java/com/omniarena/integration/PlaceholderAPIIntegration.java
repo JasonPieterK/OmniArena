@@ -31,7 +31,7 @@ public class PlaceholderAPIIntegration extends PlaceholderExpansion {
     public @Nullable String onRequest(OfflinePlayer player, @NotNull String params) {
         if (player == null) return "";
 
-        PlayerStats stats = StatsManager.getInstance().getStats(player.getUniqueId());
+        PlayerStats stats = StatsManager.getInstance().peekStats(player.getUniqueId());
         String key = params.toLowerCase();
 
         // ── Lifetime stats (work anywhere — good for TAB tablist/nametags) ──

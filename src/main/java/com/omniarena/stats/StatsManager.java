@@ -88,6 +88,23 @@ public class StatsManager {
         }
     }
 
+    /**
+     * Read-only lookup: returns the cached stats or a transient zeroed instance.
+     * Never creates or persists an entry for unknown UUIDs.
+     */
+    public PlayerStats peekStats(UUID uuid) {
+        PlayerStats cached = statsCache.get(uuid);
+        if (cached != null) return cached;
+        OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+        return new PlayerStats(uuid, op.getName() != null ? op.getName() : "Unknown");
+    }
+
+    /** Read-only lookup that reports whether any stats exist for the player. */
+    public java.util.Optional<PlayerStats> findStats(UUID uuid) {
+        return java.util.Optional.ofNullable(statsCache.get(uuid));
+    }
+
+    /** Get-or-create: for write paths (match results, join). Use {@link #peekStats} for reads. */
     public PlayerStats getStats(UUID uuid) {
         return statsCache.computeIfAbsent(uuid, id -> {
             OfflinePlayer op = Bukkit.getOfflinePlayer(id);

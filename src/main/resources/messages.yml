@@ -193,6 +193,17 @@ forcewin-team: "<gold>Victory awarded to team <yellow>{team}</yellow> in <yellow
 reward-kill: "<green>+${amount} for kill."
 reward-win: "<green>+${amount} for winning!"
 
+# Tournament
+tournament-usage: "<yellow>Usage: <white>{usage}"
+tournament-no-permission: "<red>You don't have permission to manage this tournament."
+tournament-not-found: "<red>Tournament <yellow>{name}</yellow> not found."
+tournament-none: "<gray>No active tournaments."
+tournament-list-header: "<gold>=== Active Tournaments ==="
+tournament-list-entry: "<yellow>{name} <gray>[{state}] {players}/{max} on {arena}"
+tournament-prize-set: "<green>Set {place} prize of <yellow>{amount}</yellow> for <yellow>{name}</yellow>."
+tournament-prize-invalid: "<red>Prize must be a non-negative number and place one of 1st, 2nd, 3rd."
+tournament-players-only: "<red>This tournament command is for players only."
+
 # Goals
 goal-set: "<green>Win condition set to <yellow>{goal}</yellow> for <yellow>{arena}</yellow>."
 goal-value-set: "<green>Goal value set to <yellow>{value}</yellow>."

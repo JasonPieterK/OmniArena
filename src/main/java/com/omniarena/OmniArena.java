@@ -43,6 +43,7 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.queue.QueueManager queueManager;
     private com.omniarena.party.PartyManager partyManager;
     private com.omniarena.betting.BettingManager bettingManager;
+    private com.omniarena.tournament.TournamentManager tournamentManager;
     private volatile boolean stopped = false;
     private org.bukkit.scheduler.BukkitTask signUpdateTask;
 
@@ -68,6 +69,7 @@ public final class OmniArena extends JavaPlugin {
     public com.omniarena.queue.QueueManager getQueueManager() { return queueManager; }
     public com.omniarena.party.PartyManager getPartyManager() { return partyManager; }
     public com.omniarena.betting.BettingManager getBettingManager() { return bettingManager; }
+    public com.omniarena.tournament.TournamentManager getTournamentManager() { return tournamentManager; }
 
     @Override
     public void onEnable() {
@@ -94,6 +96,7 @@ public final class OmniArena extends JavaPlugin {
         queueManager        = new com.omniarena.queue.QueueManager(this);
         partyManager        = new com.omniarena.party.PartyManager(this);
         bettingManager      = new com.omniarena.betting.BettingManager(this);
+        tournamentManager   = new com.omniarena.tournament.TournamentManager(this);
 
         // ── Load data ─────────────────────────────────────────────
         statsManager.loadAll();
@@ -102,6 +105,7 @@ public final class OmniArena extends JavaPlugin {
         eloManager.loadAll();
         queueManager.start();
         partyManager.start();
+        tournamentManager.start();
 
         // ── Integrations ─────────────────────────────────────────
         integrationManager = new IntegrationManager(this);
@@ -276,11 +280,15 @@ public final class OmniArena extends JavaPlugin {
             getLogger().severe("Error ending matches on disable: " + e.getMessage());
         }
 
+        // Finalize running regens/snapshots so no preview blocks are left in the world
+        try { if (blockRestoreModule != null) blockRestoreModule.cancelAll(); } catch (Exception e) { getLogger().warning("Regen shutdown failed: " + e.getMessage()); }
+
         // Stop periodic systems
         try { if (queueManager != null) queueManager.stop(); } catch (Exception e) { getLogger().warning("Queue stop failed: " + e.getMessage()); }
         try { if (partyManager != null) partyManager.stop(); } catch (Exception e) { getLogger().warning("Party stop failed: " + e.getMessage()); }
 
         // Save all data (each guarded so one failure does not skip the rest)
+        try { if (tournamentManager != null) tournamentManager.stop(); } catch (Exception e) { getLogger().severe("Tournament save failed: " + e.getMessage()); }
         try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed: " + e.getMessage()); }
         try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed: " + e.getMessage()); }
         try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed: " + e.getMessage()); }

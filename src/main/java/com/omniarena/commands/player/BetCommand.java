@@ -69,6 +69,13 @@ public class BetCommand extends SubCommand {
             MessageUtil.send(player, "<red>" + target.getName() + " is not in an arena.");
             return;
         }
+        // Target must be a participant (not spectator) of the arena being bet on
+        boolean inThatArena = plugin.getMatchManager().getArenaName(target)
+                .map(n -> n.equalsIgnoreCase(arena.getName())).orElse(false);
+        if (!inThatArena || plugin.getMatchManager().isSpectating(target)) {
+            MessageUtil.send(player, "<red>" + target.getName() + " is not playing in arena <yellow>" + arena.getName() + "</yellow>.");
+            return;
+        }
 
         double amount;
         try {
@@ -79,7 +86,7 @@ public class BetCommand extends SubCommand {
             return;
         }
 
-        bm.placeBet(player, arenaName, target.getUniqueId(), amount);
+        bm.placeBet(player, arena.getName(), target.getUniqueId(), amount);
     }
 
     private void handleInfo(Player player, BettingManager bm, String[] args) {

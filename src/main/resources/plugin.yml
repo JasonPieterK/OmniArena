@@ -147,6 +147,14 @@ permissions:
     description: Spectate arenas
     default: true
 
+  omniarena.tournament.create:
+    description: Create, join, leave and start own tournaments
+    default: true
+
+  omniarena.tournament.admin:
+    description: Manage any tournament (start, delete, setprize)
+    default: op
+
   omniarena.pvp:
     description: Use player PvP/combat commands (/oa pvp, pvpstatus, newbie...)
     default: true

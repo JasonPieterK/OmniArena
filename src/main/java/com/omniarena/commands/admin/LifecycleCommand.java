@@ -54,6 +54,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.getEloManager().loadAll();
             plugin.getQueueManager().start();
             plugin.getPartyManager().start();
+            plugin.getTournamentManager().start();
 
             // Restart web dashboard
             plugin.getWebDashboardServer().start();
@@ -81,6 +82,9 @@ public class LifecycleCommand extends SubCommand {
         try {
             MatchManager mm = MatchManager.getInstance();
 
+            // Finalize running regens (places remaining blocks, removes previews) before tasks are cancelled
+            if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().cancelAll();
+
             // Cancel all plugin tasks (regen, countdowns, updates, etc)
             Bukkit.getScheduler().cancelTasks(plugin);
 
@@ -100,6 +104,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.getStatsManager().saveAll();
             plugin.getArenaManager().saveAll();
             plugin.getBettingManager().refundAll();
+            plugin.getTournamentManager().stop();
 
             // Stop web and visuals
             plugin.getWebDashboardServer().stop();
