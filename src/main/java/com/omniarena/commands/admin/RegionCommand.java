@@ -92,8 +92,11 @@ public class RegionCommand extends SubCommand {
                 am.clearSelection(uid);
                 MessageUtil.send(player, ConfigManager.getInstance().getMessage("region-set")
                         .replace("{arena}", arena.getName()));
+                final String an = arena.getName();
                 plugin.getBlockRestoreModule().createSnapshot(arena, () ->
-                        MessageUtil.send(player, "<gray>Region snapshot saved for regeneration."));
+                        MessageUtil.send(player, "<gray>Region snapshot saved for regeneration."),
+                        reason -> MessageUtil.send(player, "<red>Region saved, but the regen snapshot of <yellow>" + an
+                                + "</yellow> failed: " + reason + " <gray>Fix the cause, then run <white>/oa regen snapshot " + an + "</white>."));
             }
             case "info" -> {
                 if (!arena.getRegion().isDefined()) {

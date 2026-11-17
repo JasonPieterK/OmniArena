@@ -30,6 +30,15 @@ public class PartyManager {
 
     public static PartyManager getInstance() { return instance; }
 
+    /** Configured maximum party size (party.max-size, default 10, minimum 2). */
+    public static int maxSize() {
+        try {
+            return Math.max(2, com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("party.max-size", 10));
+        } catch (Exception e) {
+            return 10;
+        }
+    }
+
     public void start() {
         // Clean up expired invites every 30 seconds
         stop();
@@ -116,7 +125,7 @@ public class PartyManager {
         }
 
         if (party.isFull()) {
-            MessageUtil.send(leader, "<red>Your party is full <gray>(max " + Party.MAX_MEMBERS + " players).");
+            MessageUtil.send(leader, "<red>Your party is full <gray>(max " + maxSize() + " players).");
             return false;
         }
 
@@ -243,7 +252,7 @@ public class PartyManager {
         }
 
         if (party.isLeader(player.getUniqueId())) {
-            return disbandParty(player);
+            return leaderLeaves(party, player);
         }
 
         dequeueParty(party, player.getName() + " left the party");
@@ -261,6 +270,48 @@ public class PartyManager {
             }
         }
 
+        return true;
+    }
+
+    /**
+     * The leader leaves: leadership passes to the longest-standing online member
+     * (members are kept in join order). The party only disbands when nobody else is left online.
+     */
+    private boolean leaderLeaves(Party party, Player leaver) {
+        UUID oldId = leaver.getUniqueId();
+        dequeueParty(party, leaver.getName() + " (the party leader) left the party");
+
+        UUID nextId = null;
+        String nextName = null;
+        for (UUID m : party.getMembers()) {
+            if (m.equals(oldId)) continue;
+            Player p = Bukkit.getPlayer(m);
+            if (p != null && p.isOnline()) { nextId = m; nextName = p.getName(); break; }
+        }
+
+        party.removeMember(oldId);
+        playerToParty.remove(oldId);
+        parties.remove(oldId);
+
+        if (nextId == null) {
+            // Nobody online to inherit the party: disband it
+            for (UUID m : party.getMembers()) playerToParty.remove(m);
+            pendingInvites.values().removeIf(inv -> inv.getLeaderUuid().equals(oldId));
+            MessageUtil.send(leaver, "<green>You left the party. <gray>It was disbanded because no other member is online.");
+            return true;
+        }
+
+        party.setLeader(nextId, nextName);
+        parties.put(nextId, party);
+        for (UUID m : party.getMembers()) playerToParty.put(m, nextId);
+
+        MessageUtil.send(leaver, "<green>You left the party. <yellow>" + nextName + "</yellow> is now the leader.");
+        for (UUID m : party.getMembers()) {
+            Player p = Bukkit.getPlayer(m);
+            if (p == null || !p.isOnline()) continue;
+            if (m.equals(nextId)) MessageUtil.send(p, "<yellow>" + leaver.getName() + " <gray>left the party. <green>You are now the party leader.");
+            else MessageUtil.send(p, "<yellow>" + leaver.getName() + " <gray>left the party. <yellow>" + nextName + " <gray>is now the leader.");
+        }
         return true;
     }
 
@@ -415,7 +466,6 @@ public class PartyManager {
         private String leaderName;
         private final Set<UUID> members = new LinkedHashSet<>();
         private String kitName;
-        static final int MAX_MEMBERS = 10;
 
         public Party(UUID leaderUuid, String leaderName) {
             this.leaderUuid = leaderUuid;
@@ -431,7 +481,7 @@ public class PartyManager {
 
         public boolean isLeader(UUID uuid) { return leaderUuid.equals(uuid); }
         public boolean isMember(UUID uuid) { return members.contains(uuid); }
-        public boolean isFull() { return members.size() >= MAX_MEMBERS; }
+        public boolean isFull() { return members.size() >= maxSize(); }
 
         public void setLeader(UUID uuid, String name) {
             this.leaderUuid = uuid;

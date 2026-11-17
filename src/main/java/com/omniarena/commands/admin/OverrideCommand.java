@@ -192,7 +192,10 @@ public class OverrideCommand extends SubCommand {
         int count = 0;
         for (Arena arena : arenas) {
             if (!arena.getRegion().isDefined()) continue;
-            restore.createSnapshot(arena, null);
+            final String an = arena.getName();
+            restore.createSnapshot(arena, null, reason -> MessageUtil.send(sender,
+                    "<red>Snapshot of <yellow>" + an + "</yellow> failed: " + reason
+                    + " <gray>Fix the cause, then retry with <white>/oa regen snapshot " + an + "</white>."));
             count++;
         }
         MessageUtil.send(sender, "<green>Snapshot requested for <yellow>" + count + "</yellow> arena(s) with a region.");

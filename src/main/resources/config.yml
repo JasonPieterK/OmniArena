@@ -128,6 +128,9 @@ kits:
       - STRUCTURE_BLOCK
   sharing-enabled: true
 
+party:
+  max-size: 10  # maximum players in one party (minimum 2)
+
 signs:
   glow-effect: true  # place glowstone behind arena signs
   update-interval: 20  # ticks between sign refreshes
