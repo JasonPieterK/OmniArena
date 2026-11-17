@@ -58,6 +58,7 @@ public class LifecycleCommand extends SubCommand {
             // Restart web dashboard
             plugin.getWebDashboardServer().start();
             plugin.startSignUpdateTask();
+            plugin.getCombatManager().start();
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "

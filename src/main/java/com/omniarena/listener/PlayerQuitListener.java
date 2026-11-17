@@ -18,6 +18,11 @@ public class PlayerQuitListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        if (plugin.getVisual() != null) {
+            plugin.getVisual().getBossBarManager().removePlayer(player);
+            plugin.getVisual().getScoreboardManager().removeBoard(player);
+        }
+        if (plugin.isStopped()) return;
         MatchManager mm = MatchManager.getInstance();
 
         if (mm.isSpectating(player)) {

@@ -101,7 +101,9 @@ public class AdminKitCommand extends SubCommand {
             case "cooldown" -> {
                 if (args.length < 3) { MessageUtil.send(sender, "<red>Usage: /oa kit cooldown <name> <seconds>"); return; }
                 try {
-                    km.setAdminKitCooldown(args[1], Integer.parseInt(args[2]));
+                    int cd = Integer.parseInt(args[2]);
+                    if (cd < 0) { MessageUtil.send(sender, "<red>Cooldown cannot be negative."); return; }
+                    km.setAdminKitCooldown(args[1], cd);
                     MessageUtil.send(sender, "<green>Cooldown set for kit <yellow>" + args[1] + "</yellow>.");
                 } catch (NumberFormatException e) { MessageUtil.send(sender, "<red>Invalid number."); }
             }

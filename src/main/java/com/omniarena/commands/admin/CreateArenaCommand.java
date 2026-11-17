@@ -27,6 +27,10 @@ public class CreateArenaCommand extends SubCommand {
             return;
         }
         String name = args[0];
+        if (!name.matches("[A-Za-z0-9_-]{1,32}")) {
+            MessageUtil.send(sender, "<red>Invalid arena name. Use 1-32 characters: letters, numbers, '_' or '-'.");
+            return;
+        }
         ArenaManager am = ArenaManager.getInstance();
         if (am.exists(name)) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-already-exists")

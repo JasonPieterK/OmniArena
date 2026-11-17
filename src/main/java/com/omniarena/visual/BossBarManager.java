@@ -67,6 +67,19 @@ public class BossBarManager {
         }
     }
 
+    /** Hides every tracked bar from all online players, then clears the map. */
+    public void removeAll() {
+        for (BossBar bar : new java.util.ArrayList<>(matchBars.values())) {
+            for (Player player : Bukkit.getOnlinePlayers()) player.hideBossBar(bar);
+        }
+        matchBars.clear();
+    }
+
+    /** Hides all tracked bars from one player (e.g. on quit). */
+    public void removePlayer(Player player) {
+        for (BossBar bar : matchBars.values()) player.hideBossBar(bar);
+    }
+
     private String formatTime(int seconds) {
         return String.format("%d:%02d", seconds / 60, seconds % 60);
     }

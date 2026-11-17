@@ -85,7 +85,7 @@ public class WebDashboardServer {
         }
 
         try {
-            String bindAddress = plugin.getConfigManager().getConfig().getString("web.bind-address", "0.0.0.0");
+            String bindAddress = plugin.getConfigManager().getConfig().getString("web.bind-address", "127.0.0.1");
             int port = plugin.getConfigManager().getConfig().getInt("web.port", 8123);
             server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
             ctx("/", this::handleRoot);

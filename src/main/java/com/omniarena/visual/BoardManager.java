@@ -48,6 +48,14 @@ public class BoardManager {
         }
     }
 
+    /** Deletes every tracked board regardless of online state, then clears the map. */
+    public void removeAllBoards() {
+        for (FastBoard board : new ArrayList<>(boards.values())) {
+            try { if (board != null && !board.isDeleted()) board.delete(); } catch (Exception ignored) { }
+        }
+        boards.clear();
+    }
+
     private List<String> buildLines(Player player, Match match) {
         List<String> lines = new ArrayList<>();
         UUID uuid = player.getUniqueId();

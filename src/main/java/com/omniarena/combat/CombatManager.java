@@ -46,7 +46,7 @@ public class CombatManager {
         this.plugin = plugin;
         instance = this;
         this.globalPvp = cfg().getConfig().getBoolean("pvp.global.pvp-enabled", true);
-        startTagExpiryTask();
+        start();
     }
 
     public static CombatManager getInstance() { return instance; }
@@ -248,8 +248,12 @@ public class CombatManager {
         return combatTags.size() + newbieUntil.size() + pvpToggle.size();
     }
 
-    private void startTagExpiryTask() {
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+    private org.bukkit.scheduler.BukkitTask tagExpiryTask;
+
+    /** (Re)starts the tag-expiry loop; idempotent (cancels any previous task first). */
+    public synchronized void start() {
+        if (tagExpiryTask != null) { tagExpiryTask.cancel(); tagExpiryTask = null; }
+        tagExpiryTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             long now = System.currentTimeMillis();
             combatTags.entrySet().removeIf(e -> {
                 if (e.getValue() >= now) return false;
@@ -258,5 +262,9 @@ public class CombatManager {
                 return true;
             });
         }, 20L, 20L);
+    }
+
+    public synchronized void stop() {
+        if (tagExpiryTask != null) { tagExpiryTask.cancel(); tagExpiryTask = null; }
     }
 }

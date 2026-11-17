@@ -35,5 +35,7 @@ public class VisualController {
 
     public void shutdown() {
         hologramManager.removeAll();
+        scoreboardManager.removeAllBoards();
+        bossBarManager.removeAll();
     }
 }
