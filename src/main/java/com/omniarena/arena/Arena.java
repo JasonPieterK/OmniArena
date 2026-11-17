@@ -21,7 +21,8 @@ public class Arena {
     private int countdown = 10;
 
     // Goal
-    private GoalType goalType = GoalType.KILLS;
+    /** Explicit per-arena goal type; null = use the game mode's goal type. */
+    private GoalType goalTypeOverride = null;
     private int goalValue = 20;
 
     // Respawn
@@ -87,8 +88,13 @@ public class Arena {
     public void setMatchDuration(int matchDuration) { this.matchDuration = matchDuration; }
     public int getCountdown() { return countdown; }
     public void setCountdown(int countdown) { this.countdown = countdown; }
-    public GoalType getGoalType() { return goalType; }
-    public void setGoalType(GoalType goalType) { this.goalType = goalType; }
+    /** Effective goal type: the arena override if one was set, else the game mode's own goal. */
+    public GoalType getGoalType() { return goalTypeOverride != null ? goalTypeOverride : gameMode.getGoalType(); }
+    /** Sets the goal type; choosing the game mode's own goal clears the override. */
+    public void setGoalType(GoalType goalType) {
+        this.goalTypeOverride = (goalType == null || goalType == gameMode.getGoalType()) ? null : goalType;
+    }
+    public boolean hasGoalTypeOverride() { return goalTypeOverride != null; }
     public int getGoalValue() { return goalValue; }
     public void setGoalValue(int goalValue) { this.goalValue = goalValue; }
     public RespawnType getRespawnType() { return respawnType; }

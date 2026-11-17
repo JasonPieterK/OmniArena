@@ -75,7 +75,7 @@ public class PlaceholderAPIIntegration extends PlaceholderExpansion {
             case "gamemode":      return arena.getGameMode().name();
             case "gamemode_name": return arena.getGameMode().getDisplayName();
             case "gamemode_desc": return arena.getGameMode().getDescription();
-            case "goal":          return arena.getGameMode().getGoalType().name();
+            case "goal":          return arena.getGoalType().name();
         }
         if (matchOpt.isEmpty()) return "";
         Match match = matchOpt.get();

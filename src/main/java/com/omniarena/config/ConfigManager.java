@@ -49,13 +49,28 @@ public class ConfigManager {
     }
 
     public String getMessage(String key) {
-        String prefix = messages.getString("prefix", "[OmniArena] ");
-        String msg = messages.getString(key, "<red>Missing message: " + key);
-        return prefix + msg;
+        return rawOrDefault("prefix", "[OmniArena] ") + getRawMessage(key);
+    }
+
+    private final java.util.Set<String> warnedMissing = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private FileConfiguration jarMessages;
+
+    private String rawOrDefault(String key, String fallback) {
+        String v = messages.getString(key); // no default arg: Bukkit then consults setDefaults()
+        if (v == null && jarMessages != null) v = jarMessages.getString(key);
+        return v != null ? v : fallback;
     }
 
     public String getRawMessage(String key) {
-        return messages.getString(key, "<red>Missing message: " + key);
+        String v = rawOrDefault(key, null);
+        if (v != null) return v;
+        if (warnedMissing.add(key)) {
+            plugin.getLogger().warning("Message key '" + key + "' is missing from plugins/OmniArena/messages.yml and from the "
+                    + "bundled default. Fix: add a line '" + key + ": \"<red>your text\"' to messages.yml (or delete messages.yml "
+                    + "to regenerate it) and run /oa reload.");
+        }
+        return "<red>This message is not configured <gray>(missing key <white>" + key
+                + "</white> in messages.yml). Tell an admin to add it or delete messages.yml and run <white>/oa reload</white>.";
     }
 
     public Object getValue(String key) {
@@ -106,7 +121,7 @@ public class ConfigManager {
                 messages = YamlConfiguration.loadConfiguration(messagesFile);
         applyMessageDefaults();
             } catch (Exception ex) {
-                plugin.getLogger().severe("Failed to save messages: " + ex.getMessage());
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to save " + messagesFile.getPath() + " (" + ex.getMessage() + "). Fix: check the file is not read-only and the disk has free space, then retry.", ex);
             }
         }
         if (configDirty) {
@@ -116,7 +131,7 @@ public class ConfigManager {
                 plugin.reloadConfig();
                 config = plugin.getConfig();
             } catch (Exception ex) {
-                plugin.getLogger().severe("Failed to save config: " + ex.getMessage());
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to save plugins/OmniArena/config.yml (" + ex.getMessage() + "). Fix: check the file is not read-only and the disk has free space, then retry.", ex);
             }
         }
     }
@@ -124,9 +139,17 @@ public class ConfigManager {
     /** Falls back to the jar's bundled messages.yml for keys missing on disk (e.g. after upgrades). */
     private void applyMessageDefaults() {
         try (java.io.InputStream in = plugin.getResource("messages.yml")) {
-            if (in == null) return;
-            messages.setDefaults(YamlConfiguration.loadConfiguration(
-                    new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (java.io.IOException ignored) { }
+            if (in == null) {
+                plugin.getLogger().warning("The bundled messages.yml is missing from the plugin jar, so missing message keys cannot "
+                        + "be auto-filled. Fix: re-download OmniArena.jar.");
+                return;
+            }
+            jarMessages = YamlConfiguration.loadConfiguration(
+                    new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+            messages.setDefaults(jarMessages);
+        } catch (java.io.IOException e) {
+            plugin.getLogger().warning("Could not read the bundled messages.yml (" + e.getMessage()
+                    + "); keys missing from your messages.yml will show a placeholder. Fix: re-download OmniArena.jar.");
+        }
     }
 }

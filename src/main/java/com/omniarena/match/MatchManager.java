@@ -634,7 +634,7 @@ public class MatchManager {
         // The game type drives the win condition; arena goal value overrides the
         // mode default only when an admin set one (> 0).
         var mode = arena.getGameMode();
-        GoalType goal = mode.getGoalType();
+        GoalType goal = arena.getGoalType(); // arena goal.type override, else the mode's goal
         int goalValue = arena.getGoalValue() > 0 ? arena.getGoalValue() : mode.getDefaultGoalValue();
 
         // Per-player lives on a kills-goal arena: last player/team with lives left also wins
@@ -785,7 +785,7 @@ public class MatchManager {
 
     private MatchResult buildTimeoutResult(Match match) {
         // Kill-based modes: whoever is strictly ahead when time runs out wins
-        if (match.getArena().getGameMode().getGoalType() == GoalType.KILLS && match.getPlayerCount() > 1) {
+        if (match.getArena().getGoalType() == GoalType.KILLS && match.getPlayerCount() > 1) {
             if (!match.getTeams().isEmpty()) {
                 List<MatchTeam> sorted = new ArrayList<>(match.getTeams());
                 sorted.sort((a, b) -> Integer.compare(b.getKills(), a.getKills()));

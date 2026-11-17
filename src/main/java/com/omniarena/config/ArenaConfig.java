@@ -63,7 +63,10 @@ public class ArenaConfig {
         // Goal
         ConfigurationSection goal = cfg.getConfigurationSection("goal");
         if (goal != null) {
-            arena.setGoalType(GoalType.fromString(goal.getString("type", "KILLS")));
+            // goal.type only overrides the game mode's goal when explicitly flagged (older files always wrote it)
+            if (goal.getBoolean("type-override", false)) {
+                arena.setGoalType(GoalType.fromString(goal.getString("type", "KILLS")));
+            }
             arena.setGoalValue(goal.getInt("value", 20));
         }
 
@@ -170,6 +173,7 @@ public class ArenaConfig {
         cfg.set("lives", arena.getLives());
 
         cfg.set("goal.type", arena.getGoalType().name());
+        if (arena.hasGoalTypeOverride()) cfg.set("goal.type-override", true);
         cfg.set("goal.value", arena.getGoalValue());
 
         cfg.set("respawn.type", arena.getRespawnType().name());
