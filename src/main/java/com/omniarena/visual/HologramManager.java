@@ -100,6 +100,10 @@ public class HologramManager implements Listener {
         for (World w : plugin.getServer().getWorlds()) {
             for (org.bukkit.Chunk c : w.getLoadedChunks()) removeStale(c);
         }
+        if (!plugin.getConfig().getBoolean("visual.holograms", true)) {
+            plugin.getLogger().info("Leaderboard holograms are disabled (visual.holograms: false in config.yml); definitions are kept but not spawned.");
+            return;
+        }
         refreshAll();
         long ticks = Math.max(1, plugin.getConfig().getInt("holograms.refresh-seconds", 30)) * 20L;
         refreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refreshAll, ticks, ticks);
@@ -284,6 +288,7 @@ public class HologramManager implements Listener {
     public void onChunkLoad(ChunkLoadEvent event) {
         org.bukkit.Chunk chunk = event.getChunk();
         if (!event.isNewChunk()) removeStale(chunk);
+        if (!plugin.getConfig().getBoolean("visual.holograms", true)) return;
         for (Holo h : holograms.values()) {
             if (h.inChunk(chunk)) {
                 Bukkit.getScheduler().runTask(plugin, () -> { if (plugin.isEnabled()) refresh(h); });
