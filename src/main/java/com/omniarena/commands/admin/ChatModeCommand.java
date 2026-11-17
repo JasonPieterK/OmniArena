@@ -32,7 +32,17 @@ public class ChatModeCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
-        ChatMode mode = ChatMode.fromString(args[2]);
+        if (!args[0].equalsIgnoreCase("set")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+        ChatMode mode;
+        try { mode = ChatMode.valueOf(args[2].toUpperCase()); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Unknown chat mode <yellow>" + args[2] + "</yellow>. Valid: "
+                    + Arrays.stream(ChatMode.values()).map(ChatMode::name).collect(java.util.stream.Collectors.joining(", ")));
+            return;
+        }
         arena.setChatMode(mode);
         ArenaManager.getInstance().save(arena);
         MessageUtil.send(sender, "<green>Chat mode set to <yellow>" + mode.name() + "</yellow> for <yellow>" + arena.getName() + "</yellow>.");

@@ -47,10 +47,17 @@ public final class KitYamlLoader {
             kit.setContents(parseContents(cfg));
             kit.setArmor(parseArmor(cfg.getConfigurationSection("armor")));
             kit.setEffects(parseEffects(cfg.getList("effects")));
+            kit.setOffHand(parseItemSection(cfg.getConfigurationSection("offhand")));
         } else {
             kit.setContents(parseLegacyContents(cfg.getList("contents")));
             kit.setArmor(parseLegacyArmor(cfg.getList("armor")));
             kit.setEffects(new ArrayList<>());
+            Object off = cfg.get("offhand");
+            if (off instanceof ItemStack o) kit.setOffHand(o);
+            else {
+                List<?> raw = cfg.getList("contents");
+                if (raw != null && raw.size() > 40 && raw.get(40) instanceof ItemStack o2) kit.setOffHand(o2);
+            }
         }
 
         if (kit.getContents() != null && kit.getIcon() != null
@@ -105,7 +112,12 @@ public final class KitYamlLoader {
 
         Object displayName = raw.get("name");
         if (displayName != null) {
-            meta.displayName(ColorUtil.parse(String.valueOf(displayName)));
+            net.kyori.adventure.text.Component nm = ColorUtil.parse(String.valueOf(displayName));
+            if (nm.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC)
+                    == net.kyori.adventure.text.format.TextDecoration.State.NOT_SET) {
+                nm = nm.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
+            }
+            meta.displayName(nm);
         }
 
         Object enchants = raw.get("enchants");
@@ -196,7 +208,8 @@ public final class KitYamlLoader {
     private static PotionEffectType resolveEffectType(String name) {
         String normalized = name.toUpperCase(Locale.ROOT);
         if ("HARMING".equals(normalized)) normalized = "INSTANT_DAMAGE";
-        if ("HEAL".equals(normalized)) normalized = "INSTANT_HEALTH";
+        if ("HEAL".equals(normalized) || "HEALING".equals(normalized)) normalized = "INSTANT_HEALTH";
+        if ("DAMAGE".equals(normalized)) normalized = "INSTANT_DAMAGE";
 
         PotionEffectType byName = PotionEffectType.getByName(normalized);
         if (byName != null) return byName;

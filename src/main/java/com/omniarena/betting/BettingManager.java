@@ -132,9 +132,9 @@ public class BettingManager {
             return false;
         }
 
-        // Check if player already has a bet on this match
-        if (hasBetOnMatch(player, arenaName)) {
-            MessageUtil.send(player, "<red>You already have a bet on this match.");
+        // One active bet per player (a second bet would orphan the first one's bookkeeping)
+        if (activeBets.containsKey(player.getUniqueId())) {
+            MessageUtil.send(player, "<red>You already have an active bet. Cancel it first.");
             return false;
         }
 
@@ -237,7 +237,7 @@ public class BettingManager {
                         economy.format(bet.getAmount()) + "</green> was refunded.");
             } else if (bet.getPredictedWinner().equals(winnerId)) {
                 // Winner - payout based on pool share (paid even if offline)
-                double winnings = totalPool * (bet.getAmount() / winnerPool);
+                double winnings = Math.floor(totalPool * (bet.getAmount() / winnerPool) * 100) / 100; // never pay out more than the pool
                 economy.depositPlayer(off, winnings);
                 if (player != null) MessageUtil.send(player, "<green>You won your bet! <yellow>" + economy.format(winnings) +
                         "</yellow> (profit: <yellow>" + economy.format(winnings - bet.getAmount()) + "</yellow>)");

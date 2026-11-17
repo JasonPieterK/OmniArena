@@ -67,13 +67,7 @@ public class InventoryClickListener implements Listener {
         if (kitOpt.isEmpty()) return;
 
         AdminKit kit = kitOpt.get();
-        if (!PermissionChecker.canUseKit(player, kit.getRequiredPermission())) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-no-permission")
-                    .replace("{kit}", kit.getName()));
-            return;
-        }
-
-        KitManager.getInstance().equipKit(player, kit);
+        if (!KitManager.getInstance().tryEquip(player, kit)) return;
         player.closeInventory();
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                 .replace("{kit}", kit.getName()));
@@ -83,7 +77,7 @@ public class InventoryClickListener implements Listener {
         Material type = clicked.getType();
         if (type == Material.BLACK_STAINED_GLASS_PANE || type == Material.CYAN_STAINED_GLASS_PANE) return;
 
-        if (slot == 45 || (slot == 49 && type == Material.BOOK)) {
+        if (slot == 45 || slot == 49) {
             player.closeInventory();
             MessageUtil.send(player, "<yellow>Use <white>/kit create <name></white> to save your current inventory.");
             return;
@@ -99,12 +93,7 @@ public class InventoryClickListener implements Listener {
             Optional<AdminKit> adminKitOpt = KitManager.getInstance().getAdminKit(adminName);
             if (adminKitOpt.isEmpty()) return;
             AdminKit kit = adminKitOpt.get();
-            if (!com.omniarena.permission.PermissionChecker.canUseKit(player, kit.getRequiredPermission())) {
-                MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-no-permission")
-                        .replace("{kit}", kit.getName()));
-                return;
-            }
-            KitManager.getInstance().equipKit(player, kit);
+            if (!KitManager.getInstance().tryEquip(player, kit)) return;
             player.closeInventory();
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                     .replace("{kit}", kit.getName()));
@@ -114,7 +103,7 @@ public class InventoryClickListener implements Listener {
         // Personal kit
         Optional<PlayerKit> kitOpt = KitManager.getInstance().getPlayerKit(player.getUniqueId(), kitName);
         if (kitOpt.isEmpty()) return;
-        KitManager.getInstance().equipKit(player, kitOpt.get());
+        if (!KitManager.getInstance().tryEquip(player, kitOpt.get())) return;
         player.closeInventory();
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                 .replace("{kit}", kitOpt.get().getName()));

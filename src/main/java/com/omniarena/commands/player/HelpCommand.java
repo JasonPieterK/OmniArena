@@ -98,7 +98,7 @@ public class HelpCommand extends SubCommand {
         guides.put("startmatch", List.of(
                 "<yellow>1.</yellow> Enable arena: <white>/oa enable <arena></white>.",
                 "<yellow>2.</yellow> Players join by sign or <white>/oa join <arena></white>.",
-                "<yellow>3.</yellow> Players run <white>/oa ready</white>.",
+                "<yellow>3.</yellow> Match auto-starts when min players joined.",
                 "<yellow>4.</yellow> Admin can force start: <white>/oa match start <arena></white>."));
         guides.put("stopmatch", List.of(
                 "<yellow>Stop:</yellow> <white>/oa match stop <arena></white>.",

@@ -77,6 +77,14 @@ public class BetCommand extends SubCommand {
             return;
         }
 
+        // No betting on a match that has already ended (result settled / arena resetting)
+        var liveMatch = plugin.getMatchManager().getMatch(arena);
+        if (liveMatch.isEmpty() || liveMatch.get().getState() == com.omniarena.match.MatchState.ENDING
+                || liveMatch.get().getState() == com.omniarena.match.MatchState.RESETTING) {
+            MessageUtil.send(player, "<red>That match is not open for betting.");
+            return;
+        }
+
         double amount;
         try {
             amount = Double.parseDouble(args[3]);

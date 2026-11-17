@@ -31,21 +31,37 @@ public class StatsCommand extends SubCommand {
             }
 
             // Check admin reset
-            if (args[0].equalsIgnoreCase("reset") && args.length >= 2) {
+            if (args[0].equalsIgnoreCase("reset")) {
                 if (!PermissionChecker.hasAdminStats(sender)) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission"));
                     return;
                 }
-                Player resetTarget = Bukkit.getPlayer(args[1]);
+                if (args.length < 2) {
+                    MessageUtil.send(sender, "<red>Usage: /oa stats reset <player>");
+                    return;
+                }
+                OfflinePlayer resetTarget = Bukkit.getPlayerExact(args[1]);
+                if (resetTarget == null) {
+                    OfflinePlayer off = Bukkit.getOfflinePlayer(args[1]);
+                    if (off.hasPlayedBefore()) resetTarget = off;
+                }
                 if (resetTarget == null) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return;
                 }
                 StatsManager.getInstance().resetStats(resetTarget.getUniqueId());
-                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-reset").replace("{player}", resetTarget.getName()));
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-reset").replace("{player}", resetTarget.getName() != null ? resetTarget.getName() : args[1]));
                 return;
             }
-            target = Bukkit.getOfflinePlayer(args[0]);
+            target = Bukkit.getPlayerExact(args[0]);
+            if (target == null) {
+                OfflinePlayer off = Bukkit.getOfflinePlayer(args[0]);
+                if (!off.hasPlayedBefore()) {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[0]));
+                    return;
+                }
+                target = off;
+            }
         } else {
             if (!(sender instanceof Player player)) {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only"));

@@ -24,6 +24,7 @@ public class DeleteArenaCommand extends SubCommand {
             return;
         }
         String name = args[0];
+        ArenaManager.getInstance().get(name).ifPresent(DisableArenaCommand::kickAll);
         if (!ArenaManager.getInstance().delete(name)) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found")
                     .replace("{arena}", name));

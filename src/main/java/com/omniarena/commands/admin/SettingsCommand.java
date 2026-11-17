@@ -140,14 +140,29 @@ public class SettingsCommand extends SubCommand {
     private Object parseValue(SettingDefinition entry, String raw, CommandSender sender) {
         try {
             return switch (entry.type()) {
-                case BOOLEAN -> raw.equalsIgnoreCase("true") || raw.equalsIgnoreCase("yes") || raw.equalsIgnoreCase("on");
-                case INTEGER -> Integer.parseInt(raw);
-                case DECIMAL -> Double.parseDouble(raw);
+                case BOOLEAN -> {
+                    String v = raw.trim().toLowerCase(Locale.ROOT);
+                    if (v.equals("true") || v.equals("yes") || v.equals("on")) yield Boolean.TRUE;
+                    if (v.equals("false") || v.equals("no") || v.equals("off")) yield Boolean.FALSE;
+                    MessageUtil.send(sender, "<red>Expected true or false for <yellow>" + entry.key() + "</yellow>.");
+                    yield null;
+                }
+                case INTEGER -> Integer.parseInt(raw.trim());
+                case DECIMAL -> Double.parseDouble(raw.trim());
                 case LIST -> Arrays.stream(raw.split("\\R|,"))
                         .map(String::trim)
                         .filter(s -> !s.isBlank())
                         .toList();
-                case COLOR, SELECT, STRING -> raw;
+                case COLOR, SELECT, STRING -> {
+                    if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
+                        try { yield RegenAnimationType.valueOf(raw.trim().toUpperCase(Locale.ROOT)).name(); }
+                        catch (IllegalArgumentException e) {
+                            MessageUtil.send(sender, "<red>Unknown style <yellow>" + raw + "</yellow>.");
+                            yield null;
+                        }
+                    }
+                    yield raw;
+                }
             };
         } catch (NumberFormatException e) {
             MessageUtil.send(sender, "<red>Expected number for <yellow>" + entry.key() + "</yellow>.");

@@ -29,8 +29,24 @@ public class DisableArenaCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[0]));
             return;
         }
+        kickAll(arena.get());
         ArenaManager.getInstance().disable(arena.get());
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-disabled").replace("{arena}", args[0]));
+    }
+
+    /** Removes every player and spectator from the arena's active match (if any). */
+    static void kickAll(Arena arena) {
+        var mm = com.omniarena.match.MatchManager.getInstance();
+        mm.getMatch(arena).ifPresent(match -> {
+            for (java.util.UUID id : new java.util.ArrayList<>(match.getSpectators())) {
+                org.bukkit.entity.Player p = org.bukkit.Bukkit.getPlayer(id);
+                if (p != null) mm.leaveSpectator(p);
+            }
+            for (java.util.UUID id : new java.util.ArrayList<>(match.getPlayers())) {
+                org.bukkit.entity.Player p = org.bukkit.Bukkit.getPlayer(id);
+                if (p != null) mm.leaveArena(p);
+            }
+        });
     }
 
     @Override

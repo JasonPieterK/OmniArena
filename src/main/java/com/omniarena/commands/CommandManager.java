@@ -41,6 +41,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "goal",          new GoalCommand(plugin));
         reg(adminCommands, "module",        new ModuleCommand(plugin));
         reg(adminCommands, "match",         new MatchAdminCommand(plugin));
+        reg(adminCommands, "force",         new ForceStartCommand(plugin));
+        reg(adminCommands, "forcewin",      new ForceWinCommand(plugin));
         reg(adminCommands, "regen",         new RegenCommand(plugin));
         reg(adminCommands, "sign",          new SignCommand(plugin));
         reg(adminCommands, "kit",           new AdminKitCommand(plugin));
@@ -86,6 +88,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                         var cfg = ConfigManager.getInstance().getConfig();
                         java.util.List<String> off = new java.util.ArrayList<>(cfg.getStringList("pvp.disabled-worlds"));
                         String w = args[1];
+                        if (org.bukkit.Bukkit.getWorld(w) == null && off.stream().noneMatch(x -> x.equalsIgnoreCase(w))) {
+                            MessageUtil.send(sender, "<red>Unknown world <yellow>" + w + "</yellow>.");
+                            return;
+                        }
                         if (off.removeIf(x -> x.equalsIgnoreCase(w))) MessageUtil.send(sender, "<green>PvP re-enabled in <yellow>" + w + "</yellow>.");
                         else { off.add(w); MessageUtil.send(sender, "<red>PvP disabled in <yellow>" + w + "</yellow>."); }
                         ConfigManager.getInstance().setValue("pvp.disabled-worlds", off);
@@ -181,7 +187,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         SubCommand adminCmd = adminCommands.get(sub);
         if (adminCmd != null) {
-            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help") && !sub.equals("regen")) {
+            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help") && !sub.equals("regen") && !sub.equals("kit")) {
                 showCommandHelp(sender, sub, adminCmd);
                 return true;
             }
@@ -212,8 +218,13 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         SubCommand playerCmd = playerCommands.get(sub);
         if (playerCmd != null) {
-            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help")) {
+            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help") && !sub.equals("kit")) {
                 showCommandHelp(sender, sub, playerCmd);
+                return true;
+            }
+            if (sender instanceof org.bukkit.entity.Player p && !p.isOp()
+                    && playerCmd.getRequiredPermission() != null && !p.hasPermission(playerCmd.getRequiredPermission())) {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission"));
                 return true;
             }
             try {
@@ -257,14 +268,14 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         String sub = args[0].toLowerCase();
         String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
-        if (subArgs.length == 1 && "help".startsWith(subArgs[0].toLowerCase())) {
-            return List.of("help");
-        }
-
         SubCommand adminCmd = adminCommands.get(sub);
         SubCommand playerCmd = playerCommands.get(sub);
         SubCommand cmd = adminCmd != null && !shouldUsePlayerCommand(sender, sub, subArgs, adminCmd) ? adminCmd : playerCmd;
-        if (cmd != null) return cmd.tabComplete(sender, subArgs);
+        if (cmd != null) {
+            List<String> res = new ArrayList<>(cmd.tabComplete(sender, subArgs));
+            if (subArgs.length == 1 && !sub.equals("kit") && "help".startsWith(subArgs[0].toLowerCase())) res.add("help");
+            return res;
+        }
 
         return List.of();
     }

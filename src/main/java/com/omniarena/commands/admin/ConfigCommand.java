@@ -88,7 +88,18 @@ public class ConfigCommand extends SubCommand {
 
         String key = args[1];
         String value = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
-        Object parsed = parseGlobalValue(key, value);
+        boolean known = schema.settings().stream().anyMatch(d -> d.key().equalsIgnoreCase(key))
+                || ConfigManager.getInstance().getValue(key) != null;
+        if (!known) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-invalid-key").replace("{key}", key));
+            return;
+        }
+        Object parsed;
+        try { parsed = parseGlobalValue(key, value); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Invalid value for <yellow>" + key + "</yellow>: " + e.getMessage());
+            return;
+        }
         ConfigManager.getInstance().setValue(key, parsed);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-set")
                 .replace("{key}", key)
@@ -97,19 +108,44 @@ public class ConfigCommand extends SubCommand {
     }
 
     private void setArenaConfig(CommandSender sender, Arena arena, String key, String value) {
+        try {
+            applyArenaConfig(sender, arena, key, value);
+        } catch (NumberFormatException e) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", value));
+        } catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>" + e.getMessage());
+        }
+    }
+
+    private void applyArenaConfig(CommandSender sender, Arena arena, String key, String value) {
         switch (key.toLowerCase(Locale.ROOT)) {
-            case "enabled" -> arena.setState(parseBoolean(value) ? com.omniarena.arena.ArenaState.WAITING : com.omniarena.arena.ArenaState.DISABLED);
-            case "game-mode", "gamemode" -> arena.setGameMode(GameModeType.fromString(value));
-            case "min-players" -> arena.setMinPlayers(parseInt(value, arena.getMinPlayers()));
-            case "max-players" -> arena.setMaxPlayers(parseInt(value, arena.getMaxPlayers()));
+            case "enabled" -> {
+                boolean on = parseBoolean(value);
+                if (on == arena.isEnabled()) { /* no state change: don't reset a running arena */ }
+                else if (on) arena.setState(com.omniarena.arena.ArenaState.WAITING);
+                else { DisableArenaCommand.kickAll(arena); arena.setState(com.omniarena.arena.ArenaState.DISABLED); }
+            }
+            case "game-mode", "gamemode" -> arena.setGameMode(strictEnum(GameModeType.class, value));
+            case "min-players" -> {
+                int n = parseInt(value, 0);
+                if (n < 1) throw new IllegalArgumentException("min-players must be at least 1.");
+                if (arena.getMaxPlayers() > 0 && n > arena.getMaxPlayers()) throw new IllegalArgumentException("min-players cannot exceed max-players (" + arena.getMaxPlayers() + ").");
+                arena.setMinPlayers(n);
+            }
+            case "max-players" -> {
+                int n = parseInt(value, 0);
+                if (n < 1) throw new IllegalArgumentException("max-players must be at least 1.");
+                if (n < arena.getMinPlayers()) throw new IllegalArgumentException("max-players cannot be below min-players (" + arena.getMinPlayers() + ").");
+                arena.setMaxPlayers(n);
+            }
             case "match-duration" -> arena.setMatchDuration(parseInt(value, arena.getMatchDuration()));
             case "countdown" -> arena.setCountdown(parseInt(value, arena.getCountdown()));
-            case "goal-type" -> arena.setGoalType(GoalType.fromString(value));
+            case "goal-type" -> arena.setGoalType(strictEnum(GoalType.class, value));
             case "goal-value" -> arena.setGoalValue(parseInt(value, arena.getGoalValue()));
-            case "respawn-type" -> arena.setRespawnType(RespawnType.fromString(value));
+            case "respawn-type" -> arena.setRespawnType(strictEnum(RespawnType.class, value));
             case "respawn-delay" -> arena.setRespawnDelay(parseInt(value, arena.getRespawnDelay()));
             case "spawn-protection" -> arena.setSpawnProtection(parseInt(value, arena.getSpawnProtection()));
-            case "chat-mode" -> arena.setChatMode(ChatMode.fromString(value));
+            case "chat-mode" -> arena.setChatMode(strictEnum(ChatMode.class, value));
             case "announcements" -> arena.setAnnouncements(parseBoolean(value));
             case "mid-match-join" -> arena.setMidMatchJoin(parseBoolean(value));
             case "spectator-allowed" -> arena.setSpectatorAllowed(parseBoolean(value));
@@ -229,21 +265,30 @@ public class ConfigCommand extends SubCommand {
         return value;
     }
 
+    /** Strict: throws IllegalArgumentException on anything that is not clearly true/false. */
     private boolean parseBoolean(String value) {
-        return value.equalsIgnoreCase("true")
-                || value.equalsIgnoreCase("yes")
-                || value.equalsIgnoreCase("on")
-                || value.equalsIgnoreCase("enabled");
+        String v = value.trim().toLowerCase(Locale.ROOT);
+        if (v.equals("true") || v.equals("yes") || v.equals("on") || v.equals("enabled")) return true;
+        if (v.equals("false") || v.equals("no") || v.equals("off") || v.equals("disabled")) return false;
+        throw new IllegalArgumentException("Expected true or false, got: " + value);
     }
 
+    /** Strict: throws NumberFormatException; negatives rejected. */
     private int parseInt(String value, int fallback) {
-        try { return Integer.parseInt(value.trim()); }
-        catch (NumberFormatException e) { return fallback; }
+        int n = Integer.parseInt(value.trim());
+        if (n < 0) throw new NumberFormatException("negative");
+        return n;
     }
 
     private double parseDouble(String value, double fallback) {
-        try { return Double.parseDouble(value.trim()); }
-        catch (NumberFormatException e) { return fallback; }
+        return Double.parseDouble(value.trim());
+    }
+
+    private <E extends Enum<E>> E strictEnum(Class<E> type, String value) {
+        String v = value.trim().toUpperCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
+        for (E e : type.getEnumConstants()) if (e.name().equals(v)) return e;
+        throw new IllegalArgumentException("Unknown value " + value + ". Valid: "
+                + Arrays.stream(type.getEnumConstants()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")));
     }
 
     @Override

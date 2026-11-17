@@ -43,9 +43,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
         switch (action) {
             case "create" -> {
-                if (partyManager.createParty(player) != null) {
-                    MessageUtil.send(player, "<green>Party created! Use <yellow>/party invite <player></yellow> to invite members.");
-                }
+                partyManager.createParty(player); // PartyManager sends the feedback
             }
             case "disband" -> {
                 partyManager.disbandParty(player);

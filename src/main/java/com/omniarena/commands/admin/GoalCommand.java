@@ -32,11 +32,27 @@ public class GoalCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
-        GoalType goal = GoalType.fromString(args[2]);
-        arena.setGoalType(goal);
-        if (args.length >= 4) {
-            try { arena.setGoalValue(Integer.parseInt(args[3])); } catch (NumberFormatException ignored) {}
+        if (!args[0].equalsIgnoreCase("set")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
         }
+        GoalType goal;
+        try { goal = GoalType.valueOf(args[2].toUpperCase().replace("-", "_").replace(" ", "_")); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Unknown goal <yellow>" + args[2] + "</yellow>. Valid: "
+                    + Arrays.stream(GoalType.values()).map(GoalType::name).collect(java.util.stream.Collectors.joining(", ")));
+            return;
+        }
+        int value = -1;
+        if (args.length >= 4) {
+            try { value = Integer.parseInt(args[3]); if (value < 1) throw new NumberFormatException(); }
+            catch (NumberFormatException e) {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", args[3]));
+                return;
+            }
+        }
+        arena.setGoalType(goal);
+        if (value > 0) arena.setGoalValue(value);
         ArenaManager.getInstance().save(arena);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("goal-set")
                 .replace("{goal}", goal.name()).replace("{arena}", arena.getName()));

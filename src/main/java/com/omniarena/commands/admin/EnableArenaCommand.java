@@ -29,7 +29,19 @@ public class EnableArenaCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[0]));
             return;
         }
-        ArenaManager.getInstance().enable(arena.get());
+        Arena a = arena.get();
+        if (a.isEnabled()) {
+            MessageUtil.send(sender, "<yellow>Arena <white>" + a.getName() + "</white> is already enabled.");
+            return;
+        }
+        if (a.getBattleSpawns().isEmpty()) {
+            MessageUtil.send(sender, "<red>Cannot enable: no battle spawns set. Use <yellow>/oa spawn set " + a.getName() + " player</yellow>.");
+            return;
+        }
+        if (!a.getRegion().isDefined()) {
+            MessageUtil.send(sender, "<yellow>Warning: arena has no region set.");
+        }
+        ArenaManager.getInstance().enable(a);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-enabled").replace("{arena}", args[0]));
     }
 

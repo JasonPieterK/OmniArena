@@ -24,19 +24,19 @@ public class ForceStartCommand extends SubCommand {
 
     @Override
     public void execute(CommandSender sender, String[] args) {
-        if (args.length < 2) {
+        if (args.length < 2 || !args[0].equalsIgnoreCase("start")) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
             return;
         }
 
-        String arenaName = args[1];
-        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(arenaName);
+        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[1]);
         if (arenaOpt.isEmpty()) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", arenaName));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[1]));
             return;
         }
 
         Arena arena = arenaOpt.get();
+        String arenaName = arena.getName();
         MatchManager matchManager = MatchManager.getInstance();
         Match match = matchManager.getActiveMatches().stream()
                 .filter(m -> m.getArena().getName().equals(arenaName))
@@ -58,6 +58,11 @@ public class ForceStartCommand extends SubCommand {
             return;
         }
 
+        if (match.getPlayerCount() < 1) {
+            MessageUtil.send(sender, "<red>No players in <yellow>" + arenaName + "</yellow>.");
+            return;
+        }
+
         // Cancel countdown and force start
         match.cancelTasks();
         matchManager.startMatch(match);
@@ -66,6 +71,7 @@ public class ForceStartCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (args.length == 1) return List.of("start");
         if (args.length == 2) {
             return ArenaManager.getInstance().getAll().stream()
                     .map(Arena::getName)

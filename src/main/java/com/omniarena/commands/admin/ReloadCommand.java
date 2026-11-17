@@ -25,6 +25,7 @@ public class ReloadCommand extends SubCommand {
     public void execute(CommandSender sender, String[] args) {
         try {
             ConfigManager.getInstance().reload();
+            com.omniarena.kit.KitManager.getInstance().loadAll();
             // Reloading arenas while matches run would orphan live arena objects; skip it then.
             if (com.omniarena.match.MatchManager.getInstance().getActiveMatches().isEmpty()) {
                 ArenaManager.getInstance().loadAll();

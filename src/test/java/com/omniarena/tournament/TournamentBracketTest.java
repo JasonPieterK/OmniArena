@@ -76,4 +76,19 @@ class TournamentBracketTest {
         assertTrue(match.isPresent());
         assertFalse(match.get().isBye());
     }
+
+    @Test
+    void fullRun_variousSizes_alwaysProducesChampion() {
+        for (int n : new int[]{2, 3, 4, 5, 6, 7, 8, 9, 16}) {
+            TournamentBracket b = new TournamentBracket(uuids(n), "arena");
+            int guard = 0;
+            while (!b.isFinished() && guard++ < 10) {
+                for (TournamentMatch m : b.getPendingMatches()) b.recordWinner(m, m.getPlayer1());
+                b.advanceRound();
+            }
+            assertTrue(b.isFinished(), "n=" + n);
+            assertNotNull(b.getFinalWinner(), "n=" + n);
+            assertNotNull(b.getFinalLoser(), "n=" + n);
+        }
+    }
 }

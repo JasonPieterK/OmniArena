@@ -2,6 +2,7 @@ package com.omniarena.tournament;
 
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
+import com.omniarena.config.ConfigManager;
 import com.omniarena.match.Match;
 import com.omniarena.match.MatchResult;
 import com.omniarena.util.MessageUtil;
@@ -21,6 +22,9 @@ public class TournamentManager {
     private final OmniArena plugin;
     private final Map<String, Tournament> tournaments = new ConcurrentHashMap<>();
     private final File dataFile;
+    /** When a tournament match first found a player offline (for the walkover grace period). */
+    private final Map<TournamentMatch, Long> waitingSince = new ConcurrentHashMap<>();
+    private org.bukkit.scheduler.BukkitTask tickTask;
 
     public TournamentManager(OmniArena plugin) {
         this.plugin = plugin;
@@ -29,6 +33,17 @@ public class TournamentManager {
 
     public void start() {
         loadAll();
+        if (tickTask != null) tickTask.cancel();
+        // Periodic safety net: launches matches that had to wait (arena busy, player busy/offline)
+        // and recovers matches that were cancelled without producing a result.
+        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (plugin.isStopped()) return;
+            for (Tournament t : new ArrayList<>(tournaments.values())) {
+                if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
+                try { launchPendingMatches(t); }
+                catch (Exception e) { plugin.getLogger().warning("Tournament tick failed for " + t.getName() + ": " + e.getMessage()); }
+            }
+        }, 100L, 100L);
     }
 
     // ── Create / Join / Leave / Delete ────────────────────────────
@@ -48,14 +63,14 @@ public class TournamentManager {
             return false;
         }
 
-        Tournament t = new Tournament(name, arenaName, maxPlayers, creator.getUniqueId());
+        Tournament t = new Tournament(name, arena.getName(), maxPlayers, creator.getUniqueId());
         tournaments.put(name.toLowerCase(), t);
         saveAll();
 
         Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
                 "<gold>[Tournament] <yellow>" + creator.getName() +
                 " created tournament <white>" + name +
-                " <gray>(" + arenaName + ", max " + maxPlayers + "). Use /oa tournament join " + name));
+                " <gray>(" + arena.getName() + ", max " + maxPlayers + "). Use /oa tournament join " + name));
         return true;
     }
 
@@ -108,8 +123,11 @@ public class TournamentManager {
             if (requester != null) MessageUtil.send(requester, "<red>Tournament already started.");
             return;
         }
+        // Drop players who went offline during registration so they don't distort the bracket
+        t.getParticipants().removeIf(u -> Bukkit.getPlayer(u) == null);
         if (t.getParticipants().size() < 2) {
-            if (requester != null) MessageUtil.send(requester, "<red>Need at least 2 players.");
+            if (requester != null) MessageUtil.send(requester, "<red>Need at least 2 online players.");
+            saveAll();
             return;
         }
 
@@ -149,7 +167,7 @@ public class TournamentManager {
             TournamentBracket bracket = t.getBracket();
 
             Optional<TournamentMatch> matchOpt = bracket.getCurrentRound().stream()
-                    .filter(m -> !m.isCompleted() && !m.isBye()
+                    .filter(m -> !m.isCompleted() && !m.isBye() && m.isStarted()
                             && ((resWinner != null && m.involves(resWinner))
                             || (result.getLoserId() != null && m.involves(result.getLoserId()))
                             || (parts.contains(m.getPlayer1()) && parts.contains(m.getPlayer2()))))
@@ -195,9 +213,19 @@ public class TournamentManager {
         }, delay);
     }
 
+    private boolean inArena(Player p, String arenaName) {
+        return p != null && !plugin.getMatchManager().isSpectating(p)
+                && plugin.getMatchManager().getArenaName(p).map(n -> n.equalsIgnoreCase(arenaName)).orElse(false);
+    }
+
     private UUID decideDraw(TournamentMatch tm) {
         Player p1 = Bukkit.getPlayer(tm.getPlayer1());
         Player p2 = Bukkit.getPlayer(tm.getPlayer2());
+        // A player who left the arena (or went offline) loses against one who stayed
+        boolean in1 = inArena(p1, tm.getArenaName());
+        boolean in2 = inArena(p2, tm.getArenaName());
+        if (in1 && !in2) return tm.getPlayer1();
+        if (in2 && !in1) return tm.getPlayer2();
         if (p1 != null && p2 == null) return tm.getPlayer1();
         if (p2 != null && p1 == null) return tm.getPlayer2();
         if (p1 != null) {
@@ -207,41 +235,104 @@ public class TournamentManager {
         return ThreadLocalRandom.current().nextBoolean() ? tm.getPlayer1() : tm.getPlayer2();
     }
 
+    /**
+     * Checks a launched match. Returns true while it is legitimately still in progress
+     * (caller must wait), false if it was resolved or reset and may be re-launched.
+     */
+    private boolean checkLive(Tournament t, Arena arena, TournamentMatch tm) {
+        var mm = plugin.getMatchManager();
+        Match m = mm.getMatch(arena).orElse(null);
+        if (m != null && (m.getState() == com.omniarena.match.MatchState.ENDING
+                || m.getState() == com.omniarena.match.MatchState.RESETTING)) return true;
+        Player p1 = Bukkit.getPlayer(tm.getPlayer1());
+        Player p2 = Bukkit.getPlayer(tm.getPlayer2());
+        boolean in1 = inArena(p1, arena.getName());
+        boolean in2 = inArena(p2, arena.getName());
+        if (m != null && in1 && in2) return true;
+        if (m != null && (in1 || in2)) {
+            UUID winner = in1 ? tm.getPlayer1() : tm.getPlayer2();
+            if (m.getState() == com.omniarena.match.MatchState.RUNNING) {
+                mm.forceWin(m, winner); // opponent left: onMatchEnd records the result
+                return true;
+            }
+            // opponent left before the fight started: walkover
+            t.getBracket().recordWinner(tm, winner);
+            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+                    "<gold>[Tournament] <yellow>" + Bukkit.getOfflinePlayer(winner).getName()
+                    + " <gray>wins by walkover (opponent left)."));
+            mm.leaveArena(in1 ? p1 : p2);
+            return false;
+        }
+        tm.setStarted(false); // match vanished without a result: launch it again
+        return false;
+    }
+
     private void launchPendingMatches(Tournament t) {
+        if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) return;
         Arena arena = plugin.getArenaManager().get(t.getArenaName()).orElse(null);
         if (arena == null) return;
+        var mm = plugin.getMatchManager();
+        boolean changed = false;
 
         // One arena = one match at a time: if a launched match is still running, wait.
-        // (Re-launching every pending match would stuff all pairs into the same arena
-        // and re-join players that are already fighting.)
         for (TournamentMatch pm : t.getBracket().getPendingMatches()) {
-            if (pm.isStarted()) return;
+            if (pm.isStarted() && checkLive(t, arena, pm)) return;
         }
 
+        boolean busy = mm.getMatch(arena).isPresent() || mm.isLockdown() || !arena.isJoinable();
+        long graceMs = ConfigManager.getInstance().getConfig().getInt("tournament.walkover-grace-seconds", 60) * 1000L;
+        boolean launched = false;
+
         for (TournamentMatch tm : t.getBracket().getPendingMatches()) {
+            if (tm.isCompleted()) { changed = true; continue; }
             Player p1 = Bukkit.getPlayer(tm.getPlayer1());
             Player p2 = Bukkit.getPlayer(tm.getPlayer2());
 
             if (p1 == null || p2 == null) {
-                // Offline player — award win to present player
-                UUID winner = p1 != null ? tm.getPlayer1() : tm.getPlayer2();
+                // Offline player: wait a grace period (reconnect / server restart), then walkover
+                long now = System.currentTimeMillis();
+                Long since = waitingSince.putIfAbsent(tm, now);
+                if (since == null) {
+                    Player present = p1 != null ? p1 : p2;
+                    if (present != null) MessageUtil.send(present, "<gold>[Tournament] <yellow>Your opponent is offline; "
+                            + "you win by walkover in " + (graceMs / 1000) + "s unless they return.");
+                    continue;
+                }
+                if (now - since < graceMs) continue;
+                waitingSince.remove(tm);
+                UUID winner = p1 != null ? tm.getPlayer1() : p2 != null ? tm.getPlayer2() : tm.getPlayer1();
                 t.getBracket().recordWinner(tm, winner);
                 String wName = Bukkit.getOfflinePlayer(winner).getName();
                 Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
                         "<gold>[Tournament] <yellow>" + wName + " <gray>wins by walkover (opponent offline)."));
+                changed = true;
                 continue;
             }
+            waitingSince.remove(tm);
 
+            if (launched || busy) continue;
+            if (mm.isInArena(p1) || mm.isInArena(p2)) continue; // busy elsewhere: retry on next tick
+
+            var qm = com.omniarena.queue.QueueManager.getInstance();
+            if (qm != null) {
+                if (qm.isQueued(p1)) qm.leaveQueue(p1);
+                if (qm.isQueued(p2)) qm.leaveQueue(p2);
+            }
+            boolean ok1 = mm.joinArena(p1, arena);
+            boolean ok2 = ok1 && mm.joinArena(p2, arena);
+            if (!ok1 || !ok2) {
+                if (ok1) mm.leaveArena(p1);
+                continue;
+            }
             tm.setStarted(true);
-            plugin.getMatchManager().joinArena(p1, arena);
-            plugin.getMatchManager().joinArena(p2, arena);
+            launched = true;
 
             MessageUtil.send(p1, "<gold>[Tournament] <yellow>Your match vs <white>" + p2.getName() + " <yellow>begins!");
             MessageUtil.send(p2, "<gold>[Tournament] <yellow>Your match vs <white>" + p1.getName() + " <yellow>begins!");
-            break; // only one live match per arena
         }
 
         if (t.getBracket().isRoundComplete()) {
+            changed = true;
             if (t.getBracket().isFinished()) {
                 finishTournament(t);
             } else {
@@ -252,9 +343,11 @@ public class TournamentManager {
                 launchPendingMatches(t);
             }
         }
+        if (changed) saveAll();
     }
 
     private void finishTournament(Tournament t) {
+        if (t.getState() == TournamentState.FINISHED) return;
         UUID winner = t.getBracket().getFinalWinner();
         t.setState(TournamentState.FINISHED);
 
@@ -267,7 +360,7 @@ public class TournamentManager {
         pay(t, t.getBracket().getFinalLoser(), t.getPrizeSecond(), "2nd");
         List<UUID> thirds = t.getBracket().getSemifinalLosers();
         if (!thirds.isEmpty()) {
-            double share = t.getPrizeThird() / thirds.size(); // no 3rd-place match: split among semifinal losers
+            double share = Math.floor(t.getPrizeThird() / thirds.size() * 100) / 100; // no 3rd-place match: split among semifinal losers
             for (UUID u : thirds) pay(t, u, share, "3rd");
         }
 
@@ -436,7 +529,9 @@ public class TournamentManager {
 
     /** Persist state and drop in-memory tournaments (used by /oa stop and onDisable). */
     public void stop() {
+        if (tickTask != null) { tickTask.cancel(); tickTask = null; }
         saveAll();
+        waitingSince.clear();
         tournaments.clear();
     }
 

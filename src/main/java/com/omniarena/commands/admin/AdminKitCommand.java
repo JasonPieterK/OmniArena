@@ -45,11 +45,22 @@ public class AdminKitCommand extends SubCommand {
         KitManager km = KitManager.getInstance();
         String action = args[0].toLowerCase();
 
+        // Actions that modify an existing kit: report unknown kits instead of a fake success.
+        if (java.util.Set.of("setpublic", "setprivate", "icon", "description", "cooldown", "permission").contains(action)
+                && args.length >= 2 && km.getAdminKit(args[1]).isEmpty()) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", args[1]));
+            return;
+        }
+
         switch (action) {
             case "create" -> {
                 if (!(sender instanceof Player player)) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only")); return; }
                 if (args.length < 2) { MessageUtil.send(sender, "<red>Usage: /oa kit create <name>"); return; }
                 String name = args[1];
+                if (!KitManager.isValidName(name)) {
+                    MessageUtil.send(sender, "<red>Kit names may only use letters, numbers, '_', '-' and '.' (max 32).");
+                    return;
+                }
                 km.createAdminKit(name, player.getInventory().getContents(), player.getInventory().getArmorContents());
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-created").replace("{kit}", name));
             }
@@ -86,6 +97,7 @@ public class AdminKitCommand extends SubCommand {
                 if (args.length < 3) { MessageUtil.send(sender, "<red>Usage: /oa kit icon <name> <material>"); return; }
                 try {
                     Material mat = Material.valueOf(args[2].toUpperCase());
+                    if (!mat.isItem() || mat.isAir()) throw new IllegalArgumentException("not an item");
                     km.setAdminKitIcon(args[1], mat);
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-icon-set").replace("{kit}", args[1]));
                 } catch (IllegalArgumentException e) {
@@ -109,8 +121,11 @@ public class AdminKitCommand extends SubCommand {
             }
             case "permission" -> {
                 if (args.length < 3) { MessageUtil.send(sender, "<red>Usage: /oa kit permission <name> <node>"); return; }
-                km.setAdminKitPermission(args[1], args[2]);
-                MessageUtil.send(sender, "<green>Permission set for kit <yellow>" + args[1] + "</yellow>.");
+                boolean clear = args[2].equalsIgnoreCase("none") || args[2].equals("-");
+                km.setAdminKitPermission(args[1], clear ? "" : args[2]);
+                MessageUtil.send(sender, clear
+                        ? "<green>Permission cleared for kit <yellow>" + args[1] + "</yellow>."
+                        : "<green>Permission set for kit <yellow>" + args[1] + "</yellow>.");
             }
             case "list" -> {
                 MessageUtil.send(sender, "<gold>--- Admin Kits ---");

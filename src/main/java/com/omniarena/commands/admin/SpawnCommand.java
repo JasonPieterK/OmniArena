@@ -36,6 +36,13 @@ public class SpawnCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
+        if (args.length >= 3 && !action.equals("list")) {
+            try { SpawnType.valueOf(args[2].toUpperCase()); }
+            catch (IllegalArgumentException e) {
+                MessageUtil.send(sender, "<red>Unknown spawn type <yellow>" + args[2] + "</yellow>. Use BATTLE, LOBBY or SPECTATOR.");
+                return;
+            }
+        }
 
         switch (action) {
             case "set" -> {
@@ -88,6 +95,7 @@ public class SpawnCommand extends SubCommand {
                 ArenaManager.getInstance().save(arena);
                 MessageUtil.send(sender, "<yellow>Cleared all " + type.name() + " spawns for " + arena.getName() + ".");
             }
+            default -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
         }
     }
 

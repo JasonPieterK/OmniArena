@@ -103,12 +103,15 @@ public class KitShareHandler {
         KitManager km = KitManager.getInstance();
         km.getPlayerKit(req.senderId(), kitName).ifPresent(kit -> {
             int limit = PermissionChecker.getKitSlotLimit(recipient);
-            boolean created = km.createPlayerKit(recipient.getUniqueId(), kitName,
-                    kit.getContents(), kit.getArmor(), limit);
+            boolean created = km.createPlayerKit(recipient.getUniqueId(), kit.getName(),
+                    kit.getContents(), kit.getArmor(), kit.getOffHand(), limit);
 
             if (created) {
                 MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-share-accepted")
                         .replace("{kit}", kitName));
+            } else if (km.getPlayerKit(recipient.getUniqueId(), kit.getName()).isPresent()) {
+                MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-already-exists")
+                        .replace("{kit}", kit.getName()));
             } else {
                 MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-slots-full")
                         .replace("{max}", String.valueOf(limit)));

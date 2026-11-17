@@ -91,6 +91,10 @@ public class LifecycleCommand extends SubCommand {
             // End all active matches & kick players
             int kicked = 0;
             for (var match : new java.util.ArrayList<>(mm.getActiveMatches())) {
+                for (var uuid : new java.util.ArrayList<>(match.getSpectators())) {
+                    Player sp = Bukkit.getPlayer(uuid);
+                    if (sp != null) { mm.leaveSpectator(sp); kicked++; }
+                }
                 for (var uuid : new java.util.ArrayList<>(match.getPlayers())) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null) {

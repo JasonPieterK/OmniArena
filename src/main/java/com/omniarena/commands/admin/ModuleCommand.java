@@ -35,6 +35,14 @@ public class ModuleCommand extends SubCommand {
         }
         Arena arena = arenaOpt.get();
         String module = args[2].toLowerCase();
+        if (!action.equals("enable") && !action.equals("disable")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+        if (!KNOWN_MODULES.contains(module)) {
+            MessageUtil.send(sender, "<red>Unknown module <yellow>" + args[2] + "</yellow>. Valid: " + String.join(", ", KNOWN_MODULES));
+            return;
+        }
 
         if (action.equals("enable")) {
             arena.enableModule(module);

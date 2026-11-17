@@ -44,6 +44,24 @@ public class JoinCommand extends SubCommand {
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-disabled-join").replace("{arena}", args[0]));
             return;
         }
+        if (com.omniarena.queue.QueueManager.getInstance().isQueued(player)) {
+            MessageUtil.send(player, "<red>You are in a queue. Leave it first.");
+            return;
+        }
+        boolean bypass = PermissionChecker.canBypassJoin(player);
+        if (!bypass && !arena.isWhitelisted(player.getUniqueId())) {
+            MessageUtil.send(player, "<red>You are not whitelisted for this arena.");
+            return;
+        }
+        if (!arena.isJoinable()) {
+            MessageUtil.send(player, "<red>Arena <yellow>" + arena.getName() + "</yellow> is not joinable right now (" + arena.getState().name().toLowerCase() + ").");
+            return;
+        }
+        int current = MatchManager.getInstance().getMatch(arena).map(com.omniarena.match.Match::getPlayerCount).orElse(0);
+        if (!bypass && arena.getMaxPlayers() > 0 && current >= arena.getMaxPlayers()) {
+            MessageUtil.send(player, "<red>Arena <yellow>" + arena.getName() + "</yellow> is full.");
+            return;
+        }
         MatchManager.getInstance().joinArena(player, arena);
     }
 

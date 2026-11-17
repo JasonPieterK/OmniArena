@@ -30,7 +30,11 @@ public class AnnouncementsCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
-        boolean enabled = !args[2].equalsIgnoreCase("disable");
+        if (!args[0].equalsIgnoreCase("set") || !(args[2].equalsIgnoreCase("enable") || args[2].equalsIgnoreCase("disable"))) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+        boolean enabled = args[2].equalsIgnoreCase("enable");
         arena.setAnnouncements(enabled);
         ArenaManager.getInstance().save(arena);
         MessageUtil.send(sender, "<green>Announcements " + (enabled ? "enabled" : "disabled") + " for <yellow>" + arena.getName() + "</yellow>.");

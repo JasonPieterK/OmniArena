@@ -51,6 +51,10 @@ public class RegenCommand extends SubCommand {
         }
 
         Arena arena = arenaOpt.get();
+        if (com.omniarena.match.MatchManager.getInstance().getMatch(arena).isPresent()) {
+            MessageUtil.send(sender, "<red>Cannot regenerate <yellow>" + arena.getName() + "</yellow> while a match is active.");
+            return;
+        }
         BlockRestoreModule restore = plugin.getBlockRestoreModule();
         if (!restore.hasSnapshot(arena.getName())) {
             MessageUtil.send(sender, "<red>No snapshot for <yellow>" + arena.getName()
@@ -95,7 +99,13 @@ public class RegenCommand extends SubCommand {
             MessageUtil.send(sender, "<gray>Default affects <yellow>/oa regen <arena></yellow>. Use <yellow>/oa regen style <type></yellow>.");
             return;
         }
-        RegenAnimationType type = RegenAnimationType.fromConfig(args[1]);
+        RegenAnimationType type;
+        try { type = RegenAnimationType.valueOf(args[1].toUpperCase()); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Unknown style <yellow>" + args[1] + "</yellow>. Valid: "
+                    + Arrays.stream(RegenAnimationType.values()).map(Enum::name).reduce((a, b) -> a + ", " + b).orElse(""));
+            return;
+        }
         ConfigManager.getInstance().setConfigValue("regen.animation.type", type.name());
         MessageUtil.send(sender, "<green>Default regen animation set to <yellow>" + type.name() + "</yellow>.");
     }
@@ -120,9 +130,12 @@ public class RegenCommand extends SubCommand {
             MessageUtil.send(sender, "<red>Usage: <yellow>/oa regen " + args[0].toLowerCase() + " <true|false>");
             return;
         }
-        boolean enabled = args[1].equalsIgnoreCase("true")
-                || args[1].equalsIgnoreCase("yes")
-                || args[1].equalsIgnoreCase("on");
+        String v = args[1].toLowerCase();
+        boolean enabled = v.equals("true") || v.equals("yes") || v.equals("on");
+        if (!enabled && !(v.equals("false") || v.equals("no") || v.equals("off"))) {
+            MessageUtil.send(sender, "<red>Value must be true or false.");
+            return;
+        }
         String key = switch (args[0].toLowerCase()) {
             case "progress" -> "regen.progress.enabled";
             case "particles" -> "regen.animation.particles";

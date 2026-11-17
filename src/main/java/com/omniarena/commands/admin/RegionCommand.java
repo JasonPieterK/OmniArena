@@ -34,11 +34,15 @@ public class RegionCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only"));
             return;
         }
+        if (args.length < 1) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
         String action = args[0].toLowerCase();
 
         if (action.equals("wand")) {
             org.bukkit.inventory.ItemStack wand = com.omniarena.util.ItemUtil.buildGuiItem(
-                    org.bukkit.Material.WOODEN_AXE,
+                    com.omniarena.listener.PlayerInteractListener.wandMaterial(),
                     "&6&lOmniArena Selection Wand",
                     "&7Left-click a block: &eSet Position 1",
                     "&7Right-click a block: &eSet Position 2",
@@ -62,13 +66,17 @@ public class RegionCommand extends SubCommand {
         }
 
         Arena arena = arenaOpt.get();
+        if (!action.equals("set") && !action.equals("info")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
         UUID uid = player.getUniqueId();
 
         switch (action) {
             case "set" -> {
                 ArenaManager am = ArenaManager.getInstance();
                 if (!am.hasFullSelection(uid)) {
-                    MessageUtil.send(player, "<red>You must select two points first using the wand tool (Wooden Axe).");
+                    MessageUtil.send(player, "<red>You must select two points first using the selection wand.");
                     MessageUtil.send(player, "<gray>Use <yellow>/oa wand</yellow> to get the wand tool.");
                     return;
                 }

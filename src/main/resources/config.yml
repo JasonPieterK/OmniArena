@@ -221,3 +221,6 @@ betting:
   max-bet: 10000.0
   allow-spectator-bet: true
   bet-window-seconds: 30
+
+tournament:
+  walkover-grace-seconds: 60   # wait this long for an offline player before awarding a walkover

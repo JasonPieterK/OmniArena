@@ -110,6 +110,7 @@ permissions:
       omniarena.admin.sign: true
       omniarena.admin.stats: true
       omniarena.admin.reload: true
+      omniarena.admin.override: true
 
   omniarena.admin.arena:
     description: Arena create/delete/config
@@ -129,6 +130,10 @@ permissions:
 
   omniarena.admin.stats:
     description: Reset/view all player stats
+    default: op
+
+  omniarena.admin.override:
+    description: Powerful admin overrides (/oa override ...)
     default: op
 
   omniarena.admin.reload:

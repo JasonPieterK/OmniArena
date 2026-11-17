@@ -42,6 +42,15 @@ public class MatchAdminCommand extends SubCommand {
             case "start" -> {
                 Optional<Match> existing = mm.getMatch(arena);
                 if (existing.isPresent()) {
+                    var st = existing.get().getState();
+                    if (st == com.omniarena.match.MatchState.RUNNING || st == com.omniarena.match.MatchState.ENDING) {
+                        MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + st.name().toLowerCase() + ".");
+                        return;
+                    }
+                    if (existing.get().getPlayerCount() < 1) {
+                        MessageUtil.send(sender, "<red>No players in <yellow>" + arena.getName() + "</yellow>.");
+                        return;
+                    }
                     mm.startMatch(existing.get());
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-force-started").replace("{arena}", arena.getName()));
                 } else {
@@ -54,6 +63,10 @@ public class MatchAdminCommand extends SubCommand {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
                     return;
                 }
+                if (match.get().getState() == com.omniarena.match.MatchState.ENDING) {
+                    MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already ending.");
+                    return;
+                }
                 mm.endMatch(match.get(), new com.omniarena.match.MatchResult(
                         arena.getName(), null, null, null,
                         com.omniarena.match.MatchResult.Outcome.FORFEIT,
@@ -61,6 +74,15 @@ public class MatchAdminCommand extends SubCommand {
                         new java.util.ArrayList<>(match.get().getPlayers())));
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-force-stopped").replace("{arena}", arena.getName()));
             }
+            case "reset" -> {
+                if (mm.getMatch(arena).isEmpty()) {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
+                    return;
+                }
+                DisableArenaCommand.kickAll(arena);
+                MessageUtil.send(sender, "<yellow>Match in <white>" + arena.getName() + "</white> reset; all players removed.");
+            }
+            default -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
         }
     }
 
