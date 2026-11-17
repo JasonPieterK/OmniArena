@@ -62,7 +62,7 @@ public class OverrideCommand extends SubCommand {
     private void killWeb(CommandSender sender) {
         WebDashboardServer web = plugin.getWebDashboardServer();
         if (web == null) {
-            MessageUtil.send(sender, "<red>Web dashboard is not running.");
+            MessageUtil.send(sender, "<red>The web dashboard is not running, so there are no sessions to kill. <gray>Enable it with <white>web.enabled: true</white> in config.yml and run <white>/oa reload</white>.");
             return;
         }
         int before = web.activeSessionCount();
@@ -75,7 +75,7 @@ public class OverrideCommand extends SubCommand {
         if (arena == null) return;
         Optional<Match> match = MatchManager.getInstance().getMatch(arena);
         if (match.isEmpty()) {
-            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
             return;
         }
         MatchManager.getInstance().endMatch(match.get(), new com.omniarena.match.MatchResult(
@@ -92,7 +92,7 @@ public class OverrideCommand extends SubCommand {
         MatchManager mm = MatchManager.getInstance();
         Optional<Match> match = mm.getMatch(arena);
         if (match.isEmpty()) {
-            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
             return;
         }
         List<Player> players = match.get().getPlayers().stream()
@@ -137,12 +137,12 @@ public class OverrideCommand extends SubCommand {
         }
         BlockRestoreModule restore = plugin.getBlockRestoreModule();
         if (!restore.hasSnapshot(arena.getName())) {
-            MessageUtil.send(sender, "<red>No snapshot found for <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, "<red>No regen snapshot exists for <yellow>" + arena.getName() + "</yellow>, so there is nothing to purge. <gray>Create one with <white>/oa regen snapshot " + arena.getName() + "</white>.");
             return;
         }
         restore.restore(arena,
                 () -> MessageUtil.send(sender, "<green>Purged and restored <yellow>" + arena.getName() + "</yellow>."),
-                () -> MessageUtil.send(sender, "<red>Purge failed for <yellow>" + arena.getName() + "</yellow>."));
+                () -> MessageUtil.send(sender, "<red>Purging the snapshot of <yellow>" + arena.getName() + "</yellow> failed (file missing or not writable). <gray>See the console for the IO error, check the plugins/OmniArena/snapshots folder permissions, then retry."));
     }
 
     private void god(CommandSender sender, String[] args) {
@@ -151,7 +151,7 @@ public class OverrideCommand extends SubCommand {
         MatchManager mm = MatchManager.getInstance();
         Optional<Match> match = mm.getMatch(arena);
         if (match.isEmpty()) {
-            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
             return;
         }
         boolean enable = match.get().getPlayers().stream().anyMatch(uuid -> !mm.isGodMode(uuid));
@@ -171,7 +171,7 @@ public class OverrideCommand extends SubCommand {
 
     private void broadcast(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa override broadcast <message>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa override broadcast <message>"));
             return;
         }
         String message = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
@@ -186,7 +186,7 @@ public class OverrideCommand extends SubCommand {
         BlockRestoreModule restore = plugin.getBlockRestoreModule();
         java.util.Collection<Arena> arenas = ArenaManager.getInstance().getAll();
         if (arenas.isEmpty()) {
-            MessageUtil.send(sender, "<red>No arenas found.");
+            MessageUtil.send(sender, "<red>No arenas exist yet, so nothing can be snapshotted. <gray>Create one with <white>/oa create <name></white>.");
             return;
         }
         int count = 0;
@@ -200,7 +200,7 @@ public class OverrideCommand extends SubCommand {
 
     private void resetStats(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa override resetstats <player>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa override resetstats <player>"));
             return;
         }
         OfflinePlayer player = Bukkit.getPlayerExact(args[1]);
@@ -215,7 +215,7 @@ public class OverrideCommand extends SubCommand {
 
     private Arena resolveArena(CommandSender sender, String[] args, int index) {
         if (args.length <= index) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>" + getUsage());
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa override").replace("{usage}", getUsage()));
             return null;
         }
         Optional<Arena> arena = ArenaManager.getInstance().get(args[index]);
@@ -228,26 +228,26 @@ public class OverrideCommand extends SubCommand {
 
     private void forceWin(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa override forcewin <arena> <player|team>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa override forcewin <arena> <player|team>"));
             return;
         }
         Arena arena = resolveArena(sender, args, 1);
         if (arena == null) return;
         Optional<Match> match = MatchManager.getInstance().getMatch(arena);
         if (match.isEmpty()) {
-            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
             return;
         }
 
         Match mt = match.get();
         if (mt.getState() != com.omniarena.match.MatchState.RUNNING) {
-            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is not running.");
+            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is not in the RUNNING state. <gray>Force-win only works on a running match; check <white>/oa info " + arena.getName() + "</white>.");
             return;
         }
         String target = args[2];
         Player player = Bukkit.getPlayerExact(target);
         if (player != null && !mt.hasPlayer(player.getUniqueId())) {
-            MessageUtil.send(sender, "<red>" + player.getName() + " is not playing in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, "<red>" + player.getName() + " is not playing in <yellow>" + arena.getName() + "</yellow>, so they can't be given the win. <gray>Pick a participant (tab-complete).");
             return;
         }
         if (player == null) {
@@ -275,16 +275,16 @@ public class OverrideCommand extends SubCommand {
                 .filter(m -> m.getArena().getName().equals(arena.getName()))
                 .findFirst();
         if (matchOpt.isEmpty()) {
-            MessageUtil.send(sender, "<red>No active match in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
             return;
         }
         Match match = matchOpt.get();
         if (match.getState() == com.omniarena.match.MatchState.RUNNING || match.getState() == com.omniarena.match.MatchState.ENDING) {
-            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + match.getState().name().toLowerCase() + ".");
+            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + match.getState().name().toLowerCase() + ". <gray>Stop it first with <white>/oa match stop " + arena.getName() + "</white> to restart.");
             return;
         }
         if (match.getPlayerCount() < 1) {
-            MessageUtil.send(sender, "<red>No players in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no players, so a match can't start. <gray>Have players join first (<white>/oa join " + arena.getName() + "</white>).");
             return;
         }
         match.cancelTasks();
@@ -297,7 +297,7 @@ public class OverrideCommand extends SubCommand {
         if (arena == null) return;
         MatchManager matchManager = MatchManager.getInstance();
         if (!arena.isEnabled()) {
-            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> is disabled.");
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> is disabled, so no match can start. <gray>Enable it with <white>/oa enable " + arena.getName() + "</white>.");
             return;
         }
         Optional<Match> existingMatch = matchManager.getMatch(arena);
@@ -307,7 +307,7 @@ public class OverrideCommand extends SubCommand {
         }
         Match match = existingMatch.get();
         if (match.getState() == com.omniarena.match.MatchState.RUNNING || match.getState() == com.omniarena.match.MatchState.ENDING) {
-            MessageUtil.send(sender, "<red>Match already " + match.getState().name().toLowerCase() + " in <yellow>" + arena.getName() + "</yellow>.");
+            MessageUtil.send(sender, "<red>The match in <yellow>" + arena.getName() + "</yellow> is already " + match.getState().name().toLowerCase() + ". <gray>Stop it with <white>/oa match stop " + arena.getName() + "</white> first if you want a restart.");
             return;
         }
         match.cancelTasks();

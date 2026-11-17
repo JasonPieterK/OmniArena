@@ -20,7 +20,6 @@ arena:
   respawn-delay: 3  # seconds
   spawn-protection: 3  # seconds of invulnerability on spawn
   inventory-restore: true  # restore player gear on leave
-  persist-player-state: true  # save pre-arena player state to disk so crashes can't lose items
   persist-player-state: true  # also write each player's pre-arena state to plugins/OmniArena/player-states/<uuid>.yml (async) so a crash cannot lose inventories; restored + deleted on next join
   region-protection: true  # block break/place inside arena regions while no match is running (admins bypass)
 
@@ -34,6 +33,7 @@ match:
   announce-arena: true
 
 regen:
+  auto: true  # rebuild the arena from its snapshot after every match (per arena: regen.arenas.<name>.auto)
   batch-size: 4000  # blocks restored per tick; higher = faster, lower = smoother
   progress:
     enabled: true

@@ -53,6 +53,7 @@ public class RegenCommand extends SubCommand {
         }
 
         Arena arena = arenaOpt.get();
+        if (restoreBusy(sender, arena)) return;
         if (com.omniarena.match.MatchManager.getInstance().getMatch(arena).isPresent()) {
             MessageUtil.send(sender, "<red>Cannot regenerate <yellow>" + arena.getName() + "</yellow> while a match is active.");
             return;
@@ -69,7 +70,19 @@ public class RegenCommand extends SubCommand {
         restore.restore(arena,
                 (done, total) -> sendProgress(sender, arena.getName(), done, total, lastPercent),
                 () -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-complete").replace("{arena}", arena.getName())),
-                () -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-failed").replace("{arena}", arena.getName())));
+                () -> {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-failed").replace("{arena}", arena.getName()));
+                    String why = restore.getLastError(arena.getName());
+                    if (why != null) MessageUtil.send(sender, "<red>" + why);
+                });
+    }
+
+    private boolean restoreBusy(CommandSender sender, Arena arena) {
+        if (plugin.getBlockRestoreModule().isRegenerating(arena.getName())) {
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> is already being regenerated.");
+            return true;
+        }
+        return false;
     }
 
     private void handleSnapshot(CommandSender sender, String[] args) {
@@ -91,8 +104,9 @@ public class RegenCommand extends SubCommand {
         }
 
         MessageUtil.send(sender, "<yellow>Creating snapshot for <yellow>" + args[1] + "</yellow>...");
-        plugin.getBlockRestoreModule().createSnapshot(arena, () ->
-                MessageUtil.send(sender, "<green>Snapshot saved for <yellow>" + args[1] + "</yellow>."));
+        plugin.getBlockRestoreModule().createSnapshot(arena,
+                () -> MessageUtil.send(sender, "<green>Snapshot saved for <yellow>" + args[1] + "</yellow>."),
+                why -> MessageUtil.send(sender, "<red>Snapshot failed: " + why));
     }
 
     private void handleStyle(CommandSender sender, String[] args) {
@@ -151,7 +165,7 @@ public class RegenCommand extends SubCommand {
     private void showSettings(CommandSender sender) {
         var cfg = ConfigManager.getInstance().getConfig();
         MessageUtil.send(sender, "<gold>=== Regen Settings ===");
-        MessageUtil.send(sender, "<gray>Default style: <yellow>" + cfg.getString("regen.animation.type", "WAVE_SHUFFLE"));
+        MessageUtil.send(sender, "<gray>Default style: <yellow>" + RegenAnimationType.fromConfig(cfg.getString("regen.animation.type", "CENTER_OUT")).name());
         MessageUtil.send(sender, "<gray>Batch size: <yellow>" + cfg.getInt("regen.batch-size", 4000) + "</yellow> blocks/tick");
         MessageUtil.send(sender, "<gray>Progress bar: <yellow>" + cfg.getBoolean("regen.progress.enabled", true));
         MessageUtil.send(sender, "<gray>Particles: <yellow>" + cfg.getBoolean("regen.animation.particles", true));

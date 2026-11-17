@@ -41,7 +41,7 @@ public class TournamentManager {
             for (Tournament t : new ArrayList<>(tournaments.values())) {
                 if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
                 try { launchPendingMatches(t); }
-                catch (Exception e) { plugin.getLogger().warning("Tournament tick failed for " + t.getName() + ": " + e.getMessage()); }
+                catch (Exception e) { plugin.getLogger().warning("Tournament tick failed for '" + t.getName() + "' (" + e + "). The tournament keeps running; if this repeats, delete it with /tournament delete " + t.getName() + " and recreate it."); }
             }
         }, 100L, 100L);
     }
@@ -50,16 +50,16 @@ public class TournamentManager {
 
     public boolean createTournament(Player creator, String name, String arenaName, int maxPlayers) {
         if (tournaments.containsKey(name.toLowerCase())) {
-            MessageUtil.send(creator, "<red>Tournament '<yellow>" + name + "</yellow>' already exists.");
+            MessageUtil.send(creator, "<red>A tournament named '<yellow>" + name + "</yellow>' already exists. <gray>Pick another name, or join it with <white>/tournament join " + name + "</white>.");
             return false;
         }
         Arena arena = plugin.getArenaManager().get(arenaName).orElse(null);
         if (arena == null) {
-            MessageUtil.send(creator, "<red>Arena not found: <yellow>" + arenaName);
+            MessageUtil.send(creator, com.omniarena.config.ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", arenaName));
             return false;
         }
         if (maxPlayers < 2) {
-            MessageUtil.send(creator, "<red>Tournament needs at least 2 players.");
+            MessageUtil.send(creator, "<red>A tournament needs a max player count of at least 2 (you gave " + maxPlayers + "). <gray>Usage: <white>/tournament create <name> <arena> <maxPlayers></white>, e.g. <white>/tournament create " + name + " " + arenaName + " 8</white>.");
             return false;
         }
 
@@ -77,18 +77,18 @@ public class TournamentManager {
     public boolean joinTournament(Player player, String name) {
         Tournament t = getTournament(name);
         if (t == null) {
-            MessageUtil.send(player, "<red>Tournament not found: <yellow>" + name);
+            MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance().getMessage("tournament-not-found").replace("{name}", name));
             return false;
         }
         if (t.getState() != TournamentState.REGISTRATION) {
-            MessageUtil.send(player, "<red>Tournament is not accepting registrations.");
+            MessageUtil.send(player, "<red>Tournament <yellow>" + t.getName() + "</yellow> is not accepting registrations (state: " + t.getState().name() + "). <gray>Only tournaments in REGISTRATION can be joined; see <white>/tournament list</white>.");
             return false;
         }
         if (!t.addParticipant(player.getUniqueId())) {
             if (t.hasPlayer(player.getUniqueId()))
-                MessageUtil.send(player, "<red>Already registered.");
+                MessageUtil.send(player, "<red>You are already registered in <yellow>" + t.getName() + "</yellow>. <gray>Leave with <white>/tournament leave " + t.getName() + "</white> if you want out.");
             else
-                MessageUtil.send(player, "<red>Tournament is full.");
+                MessageUtil.send(player, "<red>Tournament <yellow>" + t.getName() + "</yellow> is full (" + t.getMaxPlayers() + " players). <gray>Join another one (<white>/tournament list</white>) or ask the creator to create a bigger bracket.");
             return false;
         }
 
@@ -106,11 +106,11 @@ public class TournamentManager {
     public boolean leaveTournament(Player player, String name) {
         Tournament t = getTournament(name);
         if (t == null) {
-            MessageUtil.send(player, "<red>Tournament not found: <yellow>" + name);
+            MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance().getMessage("tournament-not-found").replace("{name}", name));
             return false;
         }
         if (!t.removeParticipant(player.getUniqueId())) {
-            MessageUtil.send(player, "<red>Not registered or tournament already started.");
+            MessageUtil.send(player, "<red>You are not registered in <yellow>" + t.getName() + "</yellow>, or it already started (you can't leave mid-bracket). <gray>Check <white>/tournament status " + t.getName() + "</white>.");
             return false;
         }
         MessageUtil.send(player, "<yellow>Left tournament <white>" + t.getName() + "</white>.");
@@ -120,13 +120,13 @@ public class TournamentManager {
 
     public void startTournament(Tournament t, Player requester) {
         if (t.getState() != TournamentState.REGISTRATION) {
-            if (requester != null) MessageUtil.send(requester, "<red>Tournament already started.");
+            if (requester != null) MessageUtil.send(requester, "<red>Tournament <yellow>" + t.getName() + "</yellow> already started (state: " + t.getState().name() + "). <gray>See <white>/tournament status " + t.getName() + "</white>.");
             return;
         }
         // Drop players who went offline during registration so they don't distort the bracket
         t.getParticipants().removeIf(u -> Bukkit.getPlayer(u) == null);
         if (t.getParticipants().size() < 2) {
-            if (requester != null) MessageUtil.send(requester, "<red>Need at least 2 online players.");
+            if (requester != null) MessageUtil.send(requester, "<red>Can't start <yellow>" + t.getName() + "</yellow>: fewer than 2 registered players are online (offline players are dropped). <gray>Wait for more players to <white>/tournament join " + t.getName() + "</white>, then run <white>/tournament start " + t.getName() + "</white> again.");
             saveAll();
             return;
         }
@@ -145,7 +145,7 @@ public class TournamentManager {
     public boolean deleteTournament(String name, Player admin) {
         Tournament t = getTournament(name);
         if (t == null) {
-            if (admin != null) MessageUtil.send(admin, "<red>Tournament not found: <yellow>" + name);
+            if (admin != null) MessageUtil.send(admin, com.omniarena.config.ConfigManager.getInstance().getMessage("tournament-not-found").replace("{name}", name));
             return false;
         }
         t.setState(TournamentState.CANCELLED);
@@ -372,7 +372,7 @@ public class TournamentManager {
         if (uuid == null || amount <= 0) return;
         var vault = plugin.getIntegrationManager() != null ? plugin.getIntegrationManager().getVault() : null;
         if (vault == null) {
-            plugin.getLogger().warning("Tournament " + t.getName() + ": no economy, " + place + " prize not paid.");
+            plugin.getLogger().warning("Tournament '" + t.getName() + "': no economy provider, so the " + place + " prize was not paid. Fix: install Vault + an economy plugin, or set the prize to 0 with /tournament setprize " + t.getName() + " <1st|2nd|3rd> 0.");
             return;
         }
         org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
@@ -441,7 +441,7 @@ public class TournamentManager {
                 }
                 tournaments.put(t.getName().toLowerCase(), t);
             } catch (Exception e) {
-                plugin.getLogger().warning("Skipping invalid tournament '" + key + "': " + e.getMessage());
+                plugin.getLogger().warning("Skipping invalid tournament '" + key + "' in tournaments.yml (" + e + "). Fix: correct or remove the '" + key + "' section in plugins/OmniArena/tournaments.yml (arena name and participants must be valid), then /oa reload.");
             }
         }
         plugin.getLogger().info("Loaded " + tournaments.size() + " tournament(s).");
@@ -451,7 +451,7 @@ public class TournamentManager {
             for (Tournament t : tournaments.values()) {
                 if (t.getState() == TournamentState.IN_PROGRESS) {
                     try { resume(t); } catch (Exception e) {
-                        plugin.getLogger().warning("Failed to resume tournament " + t.getName() + ": " + e.getMessage());
+                        plugin.getLogger().warning("Failed to resume tournament '" + t.getName() + "' (" + e + "). Fix: check that its arena '" + t.getArenaName() + "' still exists and is enabled, or delete it with /tournament delete " + t.getName() + ".");
                     }
                 }
             }

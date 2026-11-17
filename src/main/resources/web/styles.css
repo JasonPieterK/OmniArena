@@ -408,3 +408,4 @@ select.input{cursor:pointer;appearance:none;
 .no-icons i.ph-bold{display:none;}
 .no-icons .totop::after{content:'\2191';font-weight:800;}
 .btn-icon{padding:8px 11px;}
+body.busy{cursor:progress;}

@@ -495,52 +495,85 @@
   }
 
   // ── Apply / save / create / delete ─────────────────────────────────────
-  async function applyAll() {
-    const btn = $('applyBtn');
-    btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch"></i> Applying…';
-    try {
-      await api('/api/apply', { method: 'POST',
-        body: JSON.stringify({ globals: S.draftGlobals, arena: S.selectedArena, arenaSettings: S.draftArena }) });
-      confettiBurst();
-      toast('Changes applied!');
-      S.dirty = false;
-      await load();
-    } catch (e) {
-      toast('Apply failed: ' + e.message, 'error');
-      btn.disabled = false;
-    }
-    btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Apply';
+  // Runs fn once at a time; ignores clicks while another write is in flight (double-submit guard).
+  async function guarded(fn) {
+    if (S.busy || S.expired) return;
+    S.busy = true;
+    document.body.classList.add('busy');
+    try { await fn(); } finally { S.busy = false; document.body.classList.remove('busy'); }
   }
 
-  async function saveArena() {
-    try {
-      await api('/api/apply', { method: 'POST',
-        body: JSON.stringify({ arena: S.selectedArena, arenaSettings: S.draftArena }) });
-      toast('Arena saved');
-      await load();
-    } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+  const APPLY_LABEL = '<i class="ph-bold ph-check-circle"></i> Apply';
+
+  function applyAll() {
+    return guarded(async () => {
+      const btn = $('applyBtn');
+      btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch"></i> Applying…';
+      try {
+        const body = { globals: S.draftGlobals };
+        if (S.selectedArena) { body.arena = S.selectedArena; body.arenaSettings = S.draftArena; }
+        await api('/api/apply', { method: 'POST', body: JSON.stringify(body) });
+        confettiBurst();
+        toast('Changes applied!');
+        S.dirty = false;
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) {
+        toast('Apply failed: ' + e.message, 'error');
+        btn.disabled = S.expired;
+      }
+      btn.innerHTML = APPLY_LABEL;
+    });
   }
 
-  async function createArena() {
-    const name = prompt('New arena name:');
-    if (!name?.trim()) return;
-    try {
-      await api('/api/create-arena', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
-      toast('Arena "' + name.trim() + '" created');
-      S.selectedArena = name.trim();
-      await load();
-    } catch (e) { toast('Create failed: ' + e.message, 'error'); }
+  function saveArena() {
+    return guarded(async () => {
+      try {
+        await api('/api/apply', { method: 'POST',
+          body: JSON.stringify({ arena: S.selectedArena, arenaSettings: S.draftArena }) });
+        toast('Arena saved');
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+    });
   }
 
-  async function deleteArena() {
-    if (!S.selectedArena) return;
+  function createArena() {
+    if (S.busy || S.expired) return;
+    const name = (prompt('New arena name (letters, digits, _ or -, max 32):') || '').trim();
+    if (!name) return;
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(name)) { toast('Invalid arena name: use letters, digits, _ or - (max 32).', 'error'); return; }
+    return guarded(async () => {
+      try {
+        await api('/api/create-arena', { method: 'POST', body: JSON.stringify({ name }) });
+        toast('Arena "' + name + '" created');
+        S.selectedArena = name;
+        S.busy = false; await load(); S.busy = true;
+        // server stores arena names as typed; make sure the editor opens it
+        const created = (S.snapshot?.arenas || []).find(a => a.name.toLowerCase() === name.toLowerCase());
+        if (created && S.selectedArena !== created.name) { S.selectedArena = created.name; S.draftArena = cloneArena(created); renderArenaList(); renderArenaEditor(); }
+      } catch (e) { toast('Create failed: ' + e.message, 'error'); }
+    });
+  }
+
+  function deleteArena() {
+    if (!S.selectedArena || S.busy || S.expired) return;
     if (!confirm('Delete arena "' + S.selectedArena + '"? This cannot be undone.')) return;
-    try {
-      await api('/api/delete-arena', { method: 'POST', body: JSON.stringify({ name: S.selectedArena }) });
-      toast('Arena deleted');
-      S.selectedArena = null;
-      await load();
-    } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+    return guarded(async () => {
+      try {
+        await api('/api/delete-arena', { method: 'POST', body: JSON.stringify({ name: S.selectedArena }) });
+        toast('Arena deleted');
+        S.selectedArena = null;
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+    });
+  }
+
+  async function logout() {
+    try { await api('/api/logout', { method: 'POST', body: '{}' }); } catch (e) { /* already gone */ }
+    try { sessionStorage.removeItem('omniarena-token'); } catch (e) {}
+    S.token = ''; S.expired = true; stopLivePolling();
+    setStatus(false, 'Logged out');
+    $('applyBtn').disabled = true;
+    toast('Logged out. Run /oa website for a new link.');
   }
 
   // ── Arena draft helpers (matches Java ArenaView json) ──────────────────
@@ -608,14 +641,16 @@
 
   // ── Theme Toggle ─────────────────────────────────────────────────────────
   function initTheme() {
-    const saved = localStorage.getItem('omniarena-theme') || 'light';
+    if (!$('themeToggle')) return; // no theme switch in the UI
+    let saved = 'light';
+    try { saved = localStorage.getItem('omniarena-theme') || 'light'; } catch (e) {}
     document.documentElement.setAttribute('data-theme', saved);
     updateThemeIcon(saved);
     $('themeToggle').addEventListener('click', () => {
       const current = document.documentElement.getAttribute('data-theme') || 'light';
       const next = current === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('omniarena-theme', next);
+      try { localStorage.setItem('omniarena-theme', next); } catch (e) {}
       updateThemeIcon(next);
     });
   }
@@ -631,6 +666,9 @@
     initTheme();
     $('refreshBtn').addEventListener('click', load);
     $('applyBtn').addEventListener('click', applyAll);
+    $('logoutBtn').addEventListener('click', logout);
+    window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+    window.addEventListener('load', detectIcons);
     $('createArenaBtn').addEventListener('click', createArena);
 
     $('cfgSearch').addEventListener('input', (e) => { S.cfgQuery = e.target.value; renderConfig(); });
@@ -651,21 +689,26 @@
   }
 
   // ── Live Matches ───────────────────────────────────────────────────────
-  let liveMatchInterval = null;
+  let liveMatchTimer = null;
+  function stopLivePolling() { if (liveMatchTimer) { clearTimeout(liveMatchTimer); liveMatchTimer = null; } }
+  function liveTabActive() { return $('tab-live').classList.contains('active'); }
   async function loadLiveMatches() {
+    stopLivePolling();
+    if (S.expired || !S.token) return;
     try {
       const data = await api('/api/live-matches');
       renderLiveMatches(data);
-      if (liveMatchInterval) clearInterval(liveMatchInterval);
-      liveMatchInterval = setInterval(loadLiveMatches, 5000);
     } catch (e) {
-      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-warning-circle"></i><p>Failed to load live matches</p></div>';
+      if (e.status === 401) return;
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-warning-circle"></i><p>Failed to load live matches: ' + esc(e.message) + '</p></div>';
     }
+    // poll only while the Live tab is open and the browser tab is visible
+    if (liveTabActive() && !S.expired) liveMatchTimer = setTimeout(loadLiveMatches, 5000);
   }
 
   function renderLiveMatches(matches) {
     if (!matches || matches.length === 0) {
-      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-soccer-ball"></i><p>No live matches currently</p></div>';
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-soccer-ball"></i><p>No live matches right now. Matches appear here once an arena starts.</p></div>';
       return;
     }
     $('liveMatchesGrid').innerHTML = matches.map(m => {
@@ -747,17 +790,18 @@
   // ── Players ───────────────────────────────────────────────────────────
   async function loadPlayers() {
     const query = $('playerSearch').value.trim();
+    if (S.expired || !S.token) return;
     try {
       const data = await api(`/api/players${query ? '?search=' + encodeURIComponent(query) : ''}`);
       renderPlayers(data);
     } catch (e) {
-      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>Failed to load players</p></div>';
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>Failed to load players: ' + esc(e.message) + '</p></div>';
     }
   }
 
   function renderPlayers(players) {
     if (!players || players.length === 0) {
-      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>No players found</p></div>';
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>No online players found.</p></div>';
       return;
     }
     $('playersGrid').innerHTML = players.map(p => `
@@ -780,7 +824,7 @@
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">K/D</div>
-            <div class="player-card-stat-value">${esc(Number(p.kd).toFixed(2))}</div>
+            <div class="player-card-stat-value">${esc((Number(p.kd) || 0).toFixed(2))}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">Matches</div>
@@ -789,6 +833,19 @@
         </div>
       </div>
     `).join('');
+  }
+
+  // If the icon font (unpkg) did not load, hide the empty glyph boxes; labels remain.
+  function detectIcons() {
+    try {
+      const probe = document.createElement('i');
+      probe.className = 'ph-bold ph-check-circle';
+      probe.style.cssText = 'position:absolute;visibility:hidden';
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe, '::before').content;
+      probe.remove();
+      if (!c || c === 'none' || c === 'normal') document.documentElement.classList.add('no-icons');
+    } catch (e) { /* ignore */ }
   }
 
   function debounce(fn, delay) {

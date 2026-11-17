@@ -782,8 +782,50 @@ public class MatchManager {
             else playerArena.remove(uuid);
         }
         match.getSpectators().clear();
-        match.getArena().setState(ArenaState.WAITING);
+        // After a played match the arena stays RESETTING until the block regen finishes
+        if (!startAutoRegen(match)) match.getArena().setState(ArenaState.WAITING);
         plugin.getBettingManager().onMatchCleanup(match.getArena().getName());
+    }
+
+    /**
+     * Restores the arena blocks from its snapshot after a finished match. The arena is RESETTING (not joinable)
+     * until the regen completes; it returns to WAITING on completion, and also on failure so it never stays stuck.
+     * @return true if a regen was started (the callbacks then own the WAITING transition)
+     */
+    private boolean startAutoRegen(Match match) {
+        Arena arena = match.getArena();
+        if (match.getState() != MatchState.RESETTING || plugin.isStopped() || !plugin.isEnabled()) return false;
+        var restore = plugin.getBlockRestoreModule();
+        if (restore == null || !arena.getRegion().isDefined()) return false;
+        var cfg = ConfigManager.getInstance().getConfig();
+        String path = "regen.arenas." + arena.getName().toLowerCase() + ".auto";
+        boolean auto = cfg.isSet(path) ? cfg.getBoolean(path) : cfg.getBoolean("regen.auto", true);
+        if (!auto) return false;
+        String name = arena.getName();
+        if (!restore.hasSnapshot(name)) {
+            plugin.getLogger().warning("Auto-regen skipped for arena " + name + ": no snapshot. Run /oa regen snapshot " + name + ".");
+            notifyAdmins("<red>Arena <yellow>" + name + "</yellow> was not regenerated: no snapshot. Run <yellow>/oa regen snapshot " + name + "</yellow>.");
+            return false;
+        }
+        arena.setState(ArenaState.RESETTING);
+        Runnable release = () -> {
+            // Do not override an admin disabling/maintaining the arena or a newer match meanwhile
+            if (arena.getState() == ArenaState.RESETTING && !activeMatches.containsKey(name)) arena.setState(ArenaState.WAITING);
+        };
+        restore.restore(arena, release, () -> {
+            String why = restore.getLastError(name);
+            plugin.getLogger().severe("Auto-regen failed for arena " + name + (why != null ? ": " + why : "."));
+            notifyAdmins("<red>Auto-regen of arena <yellow>" + name + "</yellow> failed. "
+                    + (why != null ? why : "See console.") + " The arena was reopened with its current blocks.");
+            release.run();
+        });
+        return true;
+    }
+
+    private void notifyAdmins(String miniMessage) {
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.hasPermission("omniarena.admin") || p.hasPermission("omniarena.admin.arena")) MessageUtil.send(p, miniMessage);
+        }
     }
 
     // ── Team assignment ───────────────────────────────────────────
