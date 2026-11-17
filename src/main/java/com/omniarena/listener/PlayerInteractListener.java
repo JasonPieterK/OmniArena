@@ -26,6 +26,7 @@ import java.util.Optional;
 public class PlayerInteractListener implements Listener {
 
     private final OmniArena plugin;
+    private final java.util.Map<java.util.UUID, Long> signClickCooldown = new java.util.concurrent.ConcurrentHashMap<>();
 
     public PlayerInteractListener(OmniArena plugin) {
         this.plugin = plugin;
@@ -76,15 +77,34 @@ public class PlayerInteractListener implements Listener {
     public void onInteract(PlayerInteractEvent event) {
         if (plugin.isStopped()) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        // Right-click fires once per hand: only react to the main hand so we don't double-handle
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
         Block block = event.getClickedBlock();
         if (block == null) return;
 
         Player player = event.getPlayer();
         SignManager sm = SignManager.getInstance();
 
-        if (!sm.isArenaSign(block)) return;
+        if (sm == null || !sm.isArenaSign(block)) return;
 
         event.setCancelled(true);
+        // Admins sneaking with an item in hand can edit/dye/wax the sign normally
+        if (player.isSneaking() && player.getInventory().getItemInMainHand().getType() != org.bukkit.Material.AIR
+                && com.omniarena.permission.PermissionChecker.hasAdminSign(player)) {
+            event.setCancelled(false);
+            return;
+        }
+
+        // Click cooldown (ms) so double-clicks / spam don't fire twice
+        long now = System.currentTimeMillis();
+        Long last = signClickCooldown.get(player.getUniqueId());
+        if (last != null && now - last < 750) return;
+        signClickCooldown.put(player.getUniqueId(), now);
+
+        if (!com.omniarena.permission.PermissionChecker.canUse(player)) {
+            MessageUtil.send(player, "<red>You don't have permission to join arenas. <gray>Ask an admin for the <white>omniarena.use</white> permission.");
+            return;
+        }
         Optional<ArenaSign> signOpt = sm.getSign(block);
         if (signOpt.isEmpty()) return;
 
@@ -117,6 +137,12 @@ public class PlayerInteractListener implements Listener {
                     .clickEvent(ClickEvent.runCommand("/oa spectate " + arenaName))
                     .hoverEvent(HoverEvent.showText(ColorUtil.parse("<gray>Click to spectate")));
             player.sendMessage(msg);
+            return;
+        }
+
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null && qm.isQueued(player)) {
+            MessageUtil.send(player, "<red>You are in a queue, so you can't join an arena directly. <gray>Leave the queue first with <white>/oa queue leave</white>.");
             return;
         }
 

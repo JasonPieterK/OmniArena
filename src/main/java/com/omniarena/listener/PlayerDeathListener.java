@@ -113,6 +113,7 @@ public class PlayerDeathListener implements Listener {
 
             // Killstreak
             KillstreakModule.getInstance().handleKill(killer, match);
+            plugin.getModuleManager().getComboModule().handleKill(killer, match);
 
             // Team kill
             if (arena.getTeamConfig().isEnabled()) {
@@ -125,6 +126,8 @@ public class PlayerDeathListener implements Listener {
             match.resetStreak(victim.getUniqueId());
             match.resetCombo(victim.getUniqueId());
         }
+
+        plugin.getModuleManager().getComboModule().clear(victim.getUniqueId());
 
         // Death effect
         plugin.getVisual().getEffectManager().playDeathEffect(victim.getLocation());

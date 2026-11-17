@@ -38,6 +38,11 @@ public class EntityDamageListener implements Listener {
         if (arenaOpt.isEmpty()) return;
 
         Arena arena = arenaOpt.get();
+        // Spectators are untouchable
+        if (mm.isSpectating(victim)) {
+            event.setCancelled(true);
+            return;
+        }
         Optional<Match> matchOpt = mm.getMatch(arena);
         if (matchOpt.isEmpty() || matchOpt.get().getState() != MatchState.RUNNING) {
             event.setCancelled(true);
@@ -81,13 +86,10 @@ public class EntityDamageListener implements Listener {
     public void onPvP(EntityDamageByEntityEvent event) {
         if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
-        if (!(event.getDamager() instanceof Player attacker) &&
-            !(event.getDamager() instanceof org.bukkit.entity.Projectile)) return;
 
         MatchManager mm = MatchManager.getInstance();
-        Player shooter = null;
-        if (event.getDamager() instanceof Player pa) shooter = pa;
-        else if (event.getDamager() instanceof org.bukkit.entity.Projectile pr && pr.getShooter() instanceof Player ps) shooter = ps;
+        // Player, projectile shooter, pet owner, TNT igniter, potion-cloud thrower
+        Player shooter = com.omniarena.combat.CombatListener.resolveSource(event.getDamager());
 
         // Arena fighters can't hurt outsiders, and outsiders/other matches/spectators can't hurt them
         if (shooter != null && !shooter.equals(victim)) {
@@ -124,12 +126,10 @@ public class EntityDamageListener implements Listener {
 
         // Friendly fire check
         if (!arena.getRules().isFriendlyFire() && arena.getTeamConfig().isEnabled()) {
-            Player realAttacker = null;
-            if (event.getDamager() instanceof Player) realAttacker = (Player) event.getDamager();
-            else if (event.getDamager() instanceof org.bukkit.entity.Projectile proj &&
-                     proj.getShooter() instanceof Player) realAttacker = (Player) proj.getShooter();
+            Player realAttacker = shooter;
 
-            if (realAttacker != null) {
+            // Self-inflicted damage (own arrow/TNT) is never friendly fire
+            if (realAttacker != null && !realAttacker.equals(victim)) {
                 var victimTeam   = match.getTeam(victim.getUniqueId());
                 var attackerTeam = match.getTeam(realAttacker.getUniqueId());
                 if (victimTeam != null && victimTeam.equals(attackerTeam)) {

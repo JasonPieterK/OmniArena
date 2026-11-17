@@ -64,7 +64,7 @@ public class WebDashboardServer {
                 Throwable root = t instanceof java.util.concurrent.ExecutionException && t.getCause() != null ? t.getCause() : t;
                 plugin.getLogger().warning("[Web] Request failed for " + path + ": " + root);
                 boolean busy = root instanceof java.util.concurrent.TimeoutException;
-                try { err(exchange, busy ? 503 : 500, busy ? "Server is busy, try again." : "Internal error (see server console)."); } catch (Throwable ignored) {}
+                try { err(exchange, busy ? 503 : 500, busy ? "Server is busy, try again." : "Internal error while handling this request. Reload and retry; if it persists an admin should check the server console for the '[Web] Request failed' line."); } catch (Throwable ignored) {}
             }
         });
     }
@@ -206,7 +206,7 @@ public class WebDashboardServer {
         if (!requireMethod(exchange, "GET")) return;
         String path = exchange.getRequestURI().getPath();
         if (!"/".equals(path) && !"/index.html".equals(path)) {
-            err(exchange, 404, "Not found.");
+            err(exchange, 404, "Unknown dashboard endpoint. Reload the page; if it persists the dashboard and plugin versions may differ.");
             return;
         }
         sendResource(exchange, "web/index.html", "text/html; charset=utf-8");
@@ -476,7 +476,7 @@ public class WebDashboardServer {
                 os.write(bytes);
             }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to send resource " + resourcePath + ": " + e.getMessage());
+            plugin.getLogger().warning("Failed to send dashboard resource " + resourcePath + " (" + e + "). The client likely disconnected; reload the page, or check the plugin jar if it persists.");
             try { send(exchange, 500, "Internal Server Error", "text/plain; charset=utf-8"); } catch (Exception ignored) {}
         } finally {
             exchange.close();
@@ -494,7 +494,7 @@ public class WebDashboardServer {
                 os.write(bytes);
             }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to send response: " + e.getMessage());
+            plugin.getLogger().warning("Failed to send dashboard response (" + e + "); the browser probably closed the connection, reload the page.");
         } finally {
             exchange.close();
         }

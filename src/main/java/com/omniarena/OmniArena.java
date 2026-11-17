@@ -207,6 +207,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new FoodLevelChangeListener(this), this);
         pm.registerEvents(new PlayerDropItemListener(this), this);
         pm.registerEvents(new PlayerInteractListener(this),  this);
+        pm.registerEvents(new com.omniarena.listener.SignListener(this), this);
         pm.registerEvents(new PlayerMoveListener(this),      this);
         pm.registerEvents(new PlayerTeleportListener(this),  this);
         pm.registerEvents(new GameModeRulesListener(this),   this);
@@ -303,6 +304,7 @@ public final class OmniArena extends JavaPlugin {
         try { if (blockRestoreModule != null) blockRestoreModule.cancelAll(); } catch (Exception e) { getLogger().warning("Regen shutdown failed: " + e.getMessage()); }
 
         // Stop periodic systems
+        try { if (combatManager != null) combatManager.shutdown(); } catch (Exception e) { getLogger().warning("Combat shutdown failed: " + e.getMessage()); }
         try { if (queueManager != null) queueManager.stop(); } catch (Exception e) { getLogger().warning("Queue stop failed: " + e.getMessage()); }
         try { if (partyManager != null) partyManager.stop(); } catch (Exception e) { getLogger().warning("Party stop failed: " + e.getMessage()); }
 

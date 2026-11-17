@@ -91,6 +91,8 @@ public class ArenaManager {
         if (name == null || name.isBlank()) return false;
         Arena removed = arenas.remove(name.toLowerCase());
         if (removed != null) {
+            var sm = com.omniarena.sign.SignManager.getInstance();
+            if (sm != null) sm.clearSigns(removed);
             arenaConfig.delete(name);
             return true;
         }

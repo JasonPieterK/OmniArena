@@ -125,6 +125,7 @@ public class ArenaConfig {
         for (String signStr : signList) {
             Location loc = LocationUtil.deserialize(signStr);
             if (loc != null) arena.getSigns().add(new ArenaSign(loc, name));
+            else com.omniarena.OmniArena.getInstance().getLogger().warning("Arena '" + name + "': skipped invalid sign entry '" + signStr + "' (bad format or world not loaded). Fix: edit the 'signs' list in arenas/" + name + ".yml, or re-create the sign with /oa sign create " + name + ".");
         }
 
         // End commands

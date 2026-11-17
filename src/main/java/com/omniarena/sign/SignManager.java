@@ -47,6 +47,8 @@ public class SignManager {
 
     public boolean createSign(Arena arena, Block block) {
         if (!isSign(block)) return false;
+        // A block can only belong to one arena: drop any earlier registration first
+        if (getSign(block).isPresent()) removeSign(block);
         ArenaSign sign = new ArenaSign(block.getLocation(), arena.getName());
         arena.getSigns().add(sign);
         ArenaManager.getInstance().save(arena);
@@ -72,21 +74,71 @@ public class SignManager {
         if (!isSign(block)) return;
         Sign sign = (Sign) block.getState();
 
-        Optional<Match> match = MatchManager.getInstance().getMatch(arena);
-        int players = match.map(m -> m.getPlayerCount()).orElse(0);
+        int players = MatchManager.getInstance().getMatch(arena).map(m -> m.getPlayerCount()).orElse(0);
         int max = arena.getMaxPlayers();
-        ArenaState state = arena.getState();
 
-        Component line1 = ColorUtil.parse("<dark_aqua><bold>[OmniArena]</bold></dark_aqua>");
-        Component line2 = ColorUtil.parse("<yellow>" + arena.getName());
-        Component line3 = buildStatusLine(state, players, max);
-        Component line4 = ColorUtil.parse("<gray>" + players + "/" + max + " players");
+        Component[] lines = {
+                ColorUtil.parse("<dark_aqua><bold>[OmniArena]</bold></dark_aqua>"),
+                // Plain text component: arena names are never parsed as MiniMessage/legacy codes
+                Component.text(arena.getName(), net.kyori.adventure.text.format.NamedTextColor.YELLOW),
+                buildStatusLine(arena.getState(), players, max),
+                ColorUtil.parse("<gray>" + players + "/" + max + " players")
+        };
+        boolean changed = false;
+        for (Side side : Side.values()) {
+            for (int i = 0; i < 4; i++) {
+                if (!lines[i].equals(sign.getSide(side).line(i))) {
+                    sign.getSide(side).line(i, lines[i]);
+                    changed = true;
+                }
+            }
+        }
+        if (changed) sign.update();
+    }
 
-        sign.getSide(Side.FRONT).line(0, line1);
-        sign.getSide(Side.FRONT).line(1, line2);
-        sign.getSide(Side.FRONT).line(2, line3);
-        sign.getSide(Side.FRONT).line(3, line4);
-        sign.update();
+    private final java.util.Set<String> pendingUpdates = new java.util.HashSet<>();
+
+    /** Refreshes an arena's signs next tick (coalesced); call on state/player-count changes. */
+    public void requestUpdate(Arena arena) {
+        if (arena == null || plugin.isStopped() || !plugin.isEnabled() || arena.getSigns().isEmpty()) return;
+        if (!pendingUpdates.add(arena.getName())) return;
+        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+            pendingUpdates.remove(arena.getName());
+            if (!plugin.isStopped()) updateAllSigns(arena);
+        });
+    }
+
+    /** Refreshes signs in a freshly loaded chunk (signs in unloaded chunks are skipped by the timer). */
+    public void updateChunk(org.bukkit.Chunk chunk) {
+        for (Arena arena : ArenaManager.getInstance().getAll()) {
+            if (arena.getSigns().isEmpty()) continue;
+            boolean any = false;
+            for (ArenaSign as : arena.getSigns()) {
+                Location l = as.getLocation();
+                if (l.getWorld() == chunk.getWorld() && (l.getBlockX() >> 4) == chunk.getX() && (l.getBlockZ() >> 4) == chunk.getZ()) { any = true; break; }
+            }
+            if (any) updateAllSigns(arena);
+        }
+    }
+
+    /** Arena deleted: blank its signs, remove tracked glowstone. Registrations vanish with the arena. */
+    public void clearSigns(Arena arena) {
+        for (ArenaSign as : new ArrayList<>(arena.getSigns())) {
+            Location loc = as.getLocation();
+            if (loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) continue;
+            Block block = loc.getBlock();
+            if (block.getState() instanceof Sign sign) {
+                for (Side side : Side.values()) {
+                    sign.getSide(side).line(0, ColorUtil.parse("<dark_red>[OmniArena]"));
+                    sign.getSide(side).line(1, Component.text("Arena removed"));
+                    sign.getSide(side).line(2, Component.empty());
+                    sign.getSide(side).line(3, Component.empty());
+                }
+                sign.update();
+            }
+            removeGlowstone(block);
+        }
+        arena.getSigns().clear();
     }
 
     public void updateAllSigns(Arena arena) {
@@ -100,8 +152,10 @@ public class SignManager {
             if (isSign(block)) {
                 updateSign(block, arena);
             } else {
-                // Block is no longer a sign — remove stale entry
+                // Block is no longer a sign (broken by explosion/physics/etc.) — drop entry and our glowstone
                 arena.getSigns().remove(as);
+                removeGlowstoneNear(block);
+                ArenaManager.getInstance().save(arena);
             }
         }
     }
@@ -152,7 +206,9 @@ public class SignManager {
 
     private void placeGlowstone(Block block) {
         if (!plugin.getConfig().getBoolean("signs.glow-effect", true)) return;
-        Block behind = block.getRelative(getOppositeDirection(block));
+        org.bukkit.block.BlockFace face = getOppositeDirection(block);
+        if (face == null) return; // only wall signs get a backing glowstone
+        Block behind = block.getRelative(face);
         if (behind.getType() == Material.AIR) {
             behind.setType(Material.GLOWSTONE);
             if (placedGlowstone.isEmpty()) loadGlow();
@@ -161,8 +217,26 @@ public class SignManager {
         }
     }
 
+    /** The sign block is already gone, so check every horizontal neighbour for glowstone we placed. */
+    private void removeGlowstoneNear(Block signBlock) {
+        if (placedGlowstone.isEmpty()) loadGlow();
+        boolean changed = false;
+        for (org.bukkit.block.BlockFace f : new org.bukkit.block.BlockFace[]{
+                org.bukkit.block.BlockFace.NORTH, org.bukkit.block.BlockFace.SOUTH,
+                org.bukkit.block.BlockFace.EAST, org.bukkit.block.BlockFace.WEST}) {
+            Block n = signBlock.getRelative(f);
+            if (placedGlowstone.remove(n.getLocation())) {
+                if (n.getType() == Material.GLOWSTONE) n.setType(Material.AIR);
+                changed = true;
+            }
+        }
+        if (changed) saveGlow();
+    }
+
     private void removeGlowstone(Block block) {
-        Block behind = block.getRelative(getOppositeDirection(block));
+        org.bukkit.block.BlockFace face = getOppositeDirection(block);
+        if (face == null) { removeGlowstoneNear(block); return; }
+        Block behind = block.getRelative(face);
         if (placedGlowstone.isEmpty()) loadGlow();
         // Only remove glowstone the plugin placed itself
         if (placedGlowstone.remove(behind.getLocation())) {
@@ -172,12 +246,9 @@ public class SignManager {
     }
 
     private org.bukkit.block.BlockFace getOppositeDirection(Block block) {
-        // Simple fallback — north is behind
-        if (block.getState() instanceof Sign sign) {
-            if (block.getBlockData() instanceof org.bukkit.block.data.type.WallSign ws) {
-                return ws.getFacing().getOppositeFace();
-            }
+        if (block.getBlockData() instanceof org.bukkit.block.data.type.WallSign ws) {
+            return ws.getFacing().getOppositeFace();
         }
-        return org.bukkit.block.BlockFace.NORTH;
+        return null; // standing and hanging signs have no "behind" block
     }
 }

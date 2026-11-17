@@ -109,9 +109,13 @@ public class Match {
         streak.put(uuid, 0);
         combo.put(uuid, 0);
         joinedAt.put(uuid, System.currentTimeMillis());
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(arena);
     }
 
     public void removePlayer(UUID uuid) {
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(arena);
         players.remove(uuid);
         alivePlayers.remove(uuid);
         spectators.remove(uuid);
@@ -144,12 +148,13 @@ public class Match {
         deaths.merge(victim, 1, Integer::sum);
         streak.merge(killer, 1, Integer::sum);
         streak.put(victim, 0);
+        combo.put(victim, 0);
         combo.merge(killer, 1, Integer::sum);
         lastKilledBy.put(victim, killer);
     }
 
     public void resetStreak(UUID uuid) { streak.put(uuid, 0); }
-    public void resetCombo(UUID uuid)  { combo.put(uuid, 0); }
+    public void resetCombo(UUID uuid)  { combo.computeIfPresent(uuid, (k, v) -> 0); }
 
     public int getKills(UUID uuid)  { return kills.getOrDefault(uuid, 0); }
     public int getDeaths(UUID uuid) { return deaths.getOrDefault(uuid, 0); }

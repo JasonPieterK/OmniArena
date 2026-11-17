@@ -77,7 +77,11 @@ public class Arena {
 
     public String getName() { return name; }
     public ArenaState getState() { return state; }
-    public void setState(ArenaState state) { this.state = state; }
+    public void setState(ArenaState state) {
+        this.state = state;
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(this);
+    }
     public GameModeType getGameMode() { return gameMode; }
     public void setGameMode(GameModeType gameMode) { this.gameMode = gameMode; }
     public int getMinPlayers() { return minPlayers; }

@@ -22,6 +22,7 @@ public class VisualController {
         this.actionBarManager  = new ActionBarManager();
         this.hologramManager   = new HologramManager(plugin);
         this.effectManager     = new EffectManager();
+        this.hologramManager.start();
     }
 
     public TitleManager getTitleManager() { return titleManager; }

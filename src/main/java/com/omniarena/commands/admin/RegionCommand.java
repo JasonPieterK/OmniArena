@@ -56,7 +56,7 @@ public class RegionCommand extends SubCommand {
         }
 
         if (args.length < 2) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa region " + action).replace("{usage}", getUsage()));
             return;
         }
 

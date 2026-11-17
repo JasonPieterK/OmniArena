@@ -75,7 +75,7 @@ public class BlockRestoreModule {
     }
 
     private static boolean isTileMaterial(Material m) {
-        return CONTAINER_MATS.contains(m) || Tag.ALL_SIGNS.isTagged(m);
+        return CONTAINER_MATS.contains(m) || Tag.ALL_SIGNS.isTagged(m) || Tag.BANNERS.isTagged(m);
     }
 
     // Cap on concurrent decorative falling-block entities, so a big arena
@@ -123,6 +123,13 @@ public class BlockRestoreModule {
         return lastErrors.get(arenaName.toLowerCase());
     }
 
+    /** messages.yml entry as plain text (tags stripped) for console/last-error use. */
+    private String plainMsg(String key, String... kv) {
+        String m = ConfigManager.getInstance().getRawMessage(key);
+        for (int i = 0; i + 1 < kv.length; i += 2) m = m.replace("{" + kv[i] + "}", kv[i + 1]);
+        return m.replaceAll("<[^>]*>", "");
+    }
+
     public void createSnapshot(Arena arena, Runnable onComplete) {
         createSnapshot(arena, onComplete, null);
     }
@@ -132,10 +139,10 @@ public class BlockRestoreModule {
         final String arenaName = arena.getName();
         final String key = arenaName.toLowerCase();
         ArenaRegion region = arena.getRegion();
-        if (!region.isDefined()) { snapFail(key, onFail, "Arena " + arenaName + " has no region set."); return; }
+        if (!region.isDefined()) { snapFail(key, onFail, plainMsg("arena-no-region", "arena", arenaName)); return; }
         World world = Bukkit.getWorld(region.getWorldName());
         if (world == null) {
-            snapFail(key, onFail, "World '" + region.getWorldName() + "' of arena " + arenaName + " is not loaded.");
+            snapFail(key, onFail, plainMsg("world-not-found", "world", region.getWorldName()));
             return;
         }
         if (activeRegens.containsKey(key)) {
@@ -170,11 +177,23 @@ public class BlockRestoreModule {
         final List<String> tiles = new ArrayList<>(); // "x,y,z|C|b64" / "x,y,z|S|b64|b64"
         final int[] cursor = {minX, minZ};
         final BukkitTask[] holder = new BukkitTask[1];
+        // Chunks of the region are loaded async and pinned with plugin tickets for the duration of the scan.
+        final List<long[]> chunkCoords = new ArrayList<>();
+        for (int cx = minX >> 4; cx <= maxX >> 4; cx++)
+            for (int cz = minZ >> 4; cz <= maxZ >> 4; cz++) chunkCoords.add(new long[]{cx, cz});
+        final java.util.concurrent.atomic.AtomicBoolean ticketed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        final Runnable release = () -> {
+            if (!ticketed.compareAndSet(true, false)) return;
+            for (long[] c : chunkCoords) {
+                try { world.removePluginChunkTicket((int) c[0], (int) c[1], plugin); } catch (Throwable ignored) {}
+            }
+        };
 
         Runnable step = () -> {
             try {
                 if (shuttingDown || Bukkit.getWorld(worldName) != world) {
                     abortSnapshot(holder[0], key);
+                    release.run();
                     snapFail(key, onFail, "World '" + worldName + "' was unloaded or the plugin stopped during the snapshot.");
                     return;
                 }
@@ -211,13 +230,14 @@ public class BlockRestoreModule {
                 if (cursor[0] <= maxX) return;
                 if (holder[0] != null) { holder[0].cancel(); snapshotTasks.remove(holder[0]); }
                 cursor[0] = Integer.MAX_VALUE;
+                release.run();
                 // Serialise + write the file off the main thread
                 AsyncUtil.runAsyncThenSync(() -> {
                     try {
                         saveSnapshot(arenaName, worldName, palette, runs, tiles);
                         return runs.size();
                     } catch (Exception ex) {
-                        plugin.getLogger().severe("Snapshot write failed for " + arenaName + ": " + ex);
+                        plugin.getLogger().severe("Snapshot write failed for " + arenaName + " (" + ex + "). Check free disk space and write permission on plugins/OmniArena/snapshots.");
                         return -1;
                     }
                 }, count -> {
@@ -232,19 +252,39 @@ public class BlockRestoreModule {
                 });
             } catch (Throwable ex) {
                 abortSnapshot(holder[0], key);
-                plugin.getLogger().severe("Snapshot of " + arenaName + " failed: " + ex);
-                snapFail(key, onFail, "Snapshot failed with an internal error: " + ex.getClass().getSimpleName());
+                release.run();
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Snapshot of " + arenaName + " failed", ex);
+                snapFail(key, onFail, "Snapshot failed with an internal error (" + ex.getClass().getSimpleName() + (ex.getMessage() != null ? ": " + ex.getMessage() : "") + "). Check the console for the stack trace, then retry /oa regen snapshot " + arenaName + ".");
             }
         };
 
-        BukkitTask task = AsyncUtil.runSyncRepeating(step, 0L, 1L);
-        if (task == null) { // plugin not enabled: nothing to slice against
-            snapshotting.remove(key);
-            plugin.getLogger().warning("Cannot snapshot arena " + arenaName + ": plugin disabled.");
-            return;
+        final Runnable start = () -> {
+            if (shuttingDown) { release.run(); snapshotting.remove(key); snapFail(key, onFail, "Snapshot of arena " + arenaName + " cancelled: the plugin is stopping."); return; }
+            BukkitTask task = AsyncUtil.runSyncRepeating(step, 0L, 1L);
+            if (task == null) { // plugin not enabled: nothing to slice against
+                release.run();
+                snapshotting.remove(key);
+                plugin.getLogger().warning("Cannot snapshot arena " + arenaName + ": the plugin is disabled/shutting down. Retry after the server finished starting.");
+                return;
+            }
+            holder[0] = task;
+            snapshotTasks.add(task);
+        };
+        List<java.util.concurrent.CompletableFuture<?>> futures = new ArrayList<>();
+        for (long[] c : chunkCoords) {
+            try { futures.add(world.getChunkAtAsync((int) c[0], (int) c[1], true)); } catch (Throwable ignored) {}
         }
-        holder[0] = task;
-        snapshotTasks.add(task);
+        final Runnable pinAndStart = () -> {
+            for (long[] c : chunkCoords) {
+                try { world.addPluginChunkTicket((int) c[0], (int) c[1], plugin); ticketed.set(true); } catch (Throwable ignored) {}
+            }
+            start.run();
+        };
+        if (futures.isEmpty()) { pinAndStart.run(); return; }
+        java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .whenComplete((v, ex) -> {
+                    if (AsyncUtil.runSync(pinAndStart) == null) snapshotting.remove(key); // plugin disabled
+                });
     }
 
     private void abortSnapshot(BukkitTask task, String key) {
@@ -271,7 +311,7 @@ public class BlockRestoreModule {
         // Each finalizer places what is left and then runs the completion callbacks (so arenas leave RESETTING)
         for (Map.Entry<String, Runnable> en : new ArrayList<>(activeRegens.entrySet())) {
             try { en.getValue().run(); }
-            catch (Exception ex) { plugin.getLogger().warning("Regen finalize failed for " + en.getKey() + ": " + ex.getMessage()); }
+            catch (Exception ex) { plugin.getLogger().warning("Regen finalize on shutdown failed for arena " + en.getKey() + ": " + ex + ". Some blocks may be unrestored; run /oa regen " + en.getKey() + " after startup."); }
         }
         activeRegens.clear();
         queuedCallbacks.clear();
@@ -297,7 +337,7 @@ public class BlockRestoreModule {
             return;
         }
         if (!arena.getRegion().isDefined()) {
-            restoreFail(key, onFail, "Arena " + name + " has no region. Fix: set it with /oa region, then run /oa regen snapshot " + name + ".");
+            restoreFail(key, onFail, plainMsg("arena-no-region", "arena", name) + " Then run /oa regen snapshot " + name + ".");
             return;
         }
         if (snapshotting.contains(key)) {
@@ -356,7 +396,7 @@ public class BlockRestoreModule {
                 Plan plan = result.plan();
                 World world = plan.worldName != null ? Bukkit.getWorld(plan.worldName) : null;
                 if (world == null) {
-                    restoreFail(key, null, "World '" + plan.worldName + "' of the snapshot is not loaded. Load the world, or re-snapshot if the arena moved." );
+                    restoreFail(key, null, plainMsg("world-not-found", "world", String.valueOf(plan.worldName)) + " The snapshot of " + name + " was taken there; load it or re-snapshot if the arena moved.");
                     fFail.run();
                     return;
                 }
@@ -382,7 +422,7 @@ public class BlockRestoreModule {
 
     private void safeRun(Runnable r) {
         if (r == null) return;
-        try { r.run(); } catch (Exception ex) { plugin.getLogger().warning("Regen callback failed: " + ex); }
+        try { r.run(); } catch (Exception ex) { plugin.getLogger().warning("A regen completion callback threw " + ex + "; the regen itself finished, but follow-up actions (e.g. teleport/messages) may be missing. See console."); }
     }
 
     /** Loads every chunk the snapshot touches (async) and pins them with plugin tickets for the restore. */
@@ -516,7 +556,7 @@ public class BlockRestoreModule {
                 // ── Done when queue empty AND no more entries ─────────────────
                 if (queue.isEmpty() && !plan.hasMore()) finish.run();
             } catch (Throwable ex) {
-                plugin.getLogger().severe("Regen of " + key + " failed mid-way: " + ex);
+                plugin.getLogger().severe("Regen of " + key + " failed mid-way (" + ex + "); stack trace follows. Re-run /oa regen " + key + " once fixed");
                 ex.printStackTrace();
                 if (done.compareAndSet(false, true)) {
                     if (taskHolder[0] != null) taskHolder[0].cancel();
@@ -556,7 +596,7 @@ public class BlockRestoreModule {
                 }
             }
         } catch (Exception ex) {
-            plugin.getLogger().warning("Regen entity cleanup failed: " + ex.getMessage());
+            plugin.getLogger().warning("Regen entity cleanup failed (" + ex + "); leftover item/arrow entities may remain in the arena. Remove them with /kill @e[type=item] if needed.");
         }
     }
 
@@ -588,7 +628,20 @@ public class BlockRestoreModule {
             if (st instanceof Sign sign) {
                 String[] f = new String[4], k = new String[4];
                 for (int i = 0; i < 4; i++) { f[i] = sign.getSide(Side.FRONT).getLine(i); k[i] = sign.getSide(Side.BACK).getLine(i); }
-                return pos + "|S|" + b64(String.join("\n", f)) + "|" + b64(String.join("\n", k));
+                // 4th field (optional, older snapshots lack it): frontColor,backColor,frontGlow,backGlow,waxed
+                org.bukkit.block.sign.SignSide fs = sign.getSide(Side.FRONT), bs = sign.getSide(Side.BACK);
+                String style = (fs.getColor() == null ? "" : fs.getColor().name()) + "," + (bs.getColor() == null ? "" : bs.getColor().name())
+                        + "," + fs.isGlowingText() + "," + bs.isGlowingText() + "," + sign.isWaxed();
+                return pos + "|S|" + b64(String.join("\n", f)) + "|" + b64(String.join("\n", k)) + "|" + style;
+            }
+            if (st instanceof org.bukkit.block.Banner banner) {
+                if (banner.numberOfPatterns() == 0) return null;
+                StringBuilder sb = new StringBuilder();
+                for (org.bukkit.block.banner.Pattern pt : banner.getPatterns()) {
+                    if (sb.length() > 0) sb.append(';');
+                    sb.append(pt.getColor().name()).append(':').append(pt.getPattern().getKey());
+                }
+                return pos + "|B|" + sb;
             }
             if (st instanceof Container c) {
                 Inventory inv = c instanceof Chest ch ? ch.getBlockInventory() : c.getInventory();
@@ -599,7 +652,7 @@ public class BlockRestoreModule {
                 return pos + "|C|" + b64(ItemStack.serializeItemsAsBytes(items));
             }
         } catch (Exception ex) {
-            plugin.getLogger().warning("Tile snapshot failed at " + b.getLocation() + ": " + ex.getMessage());
+            plugin.getLogger().warning("Tile snapshot failed for " + b.getType() + " at " + b.getX() + "," + b.getY() + "," + b.getZ() + " (" + ex + "); its contents/text will not be restored. Re-run /oa regen snapshot after fixing the block.");
         }
         return null;
     }
@@ -615,7 +668,33 @@ public class BlockRestoreModule {
                     for (int i = 0; i < 4; i++)
                         sign.getSide(s == 0 ? Side.FRONT : Side.BACK).setLine(i, i < l.length ? l[i] : "");
                 }
+                if (p.length > 3 && p[0].equals("S")) {
+                    String[] st2 = p[3].split(",", -1);
+                    if (st2.length >= 5) {
+                        for (int s = 0; s < 2; s++) {
+                            org.bukkit.block.sign.SignSide side = sign.getSide(s == 0 ? Side.FRONT : Side.BACK);
+                            try { if (!st2[s].isEmpty()) side.setColor(org.bukkit.DyeColor.valueOf(st2[s])); } catch (IllegalArgumentException ignored) {}
+                            side.setGlowingText(Boolean.parseBoolean(st2[2 + s]));
+                        }
+                        sign.setWaxed(Boolean.parseBoolean(st2[4]));
+                    }
+                }
                 sign.update(true, false);
+            } else if (st instanceof org.bukkit.block.Banner banner) {
+                List<org.bukkit.block.banner.Pattern> pats = new ArrayList<>();
+                if (p.length > 1 && p[0].equals("B") && !p[1].isEmpty()) {
+                    for (String e : p[1].split(";")) {
+                        int c = e.indexOf(':');
+                        if (c <= 0) continue;
+                        try {
+                            org.bukkit.NamespacedKey nk = org.bukkit.NamespacedKey.fromString(e.substring(c + 1));
+                            org.bukkit.block.banner.PatternType pt = nk == null ? null : org.bukkit.Registry.BANNER_PATTERN.get(nk);
+                            if (pt != null) pats.add(new org.bukkit.block.banner.Pattern(org.bukkit.DyeColor.valueOf(e.substring(0, c)), pt));
+                        } catch (IllegalArgumentException ignored) {}
+                    }
+                }
+                banner.setPatterns(pats);
+                banner.update(true, false);
             } else if (st instanceof Container c) {
                 Inventory inv = c instanceof Chest ch ? ch.getBlockInventory() : c.getInventory();
                 inv.clear(); // players may have stored/removed items: always reset to the snapshot
@@ -625,7 +704,7 @@ public class BlockRestoreModule {
                 }
             }
         } catch (Exception ex) {
-            plugin.getLogger().warning("Tile restore failed at " + b.getLocation() + ": " + ex.getMessage());
+            plugin.getLogger().warning("Tile restore failed for " + b.getType() + " at " + b.getX() + "," + b.getY() + "," + b.getZ() + " (" + ex + "); the block was placed but its contents/text are default. The snapshot may be corrupt: re-run /oa regen snapshot.");
         }
     }
 

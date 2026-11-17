@@ -14,16 +14,52 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class HologramManager {
+public class HologramManager implements org.bukkit.event.Listener {
 
     private final OmniArena plugin;
     private final Map<String, List<ArmorStand>> holograms = new HashMap<>();
 
+    private final org.bukkit.NamespacedKey tagKey;
+
     public HologramManager(OmniArena plugin) {
         this.plugin = plugin;
+        this.tagKey = new org.bukkit.NamespacedKey(plugin, "hologram");
+    }
+
+    /** Registers the chunk-load sweep and removes leftovers from a previous run/crash in loaded chunks. */
+    public void start() {
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        for (org.bukkit.World w : plugin.getServer().getWorlds()) {
+            for (org.bukkit.Chunk c : w.getLoadedChunks()) removeStale(c);
+        }
+    }
+
+    /** Removes OmniArena-tagged armor stands that this manager no longer tracks (stale after restart/crash). */
+    private void removeStale(org.bukkit.Chunk chunk) {
+        for (org.bukkit.entity.Entity e : chunk.getEntities()) {
+            if (e instanceof ArmorStand as
+                    && as.getPersistentDataContainer().has(tagKey, org.bukkit.persistence.PersistentDataType.BYTE)
+                    && !isTracked(as)) {
+                as.remove();
+            }
+        }
+    }
+
+    private boolean isTracked(ArmorStand as) {
+        for (List<ArmorStand> l : holograms.values()) if (l.contains(as)) return true;
+        return false;
+    }
+
+    @org.bukkit.event.EventHandler
+    public void onChunkLoad(org.bukkit.event.world.ChunkLoadEvent event) {
+        if (event.isNewChunk()) return;
+        removeStale(event.getChunk());
     }
 
     public void createLeaderboard(String id, Location base) {
+        if (base == null || base.getWorld() == null) return;
+        // Never force-load a chunk just to spawn a hologram
+        if (!base.getWorld().isChunkLoaded(base.getBlockX() >> 4, base.getBlockZ() >> 4)) return;
         removeHologram(id);
         List<ArmorStand> stands = new ArrayList<>();
 
@@ -51,11 +87,11 @@ public class HologramManager {
 
     public void removeHologram(String id) {
         List<ArmorStand> old = holograms.remove(id);
-        if (old != null) old.forEach(ArmorStand::remove);
+        if (old != null) old.forEach(a -> { if (a.isValid()) a.remove(); });
     }
 
     public void removeAll() {
-        holograms.values().forEach(list -> list.forEach(ArmorStand::remove));
+        holograms.values().forEach(list -> list.forEach(a -> { if (a.isValid()) a.remove(); }));
         holograms.clear();
     }
 
@@ -74,6 +110,7 @@ public class HologramManager {
         stand.customName(ColorUtil.parse(text));
         stand.setSmall(true);
         stand.setPersistent(false);
+        stand.getPersistentDataContainer().set(tagKey, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
         stands.add(stand);
     }
 }

@@ -225,6 +225,8 @@ public class MatchManager {
         player.getInventory().clear();
         match.addPlayer(player.getUniqueId());
         playerArena.put(player.getUniqueId(), arena.getName());
+        // Entering an arena ends any open-world combat tag (arena combat has its own rules)
+        if (plugin.getCombatManager() != null) plugin.getCombatManager().clearCombat(player.getUniqueId());
 
         Location spawn = arena.getLobbySpawn();
         if (spawn != null) markInternalTeleport(player, spawn);

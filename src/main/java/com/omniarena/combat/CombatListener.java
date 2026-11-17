@@ -55,17 +55,19 @@ public class CombatListener implements Listener {
         if (inArena(victim) || inArena(attacker)) return;
 
         if (cm().isRespawnProtected(victim.getUniqueId()) && !cm().isOverriding(attacker)) { deny(event, attacker, "pvp-respawn-protected"); return; }
-        if (!cm().isGlobalPvp()) { deny(event, attacker, "pvp-global-off"); return; }
-        if (cm().isWorldDisabled(attacker)) { deny(event, attacker, "pvp-world-off"); return; }
-        if (cm().isNewbie(victim.getUniqueId()) && !cm().isOverriding(attacker)) { deny(event, attacker, "pvp-newbie-victim"); return; }
-        if (cm().isNewbie(attacker.getUniqueId())) {
-            if (cfg().getConfig().getBoolean("pvp.newbie.disable-on-attack", true)) cm().removeNewbie(attacker.getUniqueId());
-            else { deny(event, attacker, "pvp-newbie-self"); return; }
-        }
-        if (!cm().isOverriding(attacker)) {
+        boolean override = cm().isOverriding(attacker);
+        if (!override && !cm().isGlobalPvp()) { deny(event, attacker, "pvp-global-off"); return; }
+        if (!override && (cm().isWorldDisabled(attacker) || cm().isWorldDisabled(victim))) { deny(event, attacker, "pvp-world-off"); return; }
+        if (cm().isNewbie(victim.getUniqueId()) && !override) { deny(event, attacker, "pvp-newbie-victim"); return; }
+        boolean attackerNewbie = cm().isNewbie(attacker.getUniqueId());
+        boolean dropNewbie = cfg().getConfig().getBoolean("pvp.newbie.disable-on-attack", true);
+        if (attackerNewbie && !dropNewbie && !override) { deny(event, attacker, "pvp-newbie-self"); return; }
+        if (!override) {
             if (!cm().isPvpEnabled(victim))   { deny(event, attacker, "pvp-victim-disabled"); return; }
             if (!cm().isPvpEnabled(attacker)) { deny(event, attacker, "pvp-self-disabled"); return; }
         }
+        // Only a hit that actually lands ends the attacker's own newbie shield.
+        if (attackerNewbie && dropNewbie) cm().removeNewbie(attacker.getUniqueId());
 
         // Valid PvP hit — tag both and show blood.
         if (cfg().getConfig().getBoolean("pvp.combat.tag-on-damage", true)) cm().tag(victim, attacker);
@@ -74,8 +76,16 @@ public class CombatListener implements Listener {
     }
 
     private Player resolveAttacker(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player p) return p;
-        if (event.getDamager() instanceof Projectile proj && proj.getShooter() instanceof Player p) return p;
+        return resolveSource(event.getDamager());
+    }
+
+    /** Credits the human behind a damager: shooter, tamed-pet owner, TNT igniter, lingering-cloud thrower. */
+    public static Player resolveSource(org.bukkit.entity.Entity damager) {
+        if (damager instanceof Player p) return p;
+        if (damager instanceof Projectile proj && proj.getShooter() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.Tameable t && t.isTamed() && t.getOwner() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.TNTPrimed tnt && tnt.getSource() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.AreaEffectCloud c && c.getSource() instanceof Player p) return p;
         return null;
     }
 
@@ -93,16 +103,25 @@ public class CombatListener implements Listener {
     }
 
     // ── Combat-log punishment ───────────────────────────────────────────────────
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        if (!enabled() || !cm().isTagged(player)) return;
-        if (!cfg().getConfig().getBoolean("pvp.combat.punish-combat-log", true)) return;
+        boolean tagged = enabled() && cm().isTagged(player);
+        // Shutdown, plugin/admin kicks and arena players are never combat-logs.
+        boolean exempt = Bukkit.isStopping() || plugin.isStopped()
+                || event.getReason() == PlayerQuitEvent.QuitReason.KICKED
+                || inArena(player);
+        if (!tagged || exempt
+                || !cfg().getConfig().getBoolean("pvp.combat.punish-combat-log", true)) {
+            cm().handleQuit(player.getUniqueId());
+            return;
+        }
 
         String action = cfg().getConfig().getString("pvp.combat.combat-log-action", "KILL").toUpperCase();
         if (action.equals("KILL")) {
             if (!cfg().getConfig().getBoolean("pvp.combat.drop-on-combat-log", true)) noDropDeaths.add(player.getUniqueId());
             player.setHealth(0.0); // dies on quit; drops handled by death event
+            noDropDeaths.remove(player.getUniqueId());
         } else if (action.equals("COMMAND")) {
             for (String c : cfg().getConfig().getStringList("pvp.combat.combat-log-commands")) {
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), c.replace("{player}", player.getName()));
@@ -112,7 +131,7 @@ public class CombatListener implements Listener {
             Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
                     cfg().getMessage("combat-log").replace("{player}", player.getName())));
         }
-        cm().untag(player);
+        cm().handleQuit(player.getUniqueId());
     }
 
     /** Combat-loggers killed on quit whose inventory must not drop (pvp.combat.drop-on-combat-log: false). */
@@ -144,9 +163,17 @@ public class CombatListener implements Listener {
         if (!enabled() || !cm().isTagged(player)) return;
         if (!cfg().getConfig().getBoolean("pvp.combat.block-commands", true)) return;
 
-        String msg = event.getMessage().toLowerCase();
-        List<String> allowed = cfg().getConfig().getStringList("pvp.combat.allowed-commands");
-        boolean ok = allowed.stream().anyMatch(a -> msg.startsWith(a.toLowerCase()));
+        String msg = event.getMessage().trim();
+        String label = (msg.startsWith("/") ? msg.substring(1) : msg).split("\\s+", 2)[0].toLowerCase(java.util.Locale.ROOT);
+        // namespaced form (/minecraft:tp) is judged by its bare label
+        String bare = label.contains(":") ? label.substring(label.indexOf(':') + 1) : label;
+        java.util.Set<String> names = new java.util.HashSet<>(List.of(label, bare));
+        var cmd = Bukkit.getCommandMap().getCommand(bare);
+        if (cmd != null) names.add(cmd.getName().toLowerCase(java.util.Locale.ROOT));
+        boolean ok = cfg().getConfig().getStringList("pvp.combat.allowed-commands").stream()
+                .map(a -> a.trim().toLowerCase(java.util.Locale.ROOT))
+                .map(a -> a.startsWith("/") ? a.substring(1) : a)
+                .anyMatch(names::contains);
         if (!ok) {
             event.setCancelled(true);
             MessageUtil.send(player, cfg().getMessage("combat-no-command"));
@@ -287,14 +314,15 @@ public class CombatListener implements Listener {
     }
 
     // Drop protection the moment the player swings — no abusing the shield to attack.
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onProtectedAttack(EntityDamageByEntityEvent event) {
-        if (!(resolveAttacker(event) instanceof Player attacker)) return;
+        Player attacker = resolveAttacker(event);
+        if (attacker == null || !(event.getEntity() instanceof Player)) return;
         if (cm().isRespawnProtected(attacker.getUniqueId())) cm().clearRespawnProtection(attacker.getUniqueId());
     }
 
     // ── Transfer drops to killer + kill-abuse check ──────────────────────────────
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         if (!enabled()) return;
         Player victim = event.getEntity();

@@ -37,4 +37,22 @@ public class BlockPlaceListener implements Listener {
             event.setCancelled(true);
         }
     }
+
+    /** During a match, stop water/lava from leaking out of the arena region (regen would never clean it up). */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onFluidFlow(org.bukkit.event.block.BlockFromToEvent event) {
+        if (plugin.isStopped()) return;
+        org.bukkit.Material type = event.getBlock().getType();
+        if (type != org.bukkit.Material.WATER && type != org.bukkit.Material.LAVA) return;
+        org.bukkit.Location from = event.getBlock().getLocation();
+        org.bukkit.Location to = event.getToBlock().getLocation();
+        Optional<Arena> src = ArenaManager.getInstance().getArenaAt(from);
+        if (src.isEmpty() || !src.get().getRegion().isDefined()) return;
+        Arena arena = src.get();
+        if (arena.getRegion().contains(to)) return;
+        if (arena.getState() == ArenaState.RUNNING
+                || com.omniarena.match.MatchManager.getInstance().getMatch(arena).isPresent()) {
+            event.setCancelled(true);
+        }
+    }
 }

@@ -55,7 +55,7 @@ public class RegenCommand extends SubCommand {
         Arena arena = arenaOpt.get();
         if (restoreBusy(sender, arena)) return;
         if (com.omniarena.match.MatchManager.getInstance().getMatch(arena).isPresent()) {
-            MessageUtil.send(sender, "<red>Cannot regenerate <yellow>" + arena.getName() + "</yellow> while a match is active.");
+            MessageUtil.send(sender, "<red>Cannot regenerate <yellow>" + arena.getName() + "</yellow> while a match is active. <gray>End it with <white>/oa override forceend " + arena.getName() + "</white> (or wait), then retry.");
             return;
         }
         BlockRestoreModule restore = plugin.getBlockRestoreModule();
@@ -87,7 +87,7 @@ public class RegenCommand extends SubCommand {
 
     private void handleSnapshot(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", "/oa regen snapshot <arena>"));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa regen snapshot").replace("{usage}", "/oa regen snapshot <arena>"));
             return;
         }
 
@@ -143,13 +143,13 @@ public class RegenCommand extends SubCommand {
 
     private void handleToggle(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa regen " + args[0].toLowerCase() + " <true|false>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa regen " + args[0].toLowerCase()).replace("{usage}", "/oa regen " + args[0].toLowerCase() + " <true|false>"));
             return;
         }
         String v = args[1].toLowerCase();
         boolean enabled = v.equals("true") || v.equals("yes") || v.equals("on");
         if (!enabled && !(v.equals("false") || v.equals("no") || v.equals("off"))) {
-            MessageUtil.send(sender, "<red>Value must be true or false.");
+            MessageUtil.send(sender, "<red>Invalid value <yellow>" + args[1] + "</yellow>. <gray>Use true or false (also yes/no/on/off).");
             return;
         }
         String key = switch (args[0].toLowerCase()) {
