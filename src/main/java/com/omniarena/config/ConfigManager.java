@@ -84,6 +84,17 @@ public class ConfigManager {
         return config.getBoolean("plugin.debug", false);
     }
 
+    /** Logs {@code [debug] msg} to the console only when {@code plugin.debug: true}. Cheap no-op otherwise. */
+    public void debug(String message) {
+        if (isDebug()) plugin.getLogger().info("[debug] " + message);
+    }
+
+    /** Static convenience for call sites that may run before/without a ConfigManager. */
+    public static void debugLog(java.util.function.Supplier<String> message) {
+        ConfigManager cm = getInstance();
+        if (cm != null && cm.isDebug()) cm.plugin.getLogger().info("[debug] " + message.get());
+    }
+
     public boolean isModuleEnabled(String module) {
         return config.getBoolean("modules." + module, true);
     }

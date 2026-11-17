@@ -207,7 +207,13 @@ public class MatchManager {
             return false;
         }
         if (arena.isBanned(player.getUniqueId())) {
+            ConfigManager.debugLog(() -> "join refused: " + player.getName() + " is blacklisted in arena " + arena.getName());
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-banned"));
+            return false;
+        }
+        if (!arena.isWhitelisted(player.getUniqueId()) && !com.omniarena.permission.PermissionChecker.canBypassJoin(player)) {
+            ConfigManager.debugLog(() -> "join refused: " + player.getName() + " is not whitelisted in arena " + arena.getName());
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-not-whitelisted"));
             return false;
         }
 
@@ -423,7 +429,7 @@ public class MatchManager {
                 for (UUID uuid : match.getPlayers()) {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null && player.isOnline()) {
-                        com.omniarena.util.MessageUtil.sendTitle(player,
+                        if (com.omniarena.visual.VisualGate.titles(match)) com.omniarena.util.MessageUtil.sendTitle(player,
                             "<yellow>Waiting for players</yellow>",
                             "<gray>" + match.getPlayerCount() + "/" + effectiveMin(match) + "</gray>",
                             0, 20, 0
@@ -549,6 +555,98 @@ public class MatchManager {
         match.getArena().getGameMode().applyLoadout(player);
     }
 
+    // ── Respawn: shared completion + WAVE mode ─────────────────
+
+    /**
+     * Brings a dead player back into the fight: respawn screen, battle spawn, loadout, spawn protection.
+     * Used by INSTANT/DELAYED (after their delay) and by WAVE (when a wave is released).
+     */
+    public void completeRespawn(UUID victimId, Match match) {
+        Arena arena = match.getArena();
+        Player victim = Bukkit.getPlayer(victimId);
+        if (victim == null || !victim.isOnline() || !match.hasPlayer(victimId) || !isInArena(victim)) return;
+        if (activeMatches.get(arena.getName()) != match) return;
+        if (victim.isDead()) victim.spigot().respawn();
+        if (match.getState() != MatchState.RUNNING) return;
+
+        match.getAlivePlayers().add(victimId);
+        victim.setGameMode(GameMode.SURVIVAL); // WAVE holds players in spectator until released
+
+        // Teleport to spawn + re-equip this game type's loadout
+        Location spawn = arena.getRandomBattleSpawn();
+        if (spawn != null) markInternalTeleport(victim, spawn);
+        if (spawn != null) victim.teleport(spawn);
+        applyLoadout(victim, match);
+
+        // Spawn protection
+        if (arena.getSpawnProtection() > 0) {
+            match.setSpawnProtection(victimId, arena.getSpawnProtection());
+            plugin.getVisual().getEffectManager().playSpawnProtectionEffect(victim);
+            plugin.getVisual().getSoundManager().playSpawnProtection(victim);
+            match.setSpawnProtectionTask(victimId, Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                match.clearSpawnProtectionTask(victimId);
+                match.getSpawnProtection().remove(victimId);
+                Player p = Bukkit.getPlayer(victimId);
+                if (p == null || !p.isOnline()) return;
+                plugin.getVisual().getEffectManager().removeSpawnProtectionEffect(p);
+                plugin.getVisual().getActionBarManager().sendSpawnProtectionExpired(p);
+            }, (long) arena.getSpawnProtection() * 20));
+        }
+        plugin.getVisual().getEffectManager().playSpawnEffect(victim);
+    }
+
+    /**
+     * WAVE respawn: the dead player is parked (spectator mode at the arena's spectator spot) and returns together
+     * with everybody else who died since the previous wave. Waves fire every {@code respawn.wave-interval}
+     * seconds of match time (arena key, default 10).
+     */
+    public void queueWaveRespawn(UUID victimId, Match match) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player victim = Bukkit.getPlayer(victimId);
+            if (victim == null || !victim.isOnline() || !match.hasPlayer(victimId) || !isInArena(victim)) return;
+            if (activeMatches.get(match.getArena().getName()) != match || match.getState() != MatchState.RUNNING) return;
+            if (victim.isDead()) victim.spigot().respawn(); // PlayerDeathListener.onRespawn places them at the spectator spot
+            victim.setGameMode(GameMode.SPECTATOR);
+            match.getWaveQueue().add(victimId);
+            int interval = Math.max(1, match.getArena().getRespawnWaveInterval());
+            sendWaveCountdown(victim, match, interval - (match.getElapsedSeconds() % interval));
+        }, 1L);
+    }
+
+    /** Called once per second from the match timer: counts down for waiting players and releases the wave. */
+    private void tickWave(Match match) {
+        if (match.getWaveQueue().isEmpty()) return;
+        int interval = Math.max(1, match.getArena().getRespawnWaveInterval());
+        int into = match.getElapsedSeconds() % interval;
+        if (into == 0) {
+            List<UUID> wave = new ArrayList<>(match.getWaveQueue());
+            match.getWaveQueue().clear();
+            ConfigManager.debugLog(() -> "wave respawn in arena " + match.getArena().getName() + ": releasing " + wave.size() + " player(s)");
+            for (UUID id : wave) {
+                completeRespawn(id, match);
+                Player p = Bukkit.getPlayer(id);
+                if (p != null && p.isOnline()) {
+                    if (match.getArena().getVisual().isActionBar()) MessageUtil.sendActionBar(p, "<green>Wave respawn!");
+                }
+            }
+            return;
+        }
+        int left = interval - into;
+        for (UUID id : new ArrayList<>(match.getWaveQueue())) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) sendWaveCountdown(p, match, left);
+        }
+    }
+
+    private void sendWaveCountdown(Player p, Match match, int secondsLeft) {
+        if (match.getArena().getVisual().isActionBar()) {
+            MessageUtil.sendActionBar(p, "<yellow>Respawning with the next wave in <white>" + secondsLeft + "s");
+        }
+        if (secondsLeft <= 3 && VisualGate.titles(match)) {
+            MessageUtil.sendTitle(p, "<yellow>" + secondsLeft, "<gray>Next wave", 0, 20, 5);
+        }
+    }
+
     private void startMatchTimer(Match match) {
         BukkitTask task = AsyncUtil.runSyncRepeating(() -> {
             if (match.getState() != MatchState.RUNNING) return;
@@ -557,6 +655,7 @@ public class MatchManager {
             plugin.getVisual().getScoreboardManager().updateAll(match);
             plugin.getVisual().getBossBarManager().updateTimer(match);
             plugin.getVisual().getActionBarManager().updateAll(match);
+            tickWave(match); // after the action bar update so the wave countdown is what players see
 
             if (match.getTimeRemaining() <= 0) {
                 endMatch(match, buildTimeoutResult(match));

@@ -230,6 +230,8 @@ public class HologramManager implements Listener {
     private void refresh(Holo h) {
         Location loc = h.loc();
         if (loc == null) return;
+        // Holograms inside an arena region follow that arena's visual-holograms switch (global visual.holograms already checked)
+        if (!VisualGate.holograms(loc)) { despawn(h); return; }
         // Never force-load a chunk just to spawn a hologram
         if (!loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) return;
         if (h.entity == null || !h.entity.isValid()) {

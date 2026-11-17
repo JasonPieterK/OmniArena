@@ -43,6 +43,7 @@ public class KillstreakModule {
     }
 
     private void playConfiguredSound(Player p, int streak, String name) {
+        if (!com.omniarena.visual.VisualGate.sounds(p)) return;
         org.bukkit.Sound sound;
         try { sound = org.bukkit.Sound.valueOf(name.toUpperCase()); }
         catch (Exception e) { sound = org.bukkit.Sound.ENTITY_LIGHTNING_BOLT_THUNDER; }
@@ -50,6 +51,7 @@ public class KillstreakModule {
     }
 
     private void spawnConfiguredParticle(Player p, String name) {
+        if (!com.omniarena.visual.VisualGate.particles(p)) return;
         org.bukkit.Particle particle;
         try { particle = org.bukkit.Particle.valueOf(name.toUpperCase()); }
         catch (Exception e) { particle = org.bukkit.Particle.FLAME; }

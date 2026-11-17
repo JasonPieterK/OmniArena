@@ -53,6 +53,10 @@ public class WebDashboardServer {
     /** Wraps a handler so exceptions yield an error response instead of a dropped connection. */
     private void ctx(String path, Handler handler) {
         server.createContext(path, exchange -> {
+            final long t0 = System.nanoTime();
+            // Path only: the ?token= query is never logged
+            com.omniarena.config.ConfigManager.debugLog(() -> "web: " + exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath()
+                    + " from " + exchange.getRemoteAddress().getAddress().getHostAddress());
             try {
                 handler.handle(exchange);
             } catch (HttpError e) {
@@ -65,6 +69,9 @@ public class WebDashboardServer {
                 plugin.getLogger().warning("[Web] Request failed for " + path + ": " + root);
                 boolean busy = root instanceof java.util.concurrent.TimeoutException;
                 try { err(exchange, busy ? 503 : 500, busy ? "Server is busy, try again." : "Internal error while handling this request. Reload and retry; if it persists an admin should check the server console for the '[Web] Request failed' line."); } catch (Throwable ignored) {}
+            } finally {
+                com.omniarena.config.ConfigManager.debugLog(() -> "web: " + exchange.getRequestURI().getPath() + " handled in "
+                        + (System.nanoTime() - t0) / 1_000_000L + " ms");
             }
         });
     }

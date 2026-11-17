@@ -165,6 +165,8 @@ public class BlockRestoreModule {
             return;
         }
         final int height = maxY - minY + 1;
+        ConfigManager.debugLog(() -> "regen: snapshot of arena " + arenaName + " started (" + (maxX - minX + 1) + "x" + height + "x" + (maxZ - minZ + 1)
+                + " = " + (long) (maxX - minX + 1) * height * (maxZ - minZ + 1) + " blocks)");
         final int columnsPerTick = Math.max(1, SNAPSHOT_BLOCKS_PER_TICK / Math.max(1, height));
         final String worldName = region.getWorldName();
 
@@ -354,10 +356,14 @@ public class BlockRestoreModule {
             return;
         }
         lastErrors.remove(key);
+        final long restoreT0 = System.nanoTime();
+        ConfigManager.debugLog(() -> "regen: restore of arena " + name + " started (style " + getAnimationType() + ", batch-size "
+                + ConfigManager.getInstance().getConfig().getInt("regen.batch-size", 4000) + ")");
         final java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean(false);
         final Runnable fComplete = () -> {
             if (!finished.compareAndSet(false, true)) return;
             activeRegens.remove(key);
+            ConfigManager.debugLog(() -> "regen: restore of arena " + name + " completed in " + (System.nanoTime() - restoreT0) / 1_000_000L + " ms");
             List<Waiter> q = queuedCallbacks.remove(key);
             safeRun(onComplete);
             if (q != null) q.forEach(w -> safeRun(w.ok()));
@@ -365,6 +371,7 @@ public class BlockRestoreModule {
         final Runnable fFail = () -> {
             if (!finished.compareAndSet(false, true)) return;
             activeRegens.remove(key);
+            ConfigManager.debugLog(() -> "regen: restore of arena " + name + " FAILED after " + (System.nanoTime() - restoreT0) / 1_000_000L + " ms");
             List<Waiter> q = queuedCallbacks.remove(key);
             safeRun(onFail);
             if (q != null) q.forEach(w -> safeRun(w.fail()));

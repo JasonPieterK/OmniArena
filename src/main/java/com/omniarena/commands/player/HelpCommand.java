@@ -91,21 +91,22 @@ public class HelpCommand extends SubCommand {
 
     private void loadGuides() {
         guides.put("makingarena", List.of(
-                "<yellow>1.</yellow> Stand where arena will be.",
-                "<yellow>2.</yellow> Run <white>/oa create <name></white>.",
-                "<yellow>3.</yellow> Run <white>/oa wand</white>.",
-                "<yellow>4.</yellow> Left-click corner 1, right-click corner 2.",
-                "<yellow>5.</yellow> Run <white>/oa region set <name></white>.",
-                "<yellow>6.</yellow> Add spawns with <white>/oa spawn set <name> battle</white> (once per player spot).",
-                "<yellow>7.</yellow> Add lobby with <white>/oa spawn set <name> lobby</white>.",
-                "<yellow>8.</yellow> Run <white>/oa regen snapshot <name></white>.",
-                "<yellow>9.</yellow> Run <white>/oa enable <name></white>."));
+                "<yellow>1.</yellow> Stand where the arena will be and run <white>/oa create <name></white>.",
+                "<yellow>2.</yellow> Get the selection wand with <white>/oa wand</white> (or <white>/oa region wand</white>).",
+                "<yellow>3.</yellow> Left-click corner 1, right-click corner 2.",
+                "<yellow>4.</yellow> Add spawns: <white>/oa spawn set <name> battle</white> (once per player spot), <white>lobby</white> and optionally <white>spectator</white>.",
+                "<yellow>5.</yellow> Tune it: <white>/oa config <name> set <key> <value></white> (game mode, players, respawn type, ...) or <white>/oa settings</white>.",
+                "<yellow>6.</yellow> Run <white>/oa region set <name></white> LAST: it saves the region and takes the regen snapshot of the finished build.",
+                "<yellow>7.</yellow> Run <white>/oa enable <name></white>.",
+                "<yellow>8.</yellow> Join signs: place a sign with <white>[OmniArena]</white> on line 1 and the arena name on line 2 (or <white>/oa sign create <name></white>).",
+                "<yellow>Optional:</yellow> <white>/oa access <name> whitelist|blacklist ...</white> limits who may join; <white>/oa hologram create <id> <kills|wins|kd|elo></white> adds a leaderboard."));
         guides.put("regenarena", List.of(
-                "<yellow>1.</yellow> Make sure region is set.",
-                "<yellow>2.</yellow> Save original blocks: <white>/oa regen snapshot <arena></white>.",
-                "<yellow>3.</yellow> Pick default style: <white>/oa regen style SPHERE</white>.",
-                "<yellow>4.</yellow> Rebuild: <white>/oa regen <arena></white>.",
-                "<yellow>5.</yellow> Watch chat progress bar until 100%."));
+                "<yellow>Automatic:</yellow> after every played match the arena rebuilds itself from its snapshot (<white>regen.auto</white>). It is not joinable until the rebuild finishes.",
+                "<yellow>Snapshot:</yellow> <white>/oa region set <arena></white> takes it; re-take with <white>/oa regen snapshot <arena></white> after you change the build.",
+                "<yellow>Per arena:</yellow> <white>/oa regen auto <arena> <true|false|default></white> (default = follow <white>regen.auto</white>).",
+                "<yellow>Style:</yellow> <white>/oa regen style <type></white>, 10 styles, see <white>/oa help regenstyles</white>.",
+                "<yellow>Manual rebuild:</yellow> <white>/oa regen <arena></white> (only while no match runs) or <white>/oa override purge <arena></white>.",
+                "<yellow>Check:</yellow> <white>/oa regen settings</white> shows style, batch size and the auto setting."));
         java.util.List<String> styles = new java.util.ArrayList<>();
         for (com.omniarena.arena.regen.RegenAnimationType t : com.omniarena.arena.regen.RegenAnimationType.values()) {
             styles.add("<yellow>" + t.name() + "</yellow> - <white>/oa regen style " + t.name() + "</white>");
@@ -113,10 +114,10 @@ public class HelpCommand extends SubCommand {
         styles.add("<gray>Old style names (CENTER_OUT, TOP_DOWN, METEOR_STRIKE, ...) still load from config and map to the closest style above.");
         guides.put("regenstyles", styles);
         guides.put("signjoin", List.of(
-                "<yellow>1.</yellow> Look at block where sign should go.",
-                "<yellow>2.</yellow> Run <white>/oa sign create <arena></white>.",
-                "<yellow>3.</yellow> Players right-click sign to join.",
-                "<yellow>4.</yellow> Remove with <white>/oa sign remove</white>."));
+                "<yellow>1.</yellow> Place a sign. On line 1 write <white>[OmniArena]</white> (or <white>[oa]</white>), on line 2 the arena name.",
+                "<yellow>2.</yellow> Or look at a placed sign and run <white>/oa sign create <arena></white>. Needs <white>omniarena.admin.sign</white>.",
+                "<yellow>3.</yellow> The sign shows the arena state and player count; players right-click it to join.",
+                "<yellow>4.</yellow> Remove with <white>/oa sign remove</white> or break the sign; <white>/oa sign list <arena></white> lists them."));
         guides.put("kits", List.of(
                 "<yellow>Players:</yellow> <white>/kit create <name></white>, <white>/kit equip <name></white>, <white>/kit list</white>.",
                 "<yellow>Admin preset kits:</yellow> hold items, run <white>/oa kit admin create <name></white> (or <white>/oa adminkit create <name></white>).",
@@ -124,27 +125,33 @@ public class HelpCommand extends SubCommand {
                 "<yellow>Public kits:</yellow> run <white>/oa kit admin setpublic <name></white>.",
                 "<yellow>Kit menu:</yellow> run <white>/kit</white> or <white>/oa kit</white>."));
         guides.put("startmatch", List.of(
-                "<yellow>1.</yellow> Enable arena: <white>/oa enable <arena></white>.",
-                "<yellow>2.</yellow> Players join by sign or <white>/oa join <arena></white>.",
-                "<yellow>3.</yellow> Match auto-starts when min players joined.",
-                "<yellow>4.</yellow> Admin can force start: <white>/oa match start <arena></white>."));
+                "<yellow>1.</yellow> Enable the arena: <white>/oa enable <arena></white>.",
+                "<yellow>2.</yellow> Players join by sign or <white>/oa join <arena></white>; the countdown starts at min players.",
+                "<yellow>3.</yellow> Ranked matches: <white>/oa queue join [kit]</white> (ELO matchmaking; a party leader queues the party). <white>/oa elo</white> shows ratings.",
+                "<yellow>4.</yellow> Admin force start: <white>/oa match start <arena></white>. Watch with <white>/oa spectate <arena></white>.",
+                "<yellow>5.</yellow> Limit who may join with <white>/oa access <arena> ...</white> (blacklist always, whitelist when enabled)."));
         guides.put("stopmatch", List.of(
-                "<yellow>Stop:</yellow> <white>/oa match stop <arena></white>.",
-                "<yellow>Reset blocks:</yellow> <white>/oa regen <arena></white>.",
+                "<yellow>Stop:</yellow> <white>/oa match stop <arena></white> or <white>/oa override forceend <arena></white>.",
+                "<yellow>Pick a winner:</yellow> <white>/oa forcewin <arena> <player|team></white>.",
+                "<yellow>Blocks:</yellow> the arena rebuilds itself afterwards (<white>regen.auto</white>); manual rebuild: <white>/oa regen <arena></white>.",
                 "<yellow>Leave:</yellow> players use <white>/oa leave</white>."));
         guides.put("settings", List.of(
                 "<yellow>Open UI:</yellow> <white>/oa settings</white>.",
                 "<yellow>Toggle yes/no:</yellow> click values in chat.",
                 "<yellow>Manual set:</yellow> <white>/oa settings set <key> <value></white>.",
-                "<yellow>Regen settings:</yellow> <white>/oa regen settings</white>."));
+                "<yellow>Regen settings:</yellow> <white>/oa regen settings</white>; per arena <white>/oa regen auto <arena> <true|false|default></white>.",
+                "<yellow>Debug logging:</yellow> <white>plugin.debug: true</white> adds verbose console output (matchmaking, regen timings, web requests)."));
         guides.put("permissions", List.of(
                 "<yellow>Player commands</yellow> are open by default.",
                 "<yellow>Admin commands</yellow> need OP or omniarena.admin nodes.",
                 "<yellow>Kit slots:</yellow> omniarena.kit.slots.5 or omniarena.kit.slots.10.",
-                "<yellow>Join bypass:</yellow> omniarena.join.bypass."));
+                "<yellow>Join bypass:</yellow> omniarena.join.bypass (skips whitelist and full checks).",
+                "<yellow>Access lists:</yellow> omniarena.admin.access for <white>/oa access</white>.",
+                "<yellow>Ranked queue:</yellow> omniarena.queue for <white>/oa queue</white>."));
         guides.put("troubleshooting", List.of(
-                "<yellow>No regen snapshot?</yellow> Run <white>/oa regen snapshot <arena></white> first.",
-                "<yellow>Players cannot join?</yellow> Check <white>/oa info <arena></white> and arena enabled.",
+                "<yellow>No regen snapshot?</yellow> Run <white>/oa regen snapshot <arena></white> first (or <white>/oa region set <arena></white>).",
+                "<yellow>Players cannot join?</yellow> Check <white>/oa info <arena></white>: arena enabled, not rebuilding, not whitelist-only (<white>/oa access <arena></white>).",
+                "<yellow>Arena not rebuilt after a match?</yellow> It needs a region and snapshot; check <white>/oa regen settings</white>.",
                 "<yellow>Kits hidden?</yellow> Run <white>/oa kit admin setpublic <name></white>.",
                 "<yellow>Need reload?</yellow> Run <white>/oa reload</white>."));
         guides.put("performance", List.of(

@@ -12,6 +12,7 @@ invalid-args: "<red>Wrong arguments. <gray>Correct usage: <yellow>{usage}</yello
 player-not-found: "<red>Player <yellow>{player}</yellow> is not online or the name is misspelled. <gray>Names are exact; check with <white>/list</white> or use tab-complete."
 arena-not-found: "<red>Arena <yellow>{arena}</yellow> not found. <gray>See arenas with <white>/oa list</white> or create it with <white>/oa create {arena}</white>."
 invalid-number: "<red><yellow>{input}</yellow> is not a valid number. <gray>Use digits only, e.g. <white>10</white> or <white>2.5</white>."
+arena-not-whitelisted: "<red>This arena is whitelist-only and you are not on its whitelist. <gray>Ask an admin to add you, or join another arena (<white>/oa list</white>)."
 arena-banned: "<red>You are banned from this arena, so you cannot join it. <gray>Ask an admin to lift the ban if this is a mistake."
 config-reloaded: "<green>Configuration reloaded successfully."
 plugin-version: "<gray>OmniArena <green>v{version} <gray>by OmniArena Team."

@@ -16,6 +16,7 @@ public class TitleManager {
     }
 
     public void sendMatchStartTitle(Match match) {
+        if (!VisualGate.titles(match)) return;
         forEachPlayer(match, player ->
             MessageUtil.sendTitle(player,
                     msg("title-match-start"),
@@ -24,6 +25,7 @@ public class TitleManager {
     }
 
     public void sendCountdownTitle(Match match, int seconds) {
+        if (!VisualGate.titles(match)) return;
         forEachPlayer(match, player ->
             MessageUtil.sendTitle(player,
                     msg("title-countdown").replace("{seconds}", String.valueOf(seconds)),
@@ -32,6 +34,7 @@ public class TitleManager {
     }
 
     public void sendMatchEndTitle(Match match, MatchResult result) {
+        if (!VisualGate.titles(match)) return;
         for (UUID uuid : match.getPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null) continue;
@@ -47,6 +50,7 @@ public class TitleManager {
     }
 
     public void sendKillstreakTitle(Player player, int streak, String title) {
+        if (!VisualGate.titles(player)) return;
         String titleText = msg("title-killstreak")
                 .replace("{streak}", String.valueOf(streak))
                 .replace("{title}", title);
@@ -57,6 +61,7 @@ public class TitleManager {
     }
 
     public void sendFirstBloodTitle(Match match, String playerName) {
+        if (!VisualGate.titles(match)) return;
         forEachPlayer(match, player ->
             MessageUtil.sendTitle(player,
                     msg("title-first-blood"),
@@ -65,10 +70,12 @@ public class TitleManager {
     }
 
     public void sendRevengeTitle(Player player, String target) {
+        if (!VisualGate.titles(player)) return;
         MessageUtil.sendTitle(player, "<gold>REVENGE!", "<yellow>You killed " + target + "!", 5, 25, 10);
     }
 
     public void sendFirstBloodSelf(Player player) {
+        if (!VisualGate.titles(player)) return;
         MessageUtil.sendTitle(player, "<dark_red>FIRST BLOOD!", "<red>You drew first blood!", 5, 30, 10);
     }
 

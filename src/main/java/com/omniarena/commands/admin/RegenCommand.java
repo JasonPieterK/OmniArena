@@ -23,7 +23,7 @@ public class RegenCommand extends SubCommand {
 
     public RegenCommand(OmniArena plugin) {
         super(PermissionChecker.ADMIN_ARENA,
-                "/oa regen <arena|snapshot <arena>|style <type>|batch <amount>|settings>",
+                "/oa regen <arena|snapshot <arena>|style <type>|batch <amount>|auto <arena> <true|false|default>|settings>",
                 "Regenerate arena blocks");
         this.plugin = plugin;
     }
@@ -40,6 +40,7 @@ public class RegenCommand extends SubCommand {
             case "style" -> handleStyle(sender, args);
             case "batch" -> handleBatch(sender, args);
             case "settings" -> showSettings(sender);
+            case "auto" -> handleAuto(sender, args);
             case "progress", "particles", "sound" -> handleToggle(sender, args);
             default -> restoreArena(sender, args[0]);
         }
@@ -125,6 +126,39 @@ public class RegenCommand extends SubCommand {
         MessageUtil.send(sender, "<green>Default regen animation set to <yellow>" + type.name() + "</yellow>.");
     }
 
+    /** /oa regen auto <arena> <true|false|default>: per-arena override of regen.auto (stored at regen.arenas.&lt;name&gt;.auto). */
+    private void handleAuto(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args")
+                    .replace("{command}", "/oa regen auto").replace("{usage}", "/oa regen auto <arena> <true|false|default>"));
+            return;
+        }
+        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[1]);
+        if (arenaOpt.isEmpty()) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[1]));
+            return;
+        }
+        Arena arena = arenaOpt.get();
+        String path = "regen.arenas." + arena.getName().toLowerCase(Locale.ROOT) + ".auto";
+        String v = args[2].toLowerCase(Locale.ROOT);
+        boolean global = ConfigManager.getInstance().getConfig().getBoolean("regen.auto", true);
+        switch (v) {
+            case "true", "yes", "on" -> {
+                ConfigManager.getInstance().setConfigValue(path, true);
+                MessageUtil.send(sender, "<green>Auto-regen for <yellow>" + arena.getName() + "</yellow> is now <yellow>on</yellow> (overrides the global setting).");
+            }
+            case "false", "no", "off" -> {
+                ConfigManager.getInstance().setConfigValue(path, false);
+                MessageUtil.send(sender, "<green>Auto-regen for <yellow>" + arena.getName() + "</yellow> is now <yellow>off</yellow> (overrides the global setting). <gray>Rebuild manually with <white>/oa regen " + arena.getName() + "</white>.");
+            }
+            case "default", "reset", "global" -> {
+                ConfigManager.getInstance().setConfigValue(path, null);
+                MessageUtil.send(sender, "<green>Auto-regen override removed for <yellow>" + arena.getName() + "</yellow>; it now follows <white>regen.auto</white> (currently <yellow>" + global + "</yellow>).");
+            }
+            default -> MessageUtil.send(sender, "<red>Invalid value <yellow>" + args[2] + "</yellow>. <gray>Use true, false or default (follow the global regen.auto).");
+        }
+    }
+
     private void handleBatch(CommandSender sender, String[] args) {
         if (args.length < 2) {
             MessageUtil.send(sender, "<yellow>Current regen batch size: <white>"
@@ -169,6 +203,8 @@ public class RegenCommand extends SubCommand {
         MessageUtil.send(sender, "<gray>Progress bar: <yellow>" + cfg.getBoolean("regen.progress.enabled", true));
         MessageUtil.send(sender, "<gray>Particles: <yellow>" + cfg.getBoolean("regen.animation.particles", true));
         MessageUtil.send(sender, "<gray>Sound: <yellow>" + cfg.getBoolean("regen.animation.sound", true));
+        MessageUtil.send(sender, "<gray>Auto-regen after matches: <yellow>" + cfg.getBoolean("regen.auto", true)
+                + "</yellow> <dark_gray>(per arena: /oa regen auto <arena> <true|false|default>)");
     }
 
     private void showHelp(CommandSender sender) {
@@ -177,6 +213,7 @@ public class RegenCommand extends SubCommand {
         MessageUtil.send(sender, "<yellow>/oa regen snapshot <arena></yellow> <gray>- save current arena blocks");
         MessageUtil.send(sender, "<yellow>/oa regen style <type></yellow> <gray>- set default style");
         MessageUtil.send(sender, "<yellow>/oa regen batch <amount></yellow> <gray>- set blocks restored per tick");
+        MessageUtil.send(sender, "<yellow>/oa regen auto <arena> <true|false|default></yellow> <gray>- per-arena auto-regen after matches (default = follow regen.auto)");
         MessageUtil.send(sender, "<yellow>/oa regen progress <true|false></yellow> <gray>- toggle chat progress bar");
         MessageUtil.send(sender, "<yellow>/oa regen particles <true|false></yellow> <gray>- toggle particles");
         MessageUtil.send(sender, "<yellow>/oa regen sound <true|false></yellow> <gray>- toggle sound");
@@ -199,20 +236,21 @@ public class RegenCommand extends SubCommand {
     public List<String> tabComplete(CommandSender sender, String[] args) {
         String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            List<String> options = new java.util.ArrayList<>(List.of("help", "snapshot", "style", "batch", "settings", "progress", "particles", "sound"));
+            List<String> options = new java.util.ArrayList<>(List.of("help", "snapshot", "style", "batch", "auto", "settings", "progress", "particles", "sound"));
             options.addAll(TabUtil.arenas(""));
             return TabUtil.filter(options, cur);
         }
         String a = args[0].toLowerCase(Locale.ROOT);
         if (args.length == 2) {
             return switch (a) {
-                case "snapshot" -> TabUtil.arenas(cur);
+                case "snapshot", "auto" -> TabUtil.arenas(cur);
                 case "style" -> TabUtil.enums(RegenAnimationType.class, cur);
                 case "batch" -> TabUtil.hint("<amount>", cur);
                 case "progress", "particles", "sound" -> TabUtil.bools(cur);
                 default -> List.of();
             };
         }
+        if (args.length == 3 && a.equals("auto")) return TabUtil.filter(List.of("true", "false", "default"), cur);
         return List.of();
     }
 }

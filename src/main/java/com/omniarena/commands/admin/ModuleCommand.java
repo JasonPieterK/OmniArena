@@ -16,7 +16,7 @@ import java.util.Optional;
 public class ModuleCommand extends SubCommand {
 
     private static final List<String> KNOWN_MODULES = List.of(
-            "killstreak", "combo", "power-up", "item-spawner", "environmental", "leveling");
+            "killstreak", "combo", "power-up");
 
     public ModuleCommand(OmniArena plugin) {
         super(PermissionChecker.ADMIN_ARENA, "/oa module <enable|disable> <arena> <module>", "Toggle arena module");

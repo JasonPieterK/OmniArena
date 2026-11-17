@@ -57,6 +57,8 @@ public class Match {
     // Scheduled tasks
     private BukkitTask countdownTask;
     private BukkitTask matchTimerTask;
+    /** Players waiting for the next WAVE respawn (insertion order). Main thread only. */
+    private final Set<UUID> waveQueue = new LinkedHashSet<>();
 
     public Match(Arena arena) {
         this.arena = arena;
@@ -125,6 +127,7 @@ public class Match {
         combo.remove(uuid);
         joinedAt.remove(uuid);
         spawnProtection.remove(uuid);
+        waveQueue.remove(uuid);
         teamMap.remove(uuid);
         BukkitTask spTask = spawnProtectionTasks.remove(uuid);
         if (spTask != null) spTask.cancel();
@@ -251,7 +254,10 @@ public class Match {
         matchTimerTask = task;
     }
 
+    public Set<UUID> getWaveQueue() { return waveQueue; }
+
     public void cancelTasks() {
+        waveQueue.clear();
         spawnProtectionTasks.values().forEach(BukkitTask::cancel);
         spawnProtectionTasks.clear();
         if (countdownTask != null) {

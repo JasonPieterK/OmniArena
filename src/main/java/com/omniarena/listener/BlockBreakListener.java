@@ -26,7 +26,7 @@ public class BlockBreakListener implements Listener {
         // Prevent block break if holding selection wand and has permission
         if (com.omniarena.permission.PermissionChecker.hasAdminArena(player)) {
             org.bukkit.inventory.ItemStack item = player.getInventory().getItemInMainHand();
-            if (item != null && item.getType() == org.bukkit.Material.WOODEN_AXE) {
+            if (item != null && item.getType() == PlayerInteractListener.wandMaterial()) {
                 event.setCancelled(true);
                 return;
             }

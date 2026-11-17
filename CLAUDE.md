@@ -28,8 +28,9 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
   copied the jar to a Windows path has been removed.
 - Repositories needed: PaperMC, Spigot snapshots, PurpurMC, EssentialsX, PlaceholderAPI, EngineHub,
   Sonatype, JitPack, Vault. Outbound network may be restricted in sandboxes; builds may need a
-  pre-populated `~/.m2` (the sandbox these docs were last synced in only had an old
-  `paper-api 26.2.build.31-alpha` cached, so the matrix could not be built or verified there).
+  pre-populated `~/.m2`. Verification status: compilation was verified for all 18 paper, spigot and
+  bukkit combinations (and the unit tests on paper/mc-26.2); the 6 purpur jars could not be
+  verified because repo.purpurmc.org was unreachable. No live-server runtime tests exist.
 
 ### The 24-jar matrix
 
@@ -41,7 +42,7 @@ turns off as soon as any other profile is passed with `-P`: hence "always pass b
 | Profile | Effect |
 |---------|--------|
 | `paper` | `paper-api`; adds `src/paper/java` (native Adventure, Paper events) |
-| `purpur` | `purpur-api` (repo.purpurmc.org); adds `src/paper/java` (unverified coordinates) |
+| `purpur` | `purpur-api` (repo.purpurmc.org); adds `src/paper/java` (coordinates unverified: repo unreachable when checked) |
 | `spigot` | `spigot-api`; adds `src/spigot/java`; shades and relocates Adventure (`net.kyori` -> `com.omniarena.libs.kyori`) + `adventure-platform-bukkit` |
 | `bukkit` | identical to `spigot` (only the jar name differs) |
 | `mc-*` | sets `mc.version`, `java.version`/`maven.compiler.release` (25 or 21), `api.version` (the `plugin.yml` `api-version`, `1.21` for all 1.21.x) and the three API versions |
@@ -95,8 +96,8 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `stats` | `StatsManager`, `PlayerStats` | Lifetime stats (`stats.yml`), top lists, `peekStats` (read-only) vs `getStats` (creates). |
 | `combat` | `CombatManager`, `CombatListener`, `PvpCommandHandler` | Server-wide PvP management (tags, persistent toggles `pvp-toggles.yml`, newbie `newbie.yml`, abuse, border hopping, crystal attribution). |
 | `listener` | 17 listeners | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks). |
-| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (27), `commands.player.*` (11), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
-| `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
+| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (28, incl. `AccessCommand`), `commands.player.*` (12, incl. `EloCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
+| `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
 | `module` | `ModuleManager`, `KillstreakModule`, `ComboModule`, `PowerUpModule` | Optional per-arena modules (names in `Arena.getEnabledModules()`). |
 | `settings` | `SettingsGUI`, `SettingsMenuListener`, `SettingsHolder` | Chest-GUI editor over `ConfigSchemaService`. |
 | `sign` | `SignManager`, `ArenaSign` | Join signs, glowstone tracking (`sign-glowstone.yml`). |
@@ -199,7 +200,8 @@ onEnable, onDisable, `/oa stop` and `/oa start`.
    Other async writers follow the same snapshot-then-write pattern: `PlayerStateStore` (single
    writer thread), `CombatManager` (`pvp-toggles.yml`, `newbie.yml`).
 7. Player-facing text: build with MiniMessage via `MessageUtil.send` and `ConfigManager.getMessage`
-   (the latter prepends `prefix`). Never concatenate untrusted user text into MiniMessage tags without
+   (the latter prepends `prefix`). Player chat is built with `Component.text` in `ChatListener.safeText`
+   (never parse it as MiniMessage). Never concatenate untrusted user text into MiniMessage tags without
    considering tag injection. Component-typed Bukkit APIs (item names, sign lines, inventory titles,
    boss bars, titles) must go through `PlatformAdapter`, never straight to Paper-only methods.
 
@@ -251,8 +253,9 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   compute from pre-match values; `recordWin/recordLoss` apply the new rating themselves (do not
   also call `setRating`: this double-applied before, commit 79f37fe).
 - `MatchResult.isDraw()` is true for `DRAW` and `TIMEOUT`.
-- There is no `/oa elo` command; ratings are shown by `/oa queue status`, the `elo` hologram type
-  and the web Players tab.
+- `/oa elo [player]` / `/oa elo top [n]` (`EloCommand`, `omniarena.use`) show ratings through the
+  read-only `peekRating`/`getPlayerRank`/`getLeaderboard` paths (never `getRating`, which creates an
+  entry). Ratings also appear in `/oa queue status`, the `elo` hologram type and the web Players tab.
 
 ---
 
@@ -340,8 +343,9 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - When adding a style: add the enum value, `orderEntries` case, `buildPreview` case, optional
   sound case, extend `RegenAnimationTypeTest`, and update docs (counts appear in README, DOCS.md and
   the help guides).
-- `regen.arenas.<name>.auto` is not in `config.yml`, hence not in the settings schema; it can only
-  be set by editing the file.
+- `regen.arenas.<name>.auto` is not in `config.yml`, hence not in the settings schema (no GUI or
+  dashboard entry). Set it with `/oa regen auto <arena> <true|false|default>` (`default` unsets it)
+  or by editing the file.
 
 ---
 
@@ -408,8 +412,8 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
 
 - Arena files: `arenas/<name>.yml`, loaded by `ArenaConfig` (skips `example.yml`). Locations are
   `world:x:y:z:yaw:pitch` (`LocationUtil`). `enabled` is derived from state != DISABLED. `lives` and
-  `goal.type` (+ `goal.type-override`) are persisted. Whitelist/blacklist and `whitelist-enabled`
-  are not persisted. `team.colors` and `classes` in the example file are not read.
+  `goal.type` (+ `goal.type-override`), `respawn.wave-interval` and `access.whitelist-enabled|
+  whitelist|blacklist` (UUID strings) are persisted. `team.colors` and `classes` in the example file are not read.
 - Snapshots: format v2 palette/runs plus optional `tiles` (section 7).
 - `sign-glowstone.yml`: `locations: ["world,x,y,z"]`; only positions listed are ever cleared.
 - `holograms.yml` (`HologramManager`; unparseable entries are written back verbatim),
@@ -459,8 +463,9 @@ also still routes `setpublic|setprivate|icon|description|cooldown|permission` fo
    `ConfigSchemaServiceTest` and the web Config tab after changes.
 4. If the key must be validated in the web UI add rules in `ConfigApplyService` (types, ranges, enums).
 5. Document it in DOCS.md section 18 and, if user-facing, the README.
-6. Do not add a key nobody reads. Today every key in `config.yml` is read except `plugin.debug`
-   (`ConfigManager.isDebug()` has no caller).
+6. Do not add a key nobody reads. Today every key in `config.yml` is read. `plugin.debug` is read via
+   `ConfigManager.debugLog(() -> "...")` (lazy supplier, no cost when off); use it for verbose
+   diagnostics (matchmaking, regen timings, web requests) and never log tokens.
 
 ### Messages
 
@@ -561,20 +566,25 @@ back to the jar's bundled `messages.yml`.
 14. Maven profiles: `paper` and `mc-26.2` are `activeByDefault`, which is switched off by any
     explicit `-P`; always pass `-P<platform>,mc-<version>`.
 15. `target/` and `dist/` are git-ignored; do not force-add build output.
-16. Whitelist/blacklist (and `whitelist-enabled`) on arenas are never populated or saved
-    (`JoinCommand` consults the whitelist and `omniarena.join.bypass`).
-16a. Per-arena `visual-titles|sounds|particles|holograms` are stored but nothing reads them (only
-    scoreboard, boss-bar and action-bar flags are consulted).
+16. Arena whitelist/blacklist/`whitelist-enabled` are managed by `/oa access` (`AccessCommand`,
+    `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena`
+    (blacklist always; whitelist when enabled unless `omniarena.join.bypass`/OP). Do not add join
+    paths that skip `joinArena`.
+16a. Visual channels: `VisualGate` combines the global `visual.titles|sounds|particles|holograms`
+    key with the arena flag. New titles/sounds/particles must go through `TitleManager`,
+    `SoundManager`, `ParticleManager`/`EffectManager` (which gate) or call `VisualGate` themselves.
 16b. A paper/purpur jar and a spigot/bukkit jar write container snapshots differently; do not mix
     snapshot files between them.
-17. `RespawnType.WAVE` is a flat 1 s respawn; `respawn.delay` only applies to `DELAYED`.
+17. `RespawnType.WAVE`: dead players are parked in spectator mode (`MatchManager.queueWaveRespawn`,
+    queue in `Match.getWaveQueue()`) and released together by `tickWave` from the match timer every
+    `Arena.respawnWaveInterval` seconds (`respawn.wave-interval`, default 10); the shared respawn
+    body is `MatchManager.completeRespawn`. `respawn.delay` only applies to `DELAYED`.
 18. `BlockRestoreModule` keeps `shuttingDown = true` after `cancelAll()` until the next snapshot or
     restore resets it; `/oa start` therefore works for regen again on the next call.
 19. When a match has `getQueueKit()` set, loadouts come from that admin kit, otherwise from
     `GameModeKits`; respawns call the same `applyLoadout`.
-20. `plugin.debug` is the only shipped config key that nothing reads (`ConfigManager.isDebug()` has
-    no caller); `isModuleEnabled` (`modules.*`) is also unused. Check DOCS.md section 18 before
-    assuming a key works.
+20. `isModuleEnabled` (`modules.*`) is unused. Check DOCS.md section 18 before assuming a key works.
+    `/oa module` accepts only `killstreak`, `combo`, `power-up` (`ModuleCommand.KNOWN_MODULES`).
 21. `index.html` is a resource under `src/main/resources/web`: changes require a rebuild to be served
     (served from the jar via `plugin.getResource`).
 

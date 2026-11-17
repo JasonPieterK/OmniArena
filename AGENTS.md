@@ -24,8 +24,8 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   `PlatformImpl` per jar is in `src/paper/java` (paper, purpur) or `src/spigot/java` (spigot, bukkit,
   with shaded + relocated Adventure and `adventure-platform-bukkit`). Never call Paper-only API from
   common code: add a method to `PlatformAdapter` and implement it in both `PlatformImpl` classes.
-  Code stays at Java 21 level. Purpur uses `purpur-api`; its coordinates and the 26.x / Spigot
-  snapshot versions have not been verified in the doc-authoring environment.
+  Code stays at Java 21 level. Compilation is verified for all 18 paper/spigot/bukkit combinations;
+  Purpur (`purpur-api`) could not be verified because repo.purpurmc.org was unreachable.
 - `target/` and `dist/` are git-ignored; the old Windows antrun copy step is gone.
 - Tests: 12 `@Test` methods (`grep -r "@Test" src/test | wc -l`).
 
@@ -77,7 +77,8 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   1000; needs a free enabled WAITING arena not reserved by a tournament; everyone is removed from the
   queue before match creation and re-queued (keeping wait time) on failure. Matches are flagged
   **ranked**; only ranked matches change ELO (win/loss, draws, forfeits; per player against the
-  opposing side's average in team matches). There is no `/oa elo` command.
+  opposing side's average in team matches). `/oa elo [player|top [n]]` shows ratings (read-only
+  `peekRating`, never creates entries).
 
 **Matches**
 - Win condition = `arena.getGoalType()`: the game type's goal (`KILLS` / `LAST_ALIVE`) unless the
@@ -89,7 +90,8 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   on leave; always leave via `MatchManager.leaveArena/leaveSpectator`. Plugin teleports use
   `markInternalTeleport`.
 - Regeneration is **automatic** after a match (`MatchManager.startAutoRegen`; `regen.auto`, per arena
-  `regen.arenas.<name>.auto`); the arena is `RESETTING` until it finishes. Manual: `/oa regen`,
+  `regen.arenas.<name>.auto`, set with `/oa regen auto <arena> <true|false|default>`); the arena is
+  `RESETTING` until it finishes. Manual: `/oa regen`,
   `/oa override purge`. Snapshots: `snapshots/<arena>.yml`, `format: 2`, `palette` + `runs`
   (`"x,z,y0,len,idx"`) + optional `tiles` (containers, signs, banners; container bytes are
   platform specific). Styles: 10 enum values (`INSTANT`, `SPHERE` default, `RISE`, `FALL`, `SWEEP`,
@@ -113,11 +115,16 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   refund all.
 
 **Config, messages, permissions**
-- Add keys to `config.yml` and read them where used; today every shipped key is read except
-  `plugin.debug` (see DOCS.md section 18). The web/GUI schema is exactly the keys of the live
+- Add keys to `config.yml` and read them where used; today every shipped key is read
+  (see DOCS.md section 18). The web/GUI schema is exactly the keys of the live
   `config.yml` + `messages.yml` (no extras, no padding).
 - User-facing text goes through `messages.yml` (`ConfigManager.getMessage` adds the prefix) where
-  practical; formatting is MiniMessage.
+  practical; formatting is MiniMessage. Never put player-typed text into a MiniMessage string:
+  build `Component.text(...)` (see `ChatListener.safeText`) or escape it.
+- `plugin.debug` gates verbose logging through `ConfigManager.debugLog(() -> ...)`; never log tokens.
+- Per-arena access lists (`/oa access`, `omniarena.admin.access`) are enforced in
+  `MatchManager.joinArena`; per-arena `visual-titles|sounds|particles|holograms` are combined with the
+  global `visual.*` keys by `visual/VisualGate`.
 - Declare every permission in `plugin.yml`. Player subcommands are checked by the dispatcher against
   their constructor permission for non-OP players; admin subcommands via `PermissionChecker.hasAdmin`
   (console, OP, `omniarena.admin`, or the node). All nodes in use are declared in `plugin.yml`
@@ -171,9 +178,9 @@ persisted keys without a migration or fallback read.
 - Plain `/oa kit create|delete|equip|list|rename` resolve to the player kit command; the admin forms
   are `/oa kit admin <action>` and `/oa adminkit <action>` (the legacy shortcuts for
   `setpublic|setprivate|icon|description|cooldown|permission` still reach the admin command).
-- Per-arena `visual-titles|sounds|particles|holograms`, whitelist/blacklist (and `whitelist-enabled`)
-  are not read or not persisted; `plugin.debug` is not read; `regen.arenas.<name>.auto` is only
-  settable in the file.
+- `regen.arenas.<name>.auto` is not in the settings schema (no GUI/dashboard entry); use
+  `/oa regen auto` or edit the file. `RespawnType.WAVE` waves are driven by the match timer
+  (`MatchManager.tickWave`) and `respawn.wave-interval` has no dashboard field.
 - `web.session-minutes` / `web.max-sessions` are read once at plugin enable.
 - The Docs tab serves `src/main/resources/web/docs.md`, which must be byte-identical to `DOCS.md`
   (`cp DOCS.md src/main/resources/web/docs.md`).

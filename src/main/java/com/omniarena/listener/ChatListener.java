@@ -10,6 +10,7 @@ import com.omniarena.match.MatchTeam;
 import com.omniarena.util.ColorUtil;
 import com.omniarena.util.MessageUtil;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -53,8 +54,8 @@ public final class ChatListener {
             if (team == null) {
                 sendArena(match, player, "[Arena] ", text);
             } else {
-                Component msg = ColorUtil.parse(
-                        team.getColor().getMiniMessageTag() + "[Team] <white>" + player.getName() + ": <gray>" + text);
+                Component msg = ColorUtil.parse(team.getColor().getMiniMessageTag() + "[Team] <white>")
+                        .append(safeText(player.getName() + ": ", text));
                 for (UUID uid : team.getMembers()) {
                     Player p = Bukkit.getPlayer(uid);
                     if (p != null) MessageUtil.send(p, msg);
@@ -66,9 +67,18 @@ public final class ChatListener {
         return true;
     }
 
+    /**
+     * Builds "name: message" from plain text only. Player input is never parsed as MiniMessage or
+     * legacy codes, so it cannot inject tags (click/hover events, colours, translatable keys).
+     */
+    private static Component safeText(String namePart, String text) {
+        return Component.text(namePart, NamedTextColor.WHITE)
+                .append(Component.text(text == null ? "" : text, NamedTextColor.GRAY));
+    }
+
     private static void sendArena(Match match, Player sender, String prefix, String text) {
-        Component msg = ColorUtil.parse(
-                "<dark_aqua>" + prefix + "<white>" + sender.getName() + ": <gray>" + text);
+        Component msg = ColorUtil.parse("<dark_aqua>" + prefix + "<white>")
+                .append(safeText(sender.getName() + ": ", text));
         for (UUID uid : match.getPlayers()) {
             Player p = Bukkit.getPlayer(uid);
             if (p != null) MessageUtil.send(p, msg);

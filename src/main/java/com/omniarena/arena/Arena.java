@@ -28,6 +28,8 @@ public class Arena {
     // Respawn
     private RespawnType respawnType = RespawnType.INSTANT;
     private int respawnDelay = 3;
+    /** WAVE respawn: dead players come back together every this many seconds of match time. */
+    private int respawnWaveInterval = 10;
     private int spawnProtection = 3;
     /** Lives per player; 0 = not configured (mode default respawn semantics apply). */
     private int lives = 0;
@@ -105,6 +107,8 @@ public class Arena {
     public void setRespawnType(RespawnType respawnType) { this.respawnType = respawnType; }
     public int getRespawnDelay() { return respawnDelay; }
     public void setRespawnDelay(int respawnDelay) { this.respawnDelay = respawnDelay; }
+    public int getRespawnWaveInterval() { return respawnWaveInterval; }
+    public void setRespawnWaveInterval(int seconds) { this.respawnWaveInterval = Math.max(1, seconds); }
     public int getLives() { return lives; }
     public void setLives(int lives) { this.lives = Math.max(0, lives); }
     public int getSpawnProtection() { return spawnProtection; }

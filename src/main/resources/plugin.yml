@@ -128,6 +128,7 @@ permissions:
       omniarena.admin.stats: true
       omniarena.admin.reload: true
       omniarena.admin.override: true
+      omniarena.admin.access: true
       omniarena.pvp.admin: true
       omniarena.tournament.admin: true
       omniarena.join.bypass: true
@@ -162,6 +163,10 @@ permissions:
 
   omniarena.admin.reload:
     description: Reload plugin config
+    default: op
+
+  omniarena.admin.access:
+    description: Manage per-arena whitelist/blacklist (/oa access)
     default: op
 
   omniarena.kit.slots.5:

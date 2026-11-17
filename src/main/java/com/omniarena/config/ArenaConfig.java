@@ -75,6 +75,7 @@ public class ArenaConfig {
         if (respawn != null) {
             arena.setRespawnType(RespawnType.fromString(respawn.getString("type", "INSTANT")));
             arena.setRespawnDelay(respawn.getInt("delay", 3));
+            arena.setRespawnWaveInterval(respawn.getInt("wave-interval", 10));
         }
         arena.setSpawnProtection(cfg.getInt("spawn-protection", 3));
         arena.setLives(cfg.getInt("lives", 0));
@@ -131,6 +132,11 @@ public class ArenaConfig {
             }
         }
 
+        // Access control (whitelist/blacklist of player UUIDs)
+        arena.setWhitelistEnabled(cfg.getBoolean("access.whitelist-enabled", false));
+        loadUuids(cfg.getStringList("access.whitelist"), arena.getWhitelist(), name, "whitelist");
+        loadUuids(cfg.getStringList("access.blacklist"), arena.getBlacklist(), name, "blacklist");
+
         // End commands
         arena.getEndCommands().addAll(cfg.getStringList("end-commands"));
 
@@ -148,6 +154,15 @@ public class ArenaConfig {
         }
 
         return arena;
+    }
+
+    private void loadUuids(List<String> raw, java.util.Set<java.util.UUID> into, String arena, String what) {
+        for (String s : raw) {
+            try { into.add(java.util.UUID.fromString(s.trim())); }
+            catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("Arena '" + arena + "': ignoring invalid UUID '" + s + "' in access." + what + ". Fix: remove it from arenas/" + arena + ".yml or re-add the player with /oa access " + arena + " " + what + " add <player>.");
+            }
+        }
     }
 
     private void loadSpawns(FileConfiguration cfg, Arena arena, String path, SpawnType type) {
@@ -182,6 +197,7 @@ public class ArenaConfig {
 
         cfg.set("respawn.type", arena.getRespawnType().name());
         cfg.set("respawn.delay", arena.getRespawnDelay());
+        cfg.set("respawn.wave-interval", arena.getRespawnWaveInterval());
 
         ArenaRules r = arena.getRules();
         cfg.set("rules.fall-damage", r.isFallDamage());
@@ -220,6 +236,10 @@ public class ArenaConfig {
         cfg.set("signs", signStrs);
 
         cfg.set("end-commands", arena.getEndCommands());
+
+        cfg.set("access.whitelist-enabled", arena.isWhitelistEnabled());
+        cfg.set("access.whitelist", arena.getWhitelist().stream().map(java.util.UUID::toString).sorted().toList());
+        cfg.set("access.blacklist", arena.getBlacklist().stream().map(java.util.UUID::toString).sorted().toList());
 
         ArenaVisualConfig v = arena.getVisual();
         cfg.set("visual.titles", v.isTitles());

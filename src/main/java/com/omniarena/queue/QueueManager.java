@@ -330,10 +330,21 @@ public class QueueManager {
                         side2 = new ArrayList<>(solos.subList(0, n));
                     }
                 }
-                if (side2 == null) continue;
+                if (side2 == null) {
+                    final QueuedPlayer dbg = e1;
+                    com.omniarena.config.ConfigManager.debugLog(() -> "matchmaking: no opponent for " + describe(List.of(dbg))
+                            + " (elo " + elo.get(dbg) + ", range +/-" + allowedRange(dbg, dbg, now) + ") in queue '" + queue.getKitName() + "'");
+                    continue;
+                }
 
                 Arena arena = findFreeArena(n);
-                if (arena == null) continue; // nothing free for this size; keep everyone queued
+                if (arena == null) { // nothing free for this size; keep everyone queued
+                    com.omniarena.config.ConfigManager.debugLog(() -> "matchmaking: pair found in queue '" + queue.getKitName() + "' but no free arena fits " + n + "v" + n);
+                    continue;
+                }
+                final List<QueuedPlayer> dbgSide2 = side2;
+                com.omniarena.config.ConfigManager.debugLog(() -> "matchmaking: pairing " + describe(List.of(e1)) + " (elo " + elo.get(e1)
+                        + ") vs " + describe(dbgSide2) + " in arena " + arena.getName() + " (queue '" + queue.getKitName() + "')");
 
                 // Take everyone out of the queue BEFORE creating the match so a failed
                 // attempt can put them back (previously they were silently lost).
@@ -405,6 +416,7 @@ public class QueueManager {
         if (sides.get(0).size() + sides.get(1).size() != expected) {
             // Someone went offline: re-queue the entries that are still whole
             for (QueuedPlayer q : all) requeue(q, kitName);
+            com.omniarena.config.ConfigManager.debugLog(() -> "matchmaking: a queued player went offline before the match was created; re-queued whole entries");
             return;
         }
 
@@ -416,6 +428,7 @@ public class QueueManager {
         if (!ok) {
             for (Player p : joined) mm.leaveArena(p);
             for (QueuedPlayer q : all) requeue(q, kitName);
+            com.omniarena.config.ConfigManager.debugLog(() -> "matchmaking: joinArena failed for arena " + arena.getName() + "; everyone re-queued");
             return;
         }
 

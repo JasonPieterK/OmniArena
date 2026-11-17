@@ -151,7 +151,7 @@ public class PlayerInteractListener implements Listener {
             return;
         }
 
-        if (!arena.isWhitelisted(player.getUniqueId())) {
+        if (!arena.isWhitelisted(player.getUniqueId()) && !com.omniarena.permission.PermissionChecker.canBypassJoin(player)) {
             MessageUtil.send(player, "<red>This arena is whitelist-only and you are not on its whitelist. <gray>Ask an admin to add you.");
             return;
         }

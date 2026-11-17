@@ -48,13 +48,19 @@ betting, leaderboard holograms and an embedded web dashboard, all driven by one 
   rewards, delayed reset.
 - Per-arena `lives` (`/oa config set <arena> lives <n>`, dashboard, arena file): respawn until
   lives run out, then eliminated; shown on the scoreboard and action bar.
+- Per-arena access control (`/oa access`): a blacklist that always applies and an optional whitelist
+  (`whitelist-enabled`), both saved in the arena file; `omniarena.join.bypass` skips the whitelist.
+- Per-arena visual switches (`visual-titles|sounds|particles|holograms|scoreboard|boss-bar|action-bar`)
+  work together with the global `visual.*` keys: a channel is on only when both are on. Leaderboard
+  holograms placed inside an arena region follow that arena's `visual-holograms`.
 - Arena fighters are isolated from outsiders (no damage in or out of the match).
 - Full player-state save and restore around a match: location, game mode, health, food, XP, potion
   effects, flight, speeds, invisibility, and (if `arena.inventory-restore`) inventory and armor.
   The pre-arena state is also written to `player-states/<uuid>.yml`, so players are restored on their
   next join if the server crashed mid-match.
 - Spectating (`/oa spectate`), mid-match join (per arena), spawn protection, respawn types
-  (instant, delayed, wave), first blood, revenge, killstreak, combo and power-up modules.
+  (instant, delayed, and wave: dead players return together every `respawn.wave-interval` seconds,
+  default 10, with a countdown on the action bar/title), first blood, revenge, killstreak, combo and power-up modules.
 - Configurable rewards (`rewards.*`): Vault money, XP and console commands per kill and per win.
 - Join signs (place a sign with `[OmniArena]` on line 1 and the arena name on line 2, or use
   `/oa sign create`), with live state and player count and an optional glowstone block tracked in
@@ -66,8 +72,8 @@ betting, leaderboard holograms and an embedded web dashboard, all driven by one 
 
 **Block regeneration**
 - **Automatic**: after every played match the arena is rebuilt from its snapshot (`regen.auto`,
-  per-arena override `regen.arenas.<name>.auto`); the arena is not joinable until the rebuild has
-  finished. `/oa regen <arena>` and `/oa override purge <arena>` do it by hand.
+  per-arena override via `/oa regen auto <arena> <true|false|default>`); the arena is not
+  joinable until the rebuild has finished. `/oa regen <arena>` and `/oa override purge <arena>` do it by hand.
 - Snapshots in a compact palette + vertical run-length format (format v2), captured in time slices
   on the main thread and written off-thread. They include tile entities: container contents, sign
   text and banner patterns. A snapshot is taken when you run `/oa region set`.
@@ -101,7 +107,8 @@ betting, leaderboard holograms and an embedded web dashboard, all driven by one 
   (wins, losses, draws, forfeits), per player against the opposing side's average in team matches.
 - Ranked matchmaking queue (`/oa queue join [kit]|leave|status`): rating window that expands while
   you wait, optional admin-kit queues, and **party queuing** (a party leader queues the whole
-  party; parties meet parties or enough solo players on a 2-team arena).
+  party; parties meet parties or enough solo players on a 2-team arena). `/oa elo [player]` and
+  `/oa elo top [n]` show ratings.
 - Parties (`/party`): create, invite (60 s expiry), accept, decline, leave, kick, transfer
   leadership (`leader <player>`, automatic when the leader leaves), disband, info. Size limit
   `party.max-size` (default 10).
@@ -152,9 +159,10 @@ Notes:
   regen snapshots that contain containers are encoded differently on Paper-family and Spigot-family
   jars (re-take them with `/oa regen snapshot <arena>` after switching; blocks, signs and banners
   are unaffected).
-- The Purpur jars compile against `purpur-api` from repo.purpurmc.org; those coordinates, and the
-  26.x and Spigot snapshot API versions, could not be verified in the environment where this
-  documentation was written, so treat those builds as untested until you run them.
+- Build verification: compilation (and, for the 26.2 Paper profile, the unit tests) was verified
+  for all 18 paper, spigot and bukkit combinations. The 6 Purpur jars compile against `purpur-api`
+  from repo.purpurmc.org, which was unreachable where this was checked, so those 6 are the only
+  jars not compile-verified. Runtime behaviour on live servers is not covered by automated tests.
 
 ---
 
@@ -275,6 +283,7 @@ While the plugin is stopped (`/oa stop`) every command except `/oa start` replie
 | `/oa list` | `omniarena.use` | List arenas with state and players |
 | `/oa info <arena>` | `omniarena.use` | Arena details |
 | `/oa stats [player]`, `/oa stats global [kills\|wins\|kd]` | `omniarena.use` | Lifetime stats and leaderboards |
+| `/oa elo [player]`, `/oa elo top [n]` | `omniarena.use` | Ranked ELO rating (rating, rank, highest, wins/losses) and leaderboard; read-only |
 | `/oa ready` | `omniarena.use` | Status message only: matches start automatically when the minimum players are in |
 | `/oa help [guide]` | `omniarena.use` | Help and guides |
 | `/kit` and `/oa kit` | `omniarena.kit.use` | Kit menu and subcommands |
@@ -295,12 +304,13 @@ While the plugin is stopped (`/oa stop`) every command except `/oa start` replie
 | `/oa spawn <set\|list\|clear> <arena> [BATTLE\|LOBBY\|SPECTATOR] [#]` | `omniarena.admin.arena` | Spawns |
 | `/oa config <get\|set> [arena] <key> [value]` | `omniarena.admin.arena` | Edit global or per-arena config live (arena keys include `lives`) |
 | `/oa goal set <arena> <type> [value]` | `omniarena.admin.arena` | Arena goal type/value |
-| `/oa module <enable\|disable> <arena> <module>` | `omniarena.admin.arena` | Arena modules |
+| `/oa module <enable\|disable> <arena> <module>` | `omniarena.admin.arena` | Arena modules (`killstreak`, `combo`, `power-up`) |
 | `/oa chat set <arena> <ARENA\|TEAM\|GLOBAL>` | `omniarena.admin.arena` | Chat mode |
 | `/oa announcements set <arena> <enable\|disable>` | `omniarena.admin.arena` | Arena announcements |
 | `/oa tp <arena>` | `omniarena.admin.arena` | Teleport to arena |
 | `/oa debug <arena>` | `omniarena.admin.arena` | Match debug state |
-| `/oa regen ...` | `omniarena.admin.arena` | Snapshot, restore, style, batch, toggles |
+| `/oa regen ...` | `omniarena.admin.arena` | Snapshot, restore, style, batch, toggles, `auto <arena> <true\|false\|default>` |
+| `/oa access <arena> <whitelist\|blacklist> <add\|remove\|list> [player]`, `/oa access <arena> whitelist-enabled <true\|false>` | `omniarena.admin.access` | Per-arena join whitelist and blacklist (saved in the arena file) |
 | `/oa sign <create\|remove\|list>` | `omniarena.admin.sign` | Join signs |
 | `/oa hologram <create\|remove\|move\|list> ...` | `omniarena.admin.hologram` | Leaderboard holograms |
 | `/oa kit admin <action> ...` / `/oa adminkit <action> ...` | `omniarena.admin.kit` | Preset kits: create, delete, rename, equip, setpublic, setprivate, icon, description, cooldown, permission, list |
@@ -331,7 +341,7 @@ specific node. `/oa stats reset <player>` needs `omniarena.admin.stats`.
 | `omniarena.tournament.create` | true | Create, join, leave and start own tournaments |
 | `omniarena.kit.slots.5` / `.10` | false | Larger personal kit limit |
 | `omniarena.admin` | op | Parent of all admin nodes below |
-| `omniarena.admin.arena` / `.kit` / `.match` / `.sign` / `.hologram` / `.stats` / `.reload` / `.override` | op | Admin areas |
+| `omniarena.admin.arena` / `.kit` / `.match` / `.sign` / `.hologram` / `.stats` / `.reload` / `.override` / `.access` | op | Admin areas |
 | `omniarena.pvp.admin` | op | Combat admin commands |
 | `omniarena.tournament.admin` | op | Manage any tournament, delete, setprize |
 | `omniarena.join.bypass` | op | Bypass the arena whitelist and the full-arena check on `/oa join` |
@@ -449,7 +459,8 @@ Files: `config.yml` (behaviour), `messages.yml` (all player-facing text, MiniMes
 tab; all of them write the same live config. The settings GUI and web Config tab list exactly the
 keys of `config.yml` and `messages.yml`.
 
-Every key shipped in `config.yml` is read by the code, except `plugin.debug` (reserved, no effect).
+Every key shipped in `config.yml` is read by the code. `plugin.debug: true` adds `[debug]` console
+lines for matchmaking decisions, regen timings and web requests (paths only, never tokens).
 Sections:
 
 | Section | Keys |
@@ -545,7 +556,7 @@ Arenas, tournaments and kits are saved synchronously.
 | Betting says unavailable | Vault or an economy provider is missing at plugin start, or `betting.enabled` / `integrations.vault` is off. Install both and restart. |
 | Dashboard link refused | `web.enabled: false`, port in use (see log `[Web] Cannot start dashboard`), or session limit reached (`/oa override killweb`). |
 | Dashboard "Invalid or expired session" | Token idle longer than `web.session-minutes` or revoked: run `/oa website` again. |
-| Config change has no effect | The key needs `/oa reload` / restart (`web.session-minutes`, `web.max-sessions`), or it is `plugin.debug` (no effect). |
+| Config change has no effect | The key needs `/oa reload` / restart (`web.session-minutes`, `web.max-sessions`). |
 | `/kit` opens another plugin's kit | OmniArena only intercepts `/kit` if it owns the command or the player is in an arena. |
 | Placeholders blank | PlaceholderAPI missing, or the player is not in an arena (in-match values are blank/0 outside one). |
 | Standalone `/list`, `/info`, `/help` clash with other plugins | These are registered by OmniArena; use `/oa list` etc. and resolve the clash in your command-alias setup. |
@@ -559,18 +570,6 @@ guarded, so a failure in one save does not skip the others.
 
 These are accurate as of the current code and are tracked so users are not surprised:
 
-- **Arena whitelist/blacklist** are consulted by `/oa join` and signs, but no command fills them
-  and neither the lists nor `whitelist-enabled` are saved to the arena file.
-- **Per-arena visual flags** `visual-titles`, `visual-sounds`, `visual-particles` and
-  `visual-holograms` are stored and editable but not consulted (scoreboard, boss bar and action bar
-  flags work; titles/sounds/effects follow the global `visual.*` keys).
-- **Respawn type WAVE** behaves like a 1 second respawn; `respawn-delay` applies to DELAYED only.
-- **`plugin.debug`** is not read; **modules** `item-spawner`, `environmental` and `leveling` are
-  accepted by `/oa module` but have no code behind them.
-- **No `/oa elo` command**: ratings appear in `/oa queue status`, the `elo` leaderboard hologram
-  and the web Players tab.
-- **`regen.arenas.<name>.auto`** is only editable in `config.yml` (not in the GUI, dashboard or
-  `/oa config`).
 - **Database mode** is not implemented; everything is YAML.
 - **Platform differences**: container snapshots are not portable between Paper-family and
   Spigot-family jars, and the elytra firework-boost block while tagged is Paper-only.

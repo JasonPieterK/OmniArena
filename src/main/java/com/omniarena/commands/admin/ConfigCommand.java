@@ -145,6 +145,7 @@ public class ConfigCommand extends SubCommand {
             case "goal-value" -> arena.setGoalValue(parseInt(value, arena.getGoalValue()));
             case "respawn-type" -> arena.setRespawnType(strictEnum(RespawnType.class, value));
             case "respawn-delay" -> arena.setRespawnDelay(parseInt(value, arena.getRespawnDelay()));
+            case "respawn-wave-interval" -> arena.setRespawnWaveInterval(parseInt(value, arena.getRespawnWaveInterval()));
             case "spawn-protection" -> arena.setSpawnProtection(parseInt(value, arena.getSpawnProtection()));
             case "lives" -> {
                 int n = parseInt(value, arena.getLives());
@@ -205,6 +206,7 @@ public class ConfigCommand extends SubCommand {
             case "goal-value" -> arena.getGoalValue();
             case "respawn-type" -> arena.getRespawnType().name();
             case "respawn-delay" -> arena.getRespawnDelay();
+            case "respawn-wave-interval" -> arena.getRespawnWaveInterval();
             case "spawn-protection" -> arena.getSpawnProtection();
             case "lives" -> arena.getLives();
             case "chat-mode" -> arena.getChatMode().name();
@@ -300,7 +302,7 @@ public class ConfigCommand extends SubCommand {
 
 
     private static final List<String> ARENA_KEYS = List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
-            "goal-type", "goal-value", "respawn-type", "respawn-delay", "spawn-protection", "lives", "chat-mode",
+            "goal-type", "goal-value", "respawn-type", "respawn-delay", "respawn-wave-interval", "spawn-protection", "lives", "chat-mode",
             "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
             "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
             "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",

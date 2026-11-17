@@ -20,7 +20,7 @@ public class EffectManager {
     private final Random random = new Random();
 
     public void playVictoryFireworks(Match match, MatchResult result) {
-        if (result.isDraw()) return;
+        if (result.isDraw() || !VisualGate.particles(match)) return;
         UUID winnerId = result.getWinnerId();
         if (winnerId == null) return;
 

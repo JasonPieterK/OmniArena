@@ -52,6 +52,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "debug",         new DebugCommand(plugin));
         reg(adminCommands, "announcements", new AnnouncementsCommand(plugin));
         reg(adminCommands, "chat",          new ChatModeCommand(plugin));
+        reg(adminCommands, "access",        new AccessCommand(plugin));
         reg(adminCommands, "override",      new OverrideCommand(plugin));
         reg(adminCommands, "reload",        new ReloadCommand(plugin));
         reg(adminCommands, "version",       new VersionCommand(plugin));
@@ -122,6 +123,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(playerCommands, "info",     new InfoCommand(plugin));
         reg(playerCommands, "stats",    new StatsCommand(plugin));
         reg(playerCommands, "ready",    new ReadyCommand(plugin));
+        reg(playerCommands, "elo",      new EloCommand(plugin));
         // /oa kit for players mirrors /kit exactly; admin-only actions use /oa kit as admin
         KitCommandExecutor kitExec = plugin.getKitCommandExecutor();
         reg(playerCommands, "kit", new SubCommand(PermissionChecker.PLAYER_KIT, "/oa kit [action] [args]", "Player kit management") {
