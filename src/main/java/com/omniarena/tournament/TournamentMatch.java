@@ -31,6 +31,11 @@ public class TournamentMatch {
     public boolean isStarted()   { return started; }
     public void setStarted(boolean started) { this.started = started; }
 
+    /** Restore persisted result (no-op for unfinished matches). */
+    public void restoreWinner(UUID winner) {
+        if (winner != null) setWinner(winner);
+    }
+
     public void setWinner(UUID winner) {
         this.winner = winner;
         this.completed = true;

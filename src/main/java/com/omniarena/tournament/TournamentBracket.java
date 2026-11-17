@@ -13,6 +13,38 @@ public class TournamentBracket {
         generateRound1(new ArrayList<>(participants));
     }
 
+    /** Restores a persisted bracket. */
+    public TournamentBracket(String arenaName, List<List<TournamentMatch>> rounds, int currentRoundIndex) {
+        this.arenaName = arenaName;
+        this.rounds.addAll(rounds);
+        this.currentRoundIndex = Math.max(0, Math.min(currentRoundIndex, rounds.size() - 1));
+    }
+
+    public int getCurrentRoundIndex() { return currentRoundIndex; }
+
+    /** Loser of the final match (2nd place), or null if not finished. */
+    public UUID getFinalLoser() {
+        if (!isFinished()) return null;
+        for (TournamentMatch m : getCurrentRound()) {
+            if (!m.isBye() && m.getWinner() != null) return loserOf(m);
+        }
+        return null;
+    }
+
+    /** Losers of the round before the final (3rd place pool), or empty. */
+    public List<UUID> getSemifinalLosers() {
+        List<UUID> out = new ArrayList<>();
+        if (!isFinished() || rounds.size() < 2) return out;
+        for (TournamentMatch m : rounds.get(rounds.size() - 2)) {
+            if (!m.isBye() && m.getWinner() != null) out.add(loserOf(m));
+        }
+        return out;
+    }
+
+    private static UUID loserOf(TournamentMatch m) {
+        return m.getWinner().equals(m.getPlayer1()) ? m.getPlayer2() : m.getPlayer1();
+    }
+
     private void generateRound1(List<UUID> seeded) {
         int n = seeded.size();
         int nextPow2 = nextPowerOfTwo(n);
