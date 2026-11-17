@@ -87,6 +87,7 @@ public class ConfigSchemaService {
                     arena.getRespawnDelay(),
                     arena.getSpawnProtection(),
                     arena.getLives(),
+                    arena.getRespawnWaveInterval(),
                     arena.getChatMode().name(),
                     arena.isAnnouncements(),
                     arena.isMidMatchJoin(),

@@ -180,7 +180,7 @@ persisted keys without a migration or fallback read.
   `setpublic|setprivate|icon|description|cooldown|permission` still reach the admin command).
 - `regen.arenas.<name>.auto` is not in the settings schema (no GUI/dashboard entry); use
   `/oa regen auto` or edit the file. `RespawnType.WAVE` waves are driven by the match timer
-  (`MatchManager.tickWave`) and `respawn.wave-interval` has no dashboard field.
+  (`MatchManager.tickWave`) and `respawn.wave-interval` is editable via `/oa config` and the dashboard.
 - `web.session-minutes` / `web.max-sessions` are read once at plugin enable.
 - The Docs tab serves `src/main/resources/web/docs.md`, which must be byte-identical to `DOCS.md`
   (`cp DOCS.md src/main/resources/web/docs.md`).

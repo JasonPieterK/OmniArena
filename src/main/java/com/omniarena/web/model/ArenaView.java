@@ -17,6 +17,7 @@ public record ArenaView(
         int respawnDelay,
         int spawnProtection,
         int lives,
+        int respawnWaveInterval,
         String chatMode,
         boolean announcements,
         boolean midMatchJoin,

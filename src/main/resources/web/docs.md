@@ -1239,7 +1239,5 @@ down the platform layer. Each step is individually guarded so one failure does n
 - **Build verification.** All 18 paper, spigot and bukkit jars are compile-verified; the 6 Purpur
   jars are not (repo.purpurmc.org was unreachable; section 17). No automated runtime tests on live
   servers.
-- **Wave respawn UI.** `respawn-wave-interval` is an arena file / `/oa config` key only; it is not
-  in the web dashboard arena editor.
 - The Docs tab serves a separate bundled copy of this documentation (`web/docs.md`, kept identical
   to this file).
