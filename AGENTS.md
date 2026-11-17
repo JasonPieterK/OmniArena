@@ -1,7 +1,7 @@
 # AGENTS.md: guide for coding agents working on OmniArena
 
-OmniArena is a Paper PVP arena plugin (Java, Maven, Bukkit API + Adventure/MiniMessage), package
-`com.omniarena`, main class `com.omniarena.OmniArena`. This file is self-sufficient for common
+OmniArena is a PVP arena plugin for Paper, Purpur, Spigot and Bukkit (Java, Maven, Bukkit API +
+Adventure/MiniMessage), package `com.omniarena`, main class `com.omniarena.OmniArena`. This file is self-sufficient for common
 tasks; [CLAUDE.md](CLAUDE.md) has the long-form developer guide (architecture, algorithms,
 persistence formats, pitfalls) and [DOCS.md](DOCS.md) / [README.md](README.md) are the user docs.
 If code and docs disagree, the code wins: fix the docs in the same change.
@@ -9,32 +9,39 @@ If code and docs disagree, the code wins: fix the docs in the same change.
 ## Commands
 
 ```bash
-mvn -q package                 # compile + tests + shade -> target/OmniArena-1.0.0.jar
-mvn -q test                    # unit tests only (src/test/java)
-mvn -q -Dtest=TournamentBracketTest test
+mvn -q -Ppaper,mc-26.2 package          # compile + tests + shade -> target/OmniArena-paper-26.2.jar
+mvn -q -Ppaper,mc-26.2 test             # unit tests only (src/test/java)
+mvn -q -Ppaper,mc-26.2 -Dtest=TournamentBracketTest test
+scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, JAVA21_HOME)
 ```
 
-- Current POM: Java 21, Paper API 26.2 (`26.2.build.31-alpha`), shaded FastBoard/HikariCP/Gson/MySQL.
-  An antrun step copies the jar to a Windows path; ignore it, do not depend on it.
-- `target/` is tracked in git; do not edit it and do not mix its changes into a logical commit.
-- Planned matrix: 4 platforms (`paper`, `spigot`, `bukkit`, `purpur`) x 6 versions (`26.3`, `26.2`,
-  `26.1` on Java 25; `1.21.11`, `1.21.10`, `1.21.9` on Java 21) = **24 jars** named
-  `OmniArena-<platform>-<mcversion>.jar`, built with `mvn -P<platform>,mc-<version> package`. Check
-  `pom.xml` for `<id>mc-...</id>` profiles before using the form; they may not exist yet. Do not add
-  Paper-only API calls to new code without noting the Spigot/Bukkit consequence.
+- Always pass **both** a platform profile (`paper`, `purpur`, `spigot`, `bukkit`) and a version profile
+  (`mc-26.3`, `mc-26.2`, `mc-26.1` on Java 25; `mc-1.21.11`, `mc-1.21.10`, `mc-1.21.9` on Java 21):
+  `mvn -P<platform>,mc-<version> package` -> `target/OmniArena-<platform>-<mcversion>.jar`
+  (4 platforms x 6 versions = 24 jars). `paper` and `mc-26.2` are active by default but any explicit
+  `-P` switches them off.
+- Platform layer: `com.omniarena.platform` (`Platform`, `PlatformAdapter`) in `src/main/java`; the one
+  `PlatformImpl` per jar is in `src/paper/java` (paper, purpur) or `src/spigot/java` (spigot, bukkit,
+  with shaded + relocated Adventure and `adventure-platform-bukkit`). Never call Paper-only API from
+  common code: add a method to `PlatformAdapter` and implement it in both `PlatformImpl` classes.
+  Code stays at Java 21 level. Purpur uses `purpur-api`; its coordinates and the 26.x / Spigot
+  snapshot versions have not been verified in the doc-authoring environment.
+- `target/` and `dist/` are git-ignored; the old Windows antrun copy step is gone.
+- Tests: 12 `@Test` methods (`grep -r "@Test" src/test | wc -l`).
 
 ## Project map
 
 | Package | What lives there |
 |---------|------------------|
 | `OmniArena` | entry point, all managers, `isStopped()` flag, sign refresh task |
-| `arena`, `arena.regen` | arena model/registry; snapshot + animated restore (10 styles, snapshot format v2) |
-| `match`, `gamemode` | match engine (join/countdown/start/end/reset, forfeits, draws), 16 game types and loadouts |
+| `arena`, `arena.regen` | arena model/registry; snapshot (tile entities included) + animated automatic/manual restore (10 styles, snapshot format v2) |
+| `match`, `gamemode` | match engine (join/countdown/start/end/reset + auto regen, forfeits, draws, rewards, crash-safe player state), 16 game types and loadouts |
+| `platform` | `Platform`/`PlatformAdapter`: Paper vs Spigot differences (text delivery, signs, chat, item bytes, chunks) |
 | `commands.*` | `/oa` dispatcher (`CommandManager`: admin map + player map), subcommands, standalone forwarders |
 | `kit` | preset kits (`admin-kits/`), personal kits, sharing, kit GUI |
-| `queue`, `rating` | rating matchmaker (1 s tick), ELO (K=32, default 1000, floor 100) |
+| `queue`, `rating` | rating matchmaker (1 s tick, solo and party entries, `/oa queue`), ELO (K=32, default 1000, floor 100) |
 | `tournament` | single-elimination brackets with persistence |
-| `betting`, `party`, `stats`, `combat`, `sign`, `module`, `visual`, `settings` | self-explanatory systems |
+| `betting`, `party`, `stats`, `combat`, `sign`, `module`, `visual` (incl. `HologramManager`), `settings` | self-explanatory systems |
 | `web` | embedded HTTP dashboard + schema/validation; UI in `src/main/resources/web/` |
 | `integration` | Vault, PlaceholderAPI, WorldGuard, LuckPerms hooks (only place optional APIs may be imported) |
 | `util` | `AsyncUtil`, `MessageUtil` (MiniMessage), `YamlUtil`, `LocationUtil`, ... |
@@ -63,23 +70,31 @@ mvn -q -Dtest=TournamentBracketTest test
   its own try/catch.
 
 **Matchmaking (`QueueManager`)**
-- 1 s task; per-kit queues; allowed rating gap starts at 200, +50 per 10 s of waiting (longer waiter),
-  capped at 1000; needs a free enabled WAITING arena; both players removed from the queue before
-  match creation, re-queued (keeping wait time) on failure. Matches are flagged **ranked**; only
-  ranked matches change ELO (win/loss, draw/timeout between two players, forfeit when the leaver
-  quits a running two-player ranked match). There is no player command to join the queue or to view
-  ELO yet; do not document them as available.
+- Entry point `/oa queue join [kit]|leave|status` (`omniarena.queue`). 1 s task; per-kit queues
+  (`ranked` or an admin kit); a party leader queues the whole party as one entry (parties need a
+  2-team arena with `max-players >= 2 * size`; they meet an equal-size party or enough solo
+  players). Allowed rating gap starts at 200, +50 per 10 s of waiting (longer waiter), capped at
+  1000; needs a free enabled WAITING arena not reserved by a tournament; everyone is removed from the
+  queue before match creation and re-queued (keeping wait time) on failure. Matches are flagged
+  **ranked**; only ranked matches change ELO (win/loss, draws, forfeits; per player against the
+  opposing side's average in team matches). There is no `/oa elo` command.
 
 **Matches**
-- Win condition = game type's goal (`KILLS` / `LAST_ALIVE`); arena `goal-value` overrides the default
-  target only when > 0; arena `goal-type` is ignored. Teams (when `team-enabled`) score by team.
-  Timeout in kill modes: strict leader wins, otherwise draw. Draws and timeouts are `isDraw()`.
+- Win condition = `arena.getGoalType()`: the game type's goal (`KILLS` / `LAST_ALIVE`) unless the
+  arena file has `goal.type` with `goal.type-override: true` (`/oa goal set`); arena `goal-value`
+  overrides the default target only when > 0. Teams (when `team-enabled`) score by team. Arena
+  `lives` (0-100, `/oa config set <arena> lives <n>`) overrides respawn semantics. Timeout in kill
+  modes: strict leader wins, otherwise draw. Draws and timeouts are `isDraw()`.
 - Player *i* spawns on battle spawn *i* (modulo). Players' full state is saved on join and restored
   on leave; always leave via `MatchManager.leaveArena/leaveSpectator`. Plugin teleports use
   `markInternalTeleport`.
-- Regeneration is manual (`/oa regen`, `/oa override purge`, end commands); nothing auto-restores
-  after a match. Snapshots: `snapshots/<arena>.yml`, `format: 2`, `palette` + `runs` (`"x,z,y0,len,idx"`).
-  Styles: 10 enum values, old names mapped in `RegenAnimationType.fromConfig`.
+- Regeneration is **automatic** after a match (`MatchManager.startAutoRegen`; `regen.auto`, per arena
+  `regen.arenas.<name>.auto`); the arena is `RESETTING` until it finishes. Manual: `/oa regen`,
+  `/oa override purge`. Snapshots: `snapshots/<arena>.yml`, `format: 2`, `palette` + `runs`
+  (`"x,z,y0,len,idx"`) + optional `tiles` (containers, signs, banners; container bytes are
+  platform specific). Styles: 10 enum values (`INSTANT`, `SPHERE` default, `RISE`, `FALL`, `SWEEP`,
+  `TIME_REWIND`, `GALAXY`, `HOLOGRAM_SCAN`, `METEOR_SHOWER`, `OVERGROWTH`), old names mapped in
+  `RegenAnimationType.fromConfig`.
 
 **Tournaments**
 - `/oa tournament create|join|leave|start|status|list|delete|setprize`. Auto-start when full; byes
@@ -98,19 +113,20 @@ mvn -q -Dtest=TournamentBracketTest test
   refund all.
 
 **Config, messages, permissions**
-- Add keys to `config.yml` and read them where used; many existing keys are unread (see DOCS.md
-  section 18), so verify before assuming a key works. The web/GUI schema is derived from
-  `config.yml` + `messages.yml` plus built-in extras, forced to exactly 250 entries.
+- Add keys to `config.yml` and read them where used; today every shipped key is read except
+  `plugin.debug` (see DOCS.md section 18). The web/GUI schema is exactly the keys of the live
+  `config.yml` + `messages.yml` (no extras, no padding).
 - User-facing text goes through `messages.yml` (`ConfigManager.getMessage` adds the prefix) where
   practical; formatting is MiniMessage.
 - Declare every permission in `plugin.yml`. Player subcommands are checked by the dispatcher against
   their constructor permission for non-OP players; admin subcommands via `PermissionChecker.hasAdmin`
-  (console, OP, `omniarena.admin`, or the node). Known gap: `omniarena.bet` is required by
-  `/oa bet` but undeclared.
+  (console, OP, `omniarena.admin`, or the node). All nodes in use are declared in `plugin.yml`
+  (including `omniarena.bet`, `omniarena.queue`, `omniarena.admin.hologram`).
 
 **Web dashboard**
-- Default bind `127.0.0.1`; token (`?token=`) on every `/api/*` call; sessions are fixed-lifetime and
-  capped (`web.max-sessions`); body limit 1 MiB; all-or-nothing validation in `ConfigApplyService`;
+- Default bind `127.0.0.1`; token (`Authorization: Bearer`, `X-OmniArena-Token`, legacy `?token=`) on
+  every `/api/*` call; sessions slide on use, are capped (`web.max-sessions`) and revocable
+  (`POST /api/logout`); JSON errors and security headers on every response; body limit 1 MiB; all-or-nothing validation in `ConfigApplyService`;
   arena names `[A-Za-z0-9_-]{1,32}`. Static assets are public: never embed secrets. Do not add
   endpoints that run commands or touch arbitrary paths. Phosphor icon CSS is loaded from unpkg without
   SRI; hash command: `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`.
@@ -118,15 +134,16 @@ mvn -q -Dtest=TournamentBracketTest test
 **Storage** (YAML under `plugins/OmniArena/`): `config.yml`, `messages.yml`, `arenas/<name>.yml`,
 `snapshots/<arena>.yml`, `sign-glowstone.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
 `kit-cooldowns.yml`, `player-states/<uuid>.yml` (crash-safe pre-arena player state), `stats.yml`,
-`elo.yml`, `tournaments.yml`. Do not rename persisted keys without
-a migration or fallback read.
+`elo.yml`, `tournaments.yml`, `holograms.yml`, `pvp-toggles.yml`, `newbie.yml`. Do not rename
+persisted keys without a migration or fallback read.
 
 ## Conventions
 
-- Java 21 source level; 4-space indent; singletons via `private static X instance` set in the
+- Java 21 source level everywhere (also for the Java 25 profiles); 4-space indent; singletons via `private static X instance` set in the
   constructor; `Optional` for lookups; arena names are case-insensitive for lookup but keep their
   original case on disk (snapshots use lower case).
-- Optional-plugin imports stay in `integration/` (or use reflection).
+- Optional-plugin imports stay in `integration/` (or use reflection); Paper-only API stays behind the
+  platform layer.
 - Wrap fragile shutdown work in try/catch with a log; do not swallow exceptions elsewhere.
 - Prefer pure-logic unit tests; the existing tests cover regen enum, bracket logic and the config
   schema.
@@ -138,25 +155,30 @@ a migration or fallback read.
 
 1. **Subcommand**: new `SubCommand` in `commands/admin` or `commands/player`; register in
    `CommandManager.registerAll`; declare permission in `plugin.yml`; add messages; update README
-   command table, DOCS.md section 15 and the `HelpCommand` guides.
+   command table, DOCS.md sections 15/16 and the `HelpCommand` guides.
 2. **Config key**: add to `config.yml`, read it, document in DOCS.md section 18, validate in
    `ConfigApplyService` if editable from the web.
 3. **Regen style**: enum value + `orderEntries` + `buildPreview` (+ sound) + test + docs counts.
 4. **Periodic task**: idempotent `start()`/`stop()`, wire into onEnable, onDisable, `/oa stop`,
    `/oa start`, check `isStopped()`.
-5. **Docs**: README (features/commands), DOCS.md (matching section and limitations), CLAUDE.md
+5. **Docs**: README (features/commands), DOCS.md (matching section and limitations; then copy it to
+   `src/main/resources/web/docs.md`), CLAUDE.md
    (architecture/rules), and the notes at the bottom of `docs/superpowers/` plans/specs if the
    change deviates from them.
 
 ## Known pitfalls (short list)
 
-- `/oa kit create|delete|equip|list` always resolve to the player kit command (admin routing only
-  covers the metadata actions); admin kits are files in `admin-kits/`.
-- `arena.region-protection`, `rewards.*`, `database.*`, global `visual.*`, `integrations.*` (except
-  `tab.takeover`), `performance.*`, `anticheat.*` and several `pvp.*` keys are not read.
+- Plain `/oa kit create|delete|equip|list|rename` resolve to the player kit command; the admin forms
+  are `/oa kit admin <action>` and `/oa adminkit <action>` (the legacy shortcuts for
+  `setpublic|setprivate|icon|description|cooldown|permission` still reach the admin command).
+- Per-arena `visual-titles|sounds|particles|holograms`, whitelist/blacklist (and `whitelist-enabled`)
+  are not read or not persisted; `plugin.debug` is not read; `regen.arenas.<name>.auto` is only
+  settable in the file.
 - `web.session-minutes` / `web.max-sessions` are read once at plugin enable.
-- `RegenCommand.showSettings` has a stale fallback string (`WAVE_SHUFFLE`).
-- The Docs tab serves `src/main/resources/web/docs.md`, a separate copy from `DOCS.md`.
+- The Docs tab serves `src/main/resources/web/docs.md`, which must be byte-identical to `DOCS.md`
+  (`cp DOCS.md src/main/resources/web/docs.md`).
+- `/oa stop` cancels every scheduler task; auto regens that the stop starts are finished
+  synchronously by `BlockRestoreModule.cancelAll()`.
 - Delayed tasks must compare identity (`map.remove(key, value)`) so a stale callback cannot tear down
   a newer match or tournament.
 - ELO: never both `recordWin()` and `setRating()` (double application bug, already fixed once).

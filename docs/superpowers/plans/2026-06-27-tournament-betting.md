@@ -1547,11 +1547,15 @@ as written (see also the notes in `../specs/2026-06-27-tournament-betting-design
 - `TournamentManager` gained a periodic safety task, a walkover grace period
   (`tournament.walkover-grace-seconds`), arena reservation during a tournament, and removal of
   offline participants at start.
-- `TournamentCommand` is in `commands/player/` and exposed as `/oa tournament ...`; `plugin.yml`
-  adds the permissions `omniarena.tournament.create` / `omniarena.tournament.admin` but no standalone
-  command.
-- `BetCommand` requires `omniarena.bet` (not declared in `plugin.yml`). `BettingManager` enforces one
-  active bet per player, cents rounding, and refunds on stop/disable; bets are not saved to disk.
+- `TournamentCommand` is in `commands/player/` and exposed as `/oa tournament ...` and as the
+  standalone `/tournament` (forwarded); `plugin.yml` adds the permissions
+  `omniarena.tournament.create` / `omniarena.tournament.admin`.
+- `BetCommand` requires `omniarena.bet`, now declared in `plugin.yml` (default true), and is also
+  available as the standalone `/bet`. `BettingManager` enforces one active bet per player, cents
+  rounding, and refunds on stop/disable; bets are not saved to disk. `betting.allow-spectator-bet`
+  is honoured.
+- With automatic arena regeneration the tournament arena stays RESETTING until the rebuild is done;
+  the safety tick simply retries a launch that fails because of it.
 - `VaultIntegration.depositOffline(OfflinePlayer, double)` is the offline deposit method (the plan
   called it a `deposit(OfflinePlayer, double)` overload).
 - Tests: `TournamentBracketTest` also covers full runs for 2-9 and 16 players.

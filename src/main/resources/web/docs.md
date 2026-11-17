@@ -4,29 +4,34 @@ Complete reference for OmniArena 1.0.0, derived from the current source. For a s
 see [README.md](README.md). Developer and AI-agent guides: [CLAUDE.md](CLAUDE.md),
 [AGENTS.md](AGENTS.md).
 
-Contents: 1 Quick start, 2 Arenas, 3 Game types, 4 Matches, 5 Regeneration, 6 Kits, 7 Join signs,
-8 Web dashboard and settings GUI, 9 Combat (PvP) system, 10 Ratings and queue, 11 Party,
-12 Betting, 13 Tournaments, 14 Integrations and placeholders, 15 Command reference,
-16 Permissions, 17 Building and the jar matrix, 18 Configuration reference, 19 Storage,
+Contents: 1 Quick start, 2 Arenas, 3 Game types, 4 Matches, 5 Regeneration, 6 Kits, 7 Join signs
+and leaderboard holograms, 8 Web dashboard and settings GUI, 9 Combat (PvP) system, 10 Ratings and
+queue, 11 Party, 12 Betting, 13 Tournaments, 14 Integrations and placeholders, 15 Command
+reference, 16 Permissions, 17 Building and the jar matrix, 18 Configuration reference, 19 Storage,
 20 Lifecycle, 21 Known limitations.
 
 ---
 
 ## 1. Quick start
 
-1. Install the jar for your platform and Minecraft version into `plugins/`, restart.
+1. Install the jar for your platform and Minecraft version into `plugins/` (section 17), restart.
 2. `/oa wand` (or `/oa region wand`) gives the selection wand (item set by `tools.wand-material`,
    default `WOODEN_HOE`). Left-click one corner (position 1), right-click the opposite corner
    (position 2). The wand needs `omniarena.admin.arena`.
 3. `/oa create <name>`: names are 1-32 characters from `A-Z a-z 0-9 _ -`. A new arena starts
    enabled.
 4. `/oa region set <name>` saves the selection as the arena region and takes the regen snapshot.
+   The arena is rebuilt from that snapshot automatically after every match (section 5), so build
+   the arena first and set the region last (or re-run `/oa regen snapshot <name>` after changes).
    (Enabling an arena later requires at least one battle spawn.)
 5. `/oa spawn set <name> BATTLE`, once per pad. Also set `LOBBY` and `SPECTATOR` spawns.
 6. `/oa config set <name> game-mode <TYPE>` (default `DEATHMATCH`), plus `min-players`,
-   `max-players`, `match-duration`, and so on (section 2).
-7. Optional: `/oa sign create <name>` while looking at a sign (within 5 blocks).
-8. Players join with `/oa join <name>` or `/join <name>`, or by right-clicking the sign.
+   `max-players`, `match-duration`, `lives`, and so on (section 2).
+7. Optional join sign: place a sign and write `[OmniArena]` on line 1 and the arena name on line 2
+   (needs `omniarena.admin.sign`), or run `/oa sign create <name>` while looking at a placed sign
+   (within 5 blocks).
+8. Players join with `/oa join <name>` or `/join <name>`, by right-clicking the sign, or through
+   the ranked queue (`/oa queue join`, section 10).
 
 ---
 
@@ -40,7 +45,8 @@ mode, optional end commands, signs, and enabled modules. Each is saved to `arena
 
 `DISABLED`, `WAITING`, `STARTING`, `RUNNING`, `ENDING`, `RESETTING`, `MAINTENANCE`. An arena is
 *enabled* unless DISABLED or MAINTENANCE; it is *joinable* in WAITING or STARTING. The saved
-`enabled` flag is true for any state except DISABLED.
+`enabled` flag is true for any state except DISABLED. After a played match the arena stays
+RESETTING until its automatic block regeneration has finished (section 5).
 
 ### Commands (admin, `omniarena.admin.arena` unless noted)
 
@@ -68,32 +74,38 @@ mode, optional end commands, signs, and enabled modules. Each is saved to `arena
 ### Per-arena settings: `/oa config get|set <arena> <key> [value]`
 
 Without an arena name, `/oa config set <key> <value>` edits the global `config.yml` (or
-`messages.<key>` for messages); unknown keys are rejected (a key must be in the settings schema
-or already exist). Arena values are validated strictly: booleans must be `true/false/yes/no/on/off`,
-numbers must be non-negative integers, enums must be exact names, `min-players` must be >= 1 and
-not exceed `max-players` (and vice versa). Setting `enabled false` removes everyone from the arena.
-Valid arena keys:
+`messages.<key>` for messages); unknown keys are rejected (a key must be in the settings schema,
+that is in `config.yml` or `messages.yml`, or already exist). Arena values are validated strictly:
+booleans must be `true/false/yes/no/on/off`, numbers must be non-negative integers, enums must be
+exact names, `min-players` must be >= 1 and not exceed `max-players` (and vice versa), `lives` is
+0-100. Setting `enabled false` removes everyone from the arena. Valid arena keys:
 
 `enabled`, `game-mode` (alias `gamemode`), `min-players`, `max-players`, `match-duration` (seconds),
 `countdown` (seconds), `goal-type`, `goal-value`, `respawn-type` (`INSTANT|DELAYED|WAVE`),
-`respawn-delay`, `spawn-protection`, `chat-mode`, `announcements`, `mid-match-join`,
+`respawn-delay`, `spawn-protection`, `lives`, `chat-mode`, `announcements`, `mid-match-join`,
 `spectator-allowed`, `whitelist-enabled`, `team-enabled`, `team-count`, rules `fall-damage`,
 `fire-damage`, `drowning`, `suffocation`, `friendly-fire`, `block-break`, `block-place`,
 `item-drop`, `hunger-drain`, visual `visual-titles|sounds|particles|scoreboard|boss-bar|action-bar|holograms`,
 and region `region-world`, `region-min-x|y|z`, `region-max-x|y|z`.
 
-Defaults of a newly created arena: DEATHMATCH, min 2, max 16, duration 300 s, countdown 10 s,
-goal KILLS 20, respawn INSTANT with delay 3, spawn protection 3 s, chat mode ARENA, announcements
-on, mid-match join off, spectators allowed, friendly fire off, block break/place off, item drop off,
-hunger drain off, modules `killstreak` + `combo`. (The global `arena.default-*` keys in `config.yml`
-are not read; see section 18.)
+Defaults of a newly created arena come from `config.yml`: the `arena.default-*` keys
+(`default-game-mode` DEATHMATCH, `default-min-players` 2, `default-max-players` 16,
+`default-countdown` 10, `default-match-duration` 600 s), `arena.spectator-allowed` (true),
+`arena.mid-match-join` (false), `arena.respawn-delay` (3), `arena.spawn-protection` (3) and the
+`visual.titles|sounds|particles|scoreboard|boss-bar|action-bar|holograms` toggles (all true).
+Fixed defaults: goal value 20, respawn INSTANT, chat mode ARENA, announcements on, friendly fire
+off, block break/place off, item drop off, hunger drain off, fall/fire/drowning/suffocation damage
+on, modules `killstreak` + `combo`, lives 0. Changing the global defaults only affects arenas
+created afterwards.
 
 ### Lives
 
-The arena file accepts `lives: <n>` (default 0). With `lives > 0` every player has that many lives
-in any game type: each death costs one and shows the remaining count, the player respawns while
-lives remain and is eliminated (spectator) at 0, overriding the game type's respawn behaviour.
-There is no `/oa config` key or dashboard field for it yet; edit `arenas/<name>.yml` and reload.
+`lives` (0-100, default 0 = off) is settable with `/oa config set <arena> lives <n>`, in the web
+dashboard arena editor, or in the arena file. With `lives > 0` every player has that many lives in
+any game type: each death costs one and tells the player how many remain, the player respawns
+(timing per the arena respawn type) while lives remain and is eliminated (spectator) at 0,
+overriding the game type's own respawn behaviour. On `KILLS`-goal arenas the last player or team
+with lives left also wins. Lives are shown on the scoreboard (`Lives: n`) and the action bar.
 
 ### Spawns
 
@@ -104,18 +116,26 @@ if there is no spectator spawn it is the lobby spawn.
 
 ### Goal note
 
-The game type fixes the win condition (`KILLS` or `LAST_ALIVE`). For team-enabled arenas the
+The win condition is the arena's goal type. By default that is the game type's (`KILLS` or
+`LAST_ALIVE`). `/oa goal set <arena> <type> [value]` (or `/oa config set <arena> goal-type <TYPE>`)
+overrides it; the override is stored as `goal.type` plus `goal.type-override: true` in the arena
+file, and setting the type back to the game type's own goal clears it. A `goal.type` without the
+override flag (older files) is ignored. `OBJECTIVE` and `TIME_LIMIT` have no end rule of their own:
+the match then ends only by its timer or when a single side is left. For team-enabled arenas the
 condition is evaluated per team (team kills, or last team standing). The arena's `goal-value`
-overrides the game type's default kill target only when it is greater than 0. The arena's
-`goal-type` is stored and shown in the dashboard but the match engine does not read it. The
-saved default `goal-value` of a new arena is 20, so kill-target modes use 20 unless you set
-`goal-value` to 0 to fall back to the mode default.
+overrides the game type's default kill target only when it is greater than 0. A new arena is saved
+with `goal-value` 20, so kill-target modes use 20 unless you set `goal-value` to 0 to fall back to
+the mode default.
 
 ### Region protection and boundaries
 
-`RegionHandler.isLocationProtected` treats a region as protected only while its arena is
-RUNNING or STARTING. During a RUNNING match, a player who leaves the region is teleported to a
-random battle spawn. The `arena.region-protection` config key is not read.
+- While an arena is not RUNNING, players who are not OP and lack the arena admin permission cannot
+  break or place blocks inside its region when the arena's `block-break` / `block-place` rule is
+  off and `arena.region-protection` is true (default).
+- While RUNNING, break/place are blocked whenever the rule is off (OPs are exempt).
+- During a match water and lava cannot flow out of the arena region (fluid containment), so the
+  regeneration never has to clean up outside it.
+- During a RUNNING match, a player who leaves the region is teleported to a random battle spawn.
 
 ---
 
@@ -170,23 +190,30 @@ efficiency shovel, no armor. Gladiator: no armor, stone sword, shield.
 ## 4. Matches
 
 State machine: `WAITING -> STARTING -> RUNNING -> ENDING -> RESETTING`, then the match object is
-removed and the arena returns to WAITING.
+removed and the arena returns to WAITING (after its automatic regeneration, section 5).
 
 1. **Join.** `/oa join` first rejects: already in an arena, unknown/disabled arena, the player is
-   queued, not whitelisted (when the arena whitelist is on), arena not joinable, or arena full (the
-   whitelist and full checks are skipped with `omniarena.join.bypass`). `joinArena` itself rejects
-   when lockdown is on, the player is already in an arena or spectating, the arena is not joinable
-   (WAITING/STARTING, or RUNNING when the arena allows mid-match join), or the player is on the
-   arena blacklist. A manual join cancels any queue entry. The player's complete state (location,
-   game mode, health, food, saturation, XP, potion effects, flight, speeds, invisibility and, if
-   `arena.inventory-restore` (default true), inventory and armor) is saved; they are put in
-   ADVENTURE mode at the lobby spawn, healed, effects removed, and frozen (walk/fly speed 0) while
-   waiting.
+   in the matchmaking queue (leave it first with `/oa queue leave`), not whitelisted (when the
+   arena whitelist is on), arena not joinable, or arena full (the whitelist and full checks are
+   skipped with `omniarena.join.bypass`). Join signs apply the same rules. `joinArena` itself
+   rejects when lockdown is on, the player is already in an arena or spectating, the arena is not
+   joinable (WAITING/STARTING, or RUNNING when the arena allows mid-match join), the arena is
+   reserved by a tournament, the player is on the arena blacklist, or the arena holds a ranked
+   (queue) match that is already underway. Joins done by the queue or by a tournament launch drop
+   the player's queue entry. The player's complete state (location, game mode, health, food,
+   saturation, XP, potion effects, flight, speeds, invisibility and, if `arena.inventory-restore`
+   (default true), inventory and armor) is saved (and mirrored to `player-states/<uuid>.yml`
+   unless `arena.persist-player-state` is false); they are put in ADVENTURE mode at the lobby
+   spawn, healed, effects removed, and frozen (walk/fly speed 0) while waiting.
 2. **Countdown.** A 1 s repeating task. With fewer than the minimum players the match stays
-   WAITING and players see a "Waiting for players" title; the countdown resets. The minimum is the
-   arena's `min-players`, except ranked (queue) matches where it is clamped to at most 2. Otherwise it counts down from
-   the arena `countdown`, with chat/title/sound at 10 and 5 to 1 seconds. At 0 `startMatch` runs.
-3. **Start.** Teams are assigned for team-enabled arenas (shuffled, round-robin). Each player is
+   WAITING and players see a "Waiting for players" title; the countdown resets. If
+   `arena.lobby-timeout` seconds (default 120, 0 = never) pass below the minimum, the lobby is
+   closed and everyone is removed. The minimum is the arena's `min-players`, except ranked (queue)
+   matches where it is clamped to at most 2. Otherwise it counts down from the arena `countdown`,
+   with chat/title/sound (`visual.countdown-sounds`) at 10 and 5 to 1 seconds. At 0 `startMatch`
+   runs.
+3. **Start.** The arena's TIME_REWIND change log is cleared. Teams are assigned for team-enabled
+   arenas (shuffled, round-robin; queued parties keep their preset side). Each player is
    teleported to a numbered battle spawn, set to SURVIVAL, healed, given the loadout, and given
    spawn protection (`spawn-protection` seconds). Scoreboard and boss-bar timer are created
    unless TAB takeover is on. Betting is notified (`onMatchStart`).
@@ -194,41 +221,57 @@ removed and the arena returns to WAITING.
    time 0 in a `KILLS` mode with more than one player, the strictly leading player (or team, for
    team arenas) wins; ties and `LAST_ALIVE` modes end with outcome `TIMEOUT` (treated as a draw).
 5. **Deaths.** Death drops are cleared unless the arena allows item drop, keep-inventory is forced,
-   kills are recorded (first blood, kill announcement, revenge, killstreak module, team kills),
-   then end conditions are checked. Respawn modes respawn after the arena respawn delay and
-   re-equip the loadout; one-life modes eliminate.
+   kills are recorded (first blood, kill announcement `visual.kill-announcements`, revenge,
+   killstreak and combo modules, team kills, `rewards.kill-*` unless the kill-abuse window
+   suppresses it), then end conditions are checked. Respawn modes (or arenas with `lives`) respawn
+   after the arena respawn delay and re-equip the loadout; one-life modes eliminate.
 6. **End conditions.** `KILLS`: the leader (or team) reaching the target wins. `LAST_ALIVE`: one
    player (or team) left alive wins; none alive is a draw. Additionally, if a match that started
    with more than one side drops to a single player or team (others left), that side wins.
 7. **End.** `endMatch` (idempotent) cancels tasks, sets ENDING, then in order: ELO (ranked
-   matches only), betting settlement, tournament hook, titles/sounds/fireworks, boss bars
-   removed, end commands, stats, optional global announcement (`match.announce-global`), and a
-   delayed reset after `match.end-delay` seconds (default 5).
+   matches only), betting settlement, tournament hook, titles/sounds/fireworks
+   (`visual.victory-fireworks`), boss bars removed, end commands, `rewards.win-*`, stats, the arena
+   announcement (`match.announce-arena` and the arena's `announcements`), optional global
+   announcement (`match.announce-global`), and a delayed reset after `match.end-delay` seconds
+   (default 5). A failure in one of these steps is logged and does not strand the arena.
 8. **Reset.** Remaining players and spectators are removed (their saved state is restored,
    including the original location; without a saved state they go to bed or world spawn in
-   SURVIVAL), boards removed, and the match is cleaned up. Cleanup refunds any still-pending bets
-   and only releases the arena if this match still owns it.
+   SURVIVAL), boards removed, and the match is cleaned up. Cleanup refunds any still-pending bets,
+   only releases the arena if this match still owns it, and then starts the automatic block
+   regeneration (section 5); the arena is RESETTING (not joinable) until that finishes.
 
 ### Outcomes
 
 `WIN`, `LOSS`, `DRAW`, `FORFEIT`, `TIMEOUT`. `DRAW` and `TIMEOUT` count as draws in stats and ELO.
 Leaving a running **ranked** two-player match is a forfeit: the leaver loses and the opponent
-wins (ELO applied). Leaving an unranked match just removes the player, then end conditions are
-re-checked; an empty match is cleaned up. If a ranked match collapses before it starts, the
-remaining player is returned to the queue they came from.
+wins (ELO applied). In a ranked team match the last member of a side leaving a running two-team
+match counts as a loss for that side. Leaving an unranked match just removes the player, then end
+conditions are re-checked; an empty match is cleaned up. If a ranked match collapses before it
+starts, the remaining players are returned to the queue they came from (a party re-queues through
+its leader).
 
 ### Spectating
 
 `/oa spectate <arena>` (needs the match to exist and `spectator-allowed`). Spectators are in
-SPECTATOR mode and invisible; `/oa leave` restores their saved state and location.
+SPECTATOR mode and invisible (`visual.spectator-invisibility`); `/oa leave` restores their saved
+state and location.
+
+### Presentation
+
+Per match, the scoreboard (FastBoard; title `scoreboard.title`, refresh `scoreboard.update-interval`
+ticks, minimum 1 s), boss-bar timer (colors `boss-bar.*`) and action bar are shown unless the
+arena's `visual-scoreboard`, `visual-boss-bar` or `visual-action-bar` flag is off or
+`integrations.tab.takeover` is on. The scoreboard and action bar show lives when the arena uses
+them. Titles, sounds and effects are controlled by the global `visual.*` toggles
+(`killstreak-titles`, `kill-announcements`, `victory-fireworks`, `countdown-sounds`,
+`spectator-invisibility`).
 
 ### End commands
 
 Per-arena `end-commands` (if non-empty) otherwise `match.end-commands`. Placeholders: `{winner}`,
 `{loser}`, `{arena}`, `{mode}`, `{duration}` (seconds), `{winner_kills}`. Default executor is the
 console; prefix `console:` is accepted explicitly, and `player:` runs the command as the winner.
-No leading slash. Example: `match.end-commands: ["oa regen {arena}"]` rebuilds the arena after
-every match.
+No leading slash. Regeneration no longer needs an end command: it runs automatically (section 5).
 
 ### Isolation and respawns
 
@@ -253,35 +296,70 @@ Chat from spectators is not intercepted.
 
 ## 5. Regeneration
 
-After matches an arena can be rebuilt from a snapshot. **Regeneration is manual**: nothing in the
-match flow calls it. Run `/oa regen <arena>`, `/oa override purge <arena>`, or an end command.
+Arenas are rebuilt from a snapshot of their region. **Regeneration is automatic**: after every
+played match the arena is restored without any command, and it is not joinable (RESETTING) until
+the rebuild has finished. It can also be run by hand.
+
+### Automatic regeneration
+
+- `regen.auto` (default `true`) switches it on globally. Override it per arena with
+  `regen.arenas.<arena-name-lowercase>.auto: true|false` in `config.yml` (not part of the settings
+  schema, so edit the file and run `/oa reload`).
+- It starts when a match is cleaned up after its end reset (`match.end-delay`), and only for arenas
+  with a defined region. A match that is still in the lobby (WAITING/STARTING) when its last player
+  leaves is cleaned up without a regeneration.
+- The style is `regen.animation.type`; `regen.batch-size` and the particle/sound toggles apply.
+  Chat progress (`regen.progress.*`) is only sent for commands.
+- No snapshot: a warning is logged, online admins (`omniarena.admin` / `.admin.arena`) are told to
+  run `/oa regen snapshot <arena>`, and the arena reopens with its current blocks.
+- Failure: the console and admins are told why and the arena is reopened with its current blocks, so
+  it never stays stuck in RESETTING.
+- On `/oa stop` and on plugin disable running regens are finished instantly (remaining blocks are
+  placed, previews removed), including regens that the stop itself just started.
+- While an arena regenerates, the TIME_REWIND change log is not recorded; stray items, arrows, XP
+  orbs, primed TNT, falling blocks and effect clouds inside the region are removed.
 
 ### Snapshot
 
 `/oa regen snapshot <arena>` (and `/oa region set`, `/oa override snapshotall`) scan the region
 column by column, about 30,000 blocks per tick, into a palette plus vertical run-length encoding,
-then write `snapshots/<arena>.yml` off the main thread. File format v2 is described in section 19;
-legacy v1 files are still readable.
+then write `snapshots/<arena>.yml` off the main thread (atomically). File format v2 is described
+in section 19; legacy v1 files are still readable. The snapshot also records **tile entities**:
+container contents (chests, trapped chests, barrels, shulker boxes, hoppers, dispensers, droppers,
+furnaces, blast furnaces, smokers, brewing stands), sign text (both sides, dye color, glow, wax)
+and banner patterns. They are written back after the block is placed and containers are cleared
+first, so items players took or stored during the match are reset. Container items are encoded by
+the platform layer (native NBT bytes on Paper/Purpur, Bukkit object streams on Spigot/Bukkit), so a
+snapshot containing containers taken on one flavor cannot be read by the other; re-take it after
+switching (blocks, signs and banners are unaffected).
 
 ### Restore
 
-`/oa regen <arena>` loads the snapshot asynchronously, orders the blocks for the chosen style,
-then places them in per-tick batches on the main thread. A second restore of an arena that is
-already restoring only queues its completion callback. `cancelAll` (on `/oa stop` and on disable)
-instantly finishes running restores, removes preview blocks, and removes falling-block entities.
+A restore loads the snapshot asynchronously, orders the blocks for the chosen style, then places
+them in per-tick batches on the main thread without neighbour physics. A second restore of an arena
+that is already restoring only queues its completion callback. `cancelAll` (on `/oa stop` and on
+disable) instantly finishes running restores, removes preview blocks, and removes falling-block
+entities.
 
 ### Commands
 
 - `/oa regen <arena>`: restore now with `regen.animation.type`; refused while a match is active
-  in that arena.
+  in that arena or while it is already regenerating.
 - `/oa regen snapshot <arena>`.
 - `/oa regen style [type]`: set (or list) the default style. The command and the settings GUI
   accept the 10 current names and the legacy names below (an unknown name is rejected).
 - `/oa regen batch [n]`: set (or show) `regen.batch-size`.
-- `/oa regen settings`: show current values. (Its fallback text for an unset style shows a stale
-  name; the effective default is `SPHERE`.)
+- `/oa regen settings`: show current values.
 - `/oa regen progress|particles|sound <true|false>`: toggles `regen.progress.enabled`,
   `regen.animation.particles`, `regen.animation.sound`; any other value is rejected.
+- `/oa override purge <arena>`: evacuate, then restore the snapshot.
+
+### Fluid and change tracking
+
+During a match, water and lava are kept inside the region (section 2). A per-arena change log
+records, in order, the blocks changed by break/place, explosions, fluid flow, burning, fading and
+block formation (max 200k positions); it is cleared at match start and after a regen and feeds
+`TIME_REWIND`.
 
 ### Styles (10)
 
@@ -292,7 +370,7 @@ instantly finishes running restores, removes preview blocks, and removes falling
 | `RISE` | y ascending | particle plane rising |
 | `FALL` | y descending | particle plane sinking |
 | `SWEEP` | vertical plane along the longest horizontal axis | spark plane sweeping across |
-| `TIME_REWIND` | exact reverse of the order blocks changed during the match (per-arena change log of break/place/explosion/fluid/burn/fade/form events, max 200k positions, cleared at match start and after a regen); unlogged blocks follow in SPHERE order | counter-clockwise particle clock above the arena, rising pitch |
+| `TIME_REWIND` | exact reverse of the order blocks changed during the match (change log above); unlogged blocks follow in SPHERE order | counter-clockwise particle clock above the arena, rising pitch |
 | `GALAXY` | 4 spiral arms (angle + k*radius), outward within each arm | PORTAL/END_ROD along the arm |
 | `HOLOGRAM_SCAN` | y ascending, two passes | pass 1: light blue glass previews under a scan plane; pass 2: real blocks replace them (previews always cleaned on cancel/finish) |
 | `METEOR_SHOWER` | random impact points (preferring blocks changed in the match), each rebuilds its surroundings; impacts accelerate | FLAME/LAVA trails and explosion particles, capped decorative falling magma (no damage, no explosion) |
@@ -302,7 +380,7 @@ Sort keys are computed off the main thread when the plan loads. Effects are capp
 to players within 64 blocks of the region.
 
 Old style names and aliases are mapped when read from `config.yml` and also accepted by the commands:
-`RADIATE_OUTWARD`/`COLLAPSE_INWARD`/`VOID_SHOCKWAVE`/`CENTER_OUT`/`OUTSIDE_IN`/`SHOCKWAVE` -> `SPHERE`;
+`RADIATE_OUTWARD`/`COLLAPSE_INWARD`/`VOID_SHOCKWAVE`/`CENTER_OUT`/`OUTSIDE_IN`/`SHOCKWAVE`/`WAVE_SHUFFLE` -> `SPHERE`;
 `UPWARD_SURGE`/`BOTTOM_UP`/`BOTTOM_TO_TOP` -> `RISE`;
 `GRAVITY_DESCENT`/`RAIN_OF_LIGHT`/`ARMORED_DESCENT`/`TOP_DOWN`/`TOP_TO_BOTTOM`/`LASER_RAIN`/`IRON_MAN` -> `FALL`;
 `BEACON_WAVE`/`TSUNAMI_SURGE`/`BEAM_SWEEP` -> `SWEEP`;
@@ -330,7 +408,7 @@ Both open the same combined menu (your kits and public preset kits) or run a sub
 
 - `/kit`: open the menu.
 - `/kit create <name>`: save your inventory and armor as a personal kit. Names: letters, digits,
-  `_`, `-`, `.` (max 32).
+  `_`, `-`, `.` (max 32). Disabled when `kits.player-kits-enabled` is false.
 - `/kit list`: list your kits and slot usage.
 - `/kit equip <name>`: equip a personal kit, or a public preset kit (admins can equip any). While
   in an arena this works only in the lobby phase (match WAITING/STARTING); preset kits enforce
@@ -343,8 +421,9 @@ Both open the same combined menu (your kits and public preset kits) or run a sub
 
 Personal kit slots: `kits.default-slot-limit` (default 3), 5 with `omniarena.kit.slots.5`, 10 with
 `omniarena.kit.slots.10` or OP. `kits.power-cap.enabled` and `kits.power-cap.max-enchant-level`
-(default 5) cap enchant levels when a kit is saved, and unsafe items are dropped from saved kits. `kits.player-kits-enabled` and `kits.power-cap.banned-items`
-exist in `config.yml` but are not read.
+(default 5) cap enchant levels when a kit is saved; unsafe items are dropped from saved kits, and
+while the power cap is enabled the materials in `kits.power-cap.banned-items` (default bedrock,
+command blocks, barrier, spawner, structure block) are also refused.
 
 While you are in an arena, `/kit` is intercepted so OmniArena handles it even if another plugin
 registered `/kit`. Outside arenas it only intercepts when OmniArena owns the command.
@@ -356,34 +435,58 @@ Files in `admin-kits/<name>.yml`. On every load OmniArena installs any missing d
 (existing files are never overwritten). Fields: `name`, `public`, `description`, `icon`, `cooldown`,
 `permission`, `arena`, `items` (slot, material, amount, enchants, unbreakable), `armor`.
 
-Admin metadata commands (permission `omniarena.admin.kit`): `/oa kit setpublic <name>`,
+Admin kit commands (permission `omniarena.admin.kit`) have an unambiguous form,
+`/oa kit admin <action> ...` (alias `/oa adminkit <action> ...`), with the actions `create <name>`
+(from your inventory), `delete <name>`, `rename <old> <new>`, `equip <name>`, `setpublic <name>`,
 `setprivate <name>`, `icon <name> <MATERIAL>` (must be an item), `description <name> <text>`,
 `cooldown <name> <seconds>` (enforced per player and persisted in `kit-cooldowns.yml`),
-`permission <name> <node>` (`none` or `-` clears it). `AdminKitCommand` also implements
-`rename <old> <new>`, but `CommandManager.shouldUsePlayerCommand` does not list `rename`, so for an
-admin `/oa kit rename` currently reaches the *player* rename (your own kits). Unknown kit names are
-reported. Note that `/oa kit create`, `delete`, `equip` and `list` are routed to the *player* kit
-command even for admins; the admin versions are unreachable through `/oa`. Create preset kits by placing a YAML file in `admin-kits/` and
-restarting or running `/oa start`.
+`permission <name> <node>` (`none` or `-` clears it) and `list`. Unknown kit names are reported.
+
+Compatibility shortcut: for admins plain `/oa kit setpublic|setprivate|icon|description|cooldown|permission ...`
+still reaches the admin command; every other plain `/oa kit <action>` (create, delete, equip, list,
+rename, ...) is the player command, so use the `admin` form for those.
 
 Queued ranked matches equip the admin kit named by the queue key (if one exists) instead of the
 arena game type's loadout.
 
 ---
 
-## 7. Join signs
+## 7. Join signs and leaderboard holograms
 
-- `/oa sign create <arena>`: look at an existing sign (within 5 blocks). It is registered, its text
-  is written, and (if `signs.glow-effect`) a glowstone block is placed behind it when that
-  position is air. Only glowstone the plugin placed is ever removed; positions are tracked in
-  `sign-glowstone.yml`.
-- `/oa sign remove`: look at a registered sign. `/oa sign list <arena>`.
+### Join signs
+
+- Create by **placing a sign**: write `[OmniArena]` (or `[oa]`) on line 1 and the arena name on
+  line 2 (needs `omniarena.admin.sign`; an unknown arena name is flagged on the sign and nothing is
+  registered). Or place any sign and run `/oa sign create <arena>` while looking at it (within 5
+  blocks). The text is written automatically, and (if `signs.glow-effect`) a glowstone block is
+  placed behind a wall sign when that position is air. Only glowstone the plugin placed is ever
+  removed; positions are tracked in `sign-glowstone.yml`.
+- `/oa sign remove`: look at a registered sign (breaking it as an admin also removes it).
+  `/oa sign list <arena>`.
+- Registered signs are protected: only admins with `omniarena.admin.sign` can break them, and
+  explosions and pistons cannot move or destroy them.
 - Sign text: `[OmniArena]`, the arena name, a status line (Click to Join, FULL, Starting...,
   IN PROGRESS, Resetting..., DISABLED, MAINTENANCE) and `players/max players`.
-- Right-click: joins the arena. For a running arena without mid-match join the player is offered a
-  clickable spectate message. Checks: arena enabled, not already in an arena, blacklist, whitelist.
-- Signs refresh every `signs.update-interval` ticks (default 20); unloaded chunks are skipped; a
-  sign block that is no longer a sign is dropped from the arena.
+- Right-click: joins the arena (750 ms click cooldown). Admins sneaking with an item in hand can
+  edit/dye the sign instead. For a running arena without mid-match join the player is offered a
+  clickable spectate message. Checks: `omniarena.use`, arena enabled, not already in an arena, not
+  in a queue, blacklist, whitelist.
+- Signs refresh every `signs.update-interval` ticks (default 20); unloaded chunks are skipped and a
+  loading chunk refreshes its signs; a sign block that is no longer a sign is dropped from the
+  arena.
+
+### Leaderboard holograms (`/oa hologram`, permission `omniarena.admin.hologram`)
+
+- `/oa hologram create <id> <kills|wins|kd|elo> [size]`: places a multi-line `TextDisplay` entity
+  at your position showing the top `size` players (1-15, default 10) of that leaderboard.
+  `/oa hologram move <id>` moves it to you, `/oa hologram remove <id>` deletes it,
+  `/oa hologram list` lists them.
+- Definitions persist in `holograms.yml` and are respawned on startup, `/oa start` and chunk load;
+  text is refreshed in place every `holograms.refresh-seconds` (default 30) from cached stats/ELO
+  data (no chunk is force-loaded and no stat entries are created).
+- `visual.holograms: false` stops holograms from spawning (definitions are kept). Invalid entries in
+  `holograms.yml` are left untouched with a console warning.
+- The per-arena `visual-holograms` flag exists but is not consulted (section 21).
 
 ---
 
@@ -396,9 +499,9 @@ arena game type's loadout.
 enable and on `/oa start`, stopped on `/oa stop` and disable.
 
 Tabs: **Dashboard** (live stats and arena cards), **Live Matches** (polled every 5 s), **Arenas**
-(list and editor), **Players** (online players with ELO, wins, losses; search), **Config** (every
-setting with controls and search), **Docs** (bundled markdown). Edits are drafted in the browser
-and applied with the Apply button.
+(list and editor, including `lives`), **Players** (online players with ELO, wins, losses; search),
+**Config** (every `config.yml` and `messages.yml` setting with controls and search), **Docs**
+(bundled markdown). Edits are drafted in the browser and applied with the Apply button.
 
 Endpoints (all `/api/*` calls need the session token, sent as `Authorization: Bearer <token>`, or
 `X-OmniArena-Token`, or the legacy `?token=` query parameter): `GET /` (page), `/styles.css`,
@@ -413,15 +516,15 @@ Behaviour and limits:
   at most `web.max-sessions` at once (default 1, `0` = unlimited). `/oa override killweb` revokes all.
 - `POST` bodies are limited to 1 MiB. Wrong methods get `405`; errors are JSON `{"ok":false,"error":"..."}`.
 - Same-origin only: no CORS headers are sent; responses carry `Cache-Control: no-store`, a CSP,
-  `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 - If the port is taken the console says so; change `web.port` and run `/oa restart`.
 - `/api/apply` validates everything first (types, ranges, known keys, enums, min <= max players,
-  region and rule fields) and applies nothing if any value is invalid, then writes all config keys
-  in one save per file. Arena names must match `[A-Za-z0-9_-]{1,32}`.
+  lives 0-100, region and rule fields) and applies nothing if any value is invalid, then writes all
+  config keys in one save per file. Arena names must match `[A-Za-z0-9_-]{1,32}`.
 - All Bukkit API access happens on the main thread (10 s timeout).
 - The sessions manager reads `web.session-minutes` and `web.max-sessions` once, when the plugin
   enables; changing them needs a plugin restart. `web.enabled`, bind address and port are re-read
-  on `/oa start`.
+  on `/oa start`. `web.title` (browser tab title) is read per page load.
 - Remote use: see README, "Web dashboard": bind to `127.0.0.1` behind an HTTPS reverse proxy and set
   `web.public-url`.
 - The page loads Phosphor icons from unpkg without a Subresource Integrity attribute (if unpkg is
@@ -439,32 +542,44 @@ text and list values open a chat prompt. The console gets a text list.
 `/oa settings set <key> <value>` works for scripting (booleans accept true/yes/on; lists accept
 comma or newline separated values).
 
-The same schema (about 250 entries) drives the GUI, the console list, and the web Config tab: all
-`config.yml` and `messages.yml` keys plus extra descriptive entries, trimmed or padded to exactly
-250. Entries that no code reads (for example `web.remote.*`, `modules.*`, `qol.*`, `regen.laser.*`,
-`extras.auto-setting-N`) can be written but have no effect.
+The same schema drives the GUI, the console list, and the web Config tab: exactly the keys present
+in the live `config.yml` and `messages.yml` (no padding and no invented entries; every shipped
+`config.yml` key is read by some code except `plugin.debug`, section 18).
 
 ---
 
 ## 9. Combat (PvP) system
 
-Server-wide, independent of arena matches. Master switch `pvp.enabled`. The old `/pmr` prefix is
-now `/oa` (`/oa pmr` remains for admin actions).
+Server-wide, independent of arena matches (players inside an arena are handled by the match
+engine; entering an arena clears the open-world combat tag). Master switch `pvp.enabled`. The old
+`/pmr` prefix is now `/oa` (`/oa pmr` remains for admin actions).
 
-- **Combat tag.** Hits tag both players for `pvp.combat.tag-duration` seconds (default 15).
+- **Combat tag.** Hits tag the victim (`pvp.combat.tag-on-damage`) and the attacker
+  (`tag-on-attack`) for `pvp.combat.tag-duration` seconds (default 15). Kill credit also covers
+  pets, TNT, potion clouds and **end crystals** (the player who last hit a crystal is credited when
+  it explodes, for 10 seconds).
 - **Restrictions while tagged:** drop flight (`disable-fly`), force survival (`disable-gamemode`),
-  strip invisibility, undisguise via LibsDisguises, block commands except the
-  `allowed-commands` list (`block-commands`), enderpearls, teleports (`block-teleport`) and block
-  placement (`block-block-place`).
+  strip invisibility, undisguise via LibsDisguises, block commands except the `allowed-commands`
+  list (`block-commands`; matched by exact command label, namespaced forms such as `/minecraft:tp`
+  are judged by their bare label and aliases are resolved), block placement (`block-block-place`),
+  non-plugin teleports by command (`block-teleport`, default on; the older key `cancel-teleport` is
+  still honoured when only it is set), ender pearl teleports (`block-ender-pearl`, default off;
+  older key `block-enderpearls`) and elytra gliding (`block-elytra`, default on). Teleports caused
+  by plugins (including OmniArena's own) are never blocked. Blocking the *firework boost* of an
+  elytra needs Paper's `PlayerElytraBoostEvent`, so it works only on the paper/purpur jars; gliding
+  itself is blocked on every platform.
 - **Combat-log** (`punish-combat-log`, `combat-log-action` KILL | COMMAND | NOTHING,
-  `combat-log-commands` with `{player}`, `broadcast-combat-log`).
-- **PvP toggle:** per player (`/oa pvp`), default `pvp.toggle.default-state`, per world
-  (`pvp.disabled-worlds`, `/oa pmr worlds <world>` toggles one), global (`/oa pvpglobal`,
-  `pvp.global.pvp-enabled`).
-- **Newbie protection** (`pvp.newbie.enabled`, `duration` seconds, `disable-on-attack`) and
+  `combat-log-commands` with `{player}`, `broadcast-combat-log`, `drop-on-combat-log`: when false
+  the combat-logger's inventory does not drop). Kicks and server shutdown are not punished.
+- **PvP toggle:** per player (`/oa pvp`, cooldown `pvp.toggle.cooldown` seconds, can be disabled
+  with `pvp.toggle.enabled`), default `pvp.toggle.default-state`, per world (`pvp.disabled-worlds`,
+  `/oa pmr worlds <world>` toggles one), global (`/oa pvpglobal`, `pvp.global.pvp-enabled`). Players
+  with PvP switched off are remembered across restarts in `pvp-toggles.yml`.
+- **Newbie protection** (`pvp.newbie.enabled`, `duration` seconds, `disable-on-attack`,
+  `block-pickup`) granted on a player's first join and persisted in `newbie.yml`; and
   **respawn protection** (`pvp.respawn-protection.*`).
 - **Anti kill-abuse** (`pvp.killabuse.enabled`, `max-kills` on the same victim within
-  `time-window` seconds).
+  `time-window` seconds); kill rewards are suppressed for abusive kills.
 - **Anti border-hopping** (`pvp.border-hopping.prevent`): needs WorldGuard; blocks a tagged player
   from entering a region where the `pvp` flag is `deny`.
 - **Auto-soup** (`pvp.auto-soup.enabled` default false, `heal-amount`, `soup-material`).
@@ -479,9 +594,7 @@ Commands: `/oa pvp [player]`, `pvpstatus [player]`, `pvptag [player] [seconds]` 
 [seconds]` (admin), `pvpinfo [player]`, `pvplist`, `pvpoverride`, `pmr <help|cleanup|reload|worlds>`.
 Targeting another player requires `omniarena.pvp.admin`.
 
-Config keys under `pvp` that exist but are not read: `combat.tag-on-damage`, `combat.tag-on-attack`,
-`combat.drop-on-combat-log`, `toggle.enabled`, `toggle.cooldown`, `newbie.block-pickup`,
-`killabuse.cooldown`.
+Every key under `pvp` in `config.yml` is read by the code.
 
 ---
 
@@ -491,73 +604,91 @@ Config keys under `pvp` that exist but are not read: `combat.tag-on-damage`, `co
 
 Standard ELO on a 400-point scale: expected = 1 / (1 + 10^((opp - own) / 400)), K = 32 (constant),
 default rating 1000, floor 100, tracks wins, losses, draws and highest rating. Persisted to
-`elo.yml`. Ratings update for **ranked matches** only (wins, losses, forfeits, and two-player
-draws/timeouts). Both players' new ratings are computed from the pre-match ratings. The `elo.*`
-config keys described in older documentation do not exist. There is currently no command that
-displays ratings; the web Players tab shows them.
+`elo.yml`. Ratings update for **ranked matches** only (wins, losses, forfeits, and draws/timeouts).
+Both players' new ratings are computed from the pre-match ratings. In ranked team matches (queued
+parties) every player is rated against the average rating of the opposing side, for wins, draws and
+forfeits. There is no `/oa elo` command: ratings are visible in `/oa queue status` (while queued),
+in the `elo` leaderboard hologram (section 7) and in the web Players tab. The `elo.*` config keys
+described in older documentation do not exist.
 
-### Queue (`queue/QueueManager`)
+### Queue (`queue/QueueManager`, `/oa queue`)
 
+- `/oa queue join [kit]` (permission `omniarena.queue`, default true): join the ranked queue. The
+  queue name is `ranked` by default or the name of an admin kit (the match then uses that kit's
+  loadout). `/oa queue leave` and `/oa queue status` (queue, position, waiting time, your rating and
+  the rating range currently accepted). Refused while in an arena, while already queued, during a
+  lockdown, for an unknown kit name, and while the plugin is stopped. A player must leave the queue
+  before joining an arena by command or sign.
+- **Parties.** When the leader of a party of 2 or more queues, the whole party is queued as one
+  unit and is rated by its average rating; other party members cannot queue alone (they get a
+  message) and everyone must be online and free. A party is matched against another party of the
+  same size, or, when none is waiting, against enough solo players to fill the other team. Party
+  matches need an arena with `team-enabled` true, `team-count` 2 and `max-players` of at least twice
+  the party size; each side becomes one team. If a member leaves, quits, enters an arena or the
+  party changes (leave, kick, disband, join), the whole party entry is removed and the others are
+  told.
 - A matchmaking task runs every 20 ticks (1 s) while the plugin runs (`/oa stop` cancels it,
-  `/oa start` restarts it).
-- Players queue per kit name (case-insensitive key). A player cannot queue while in an arena or
-  already queued; disconnected players or players who entered an arena are dropped each tick.
-- Pairing: players in a queue are sorted by rating; adjacent-first search pairs the first player
-  with the next player whose rating gap is within the allowed range. The allowed range starts at
+  `/oa start` restarts it); disconnected players and players who entered an arena are dropped each
+  tick.
+- Pairing: entries in a queue are sorted by (average) rating; an entry is paired with the next entry
+  of the same size whose rating gap is within the allowed range. The allowed range starts at
   **200** and grows by **50 for every 10 seconds** of waiting (the longer waiter of the two
   counts), capped at **1000**.
-- A free arena is any enabled, WAITING, joinable arena with no running match. If none is free
-  matchmaking stops for that tick and everyone stays queued.
-- The match is created by joining both players; it is flagged **ranked**, remembers its queue name,
-  and, if the queue key names an admin kit, `queueKit` is set. If joining fails both players are
-  re-queued with their original wait time. If a ranked match collapses before it starts, the
-  remaining player is put back into the queue by `MatchManager`.
-- A manual `/oa join` or a tournament launch removes the player from any queue. Queue matchmaking
-skips arenas that are reserved by an in-progress tournament, arenas with `max-players` below 2,
-and does nothing while lockdown is on.
-- Outside that re-queue path, `joinQueue(Player, kitName)` has no caller in this build, see
-  section 21.
+- A free arena is any enabled, WAITING, joinable arena with no running match that is not reserved by
+  an in-progress tournament and has `max-players` of at least 2 (twice the party size for parties).
+  If none is free nobody is paired in that tick and everyone stays queued. Matchmaking does nothing
+  during a lockdown.
+- The match is created by joining everyone; it is flagged **ranked**, remembers its queue name,
+  and, if the queue key names an admin kit, `queueKit` is set. Ranked matches are closed to outsiders
+  once underway. If joining fails everyone is re-queued with their original wait time. If a ranked
+  match collapses before it starts, the remaining players are put back into the queue by
+  `MatchManager` (a party re-queues through its leader).
+- Joins done by the queue or a tournament launch drop the player's queue entry.
 
 ---
 
 ## 11. Party
 
 `/party` (also `/oa party`, permission `omniarena.use`): `create`, `disband` (leader),
-`invite <player>`, `accept`, `decline`, `leave`, `kick <player>` (leader), `leader <player>`,
-`info`. Invites expire after 60 seconds (cleanup task every 30 s); a party holds at most 10
-members. Members are notified of joins and leaves. A quitting player is removed from their party.
-The `party.*` config keys described in older documentation do not exist; the limits are
-constants. Parties are not yet consumed by matches or queues.
+`invite <player>`, `accept`, `decline`, `leave`, `kick <player>` (leader), `leader <player>`
+(transfer leadership), `info`. Invites expire after 60 seconds (cleanup task every 30 s) and are
+tied to the party, so they survive a leadership change; a party holds at most `party.max-size`
+members (default 10, minimum 2). Members are notified of joins and leaves. A quitting player is
+removed from their party; when the leader leaves, leadership passes to the longest-standing online
+member and the party disbands only if nobody else is online. Parties are used by the ranked queue
+(section 10): the leader queues the whole party. They are otherwise not consumed by matches.
 
 ---
 
 ## 12. Betting
 
-Requires Vault and an economy provider present when the plugin enables (checked once at startup).
+Requires Vault and an economy provider present when the plugin enables (checked once at startup),
+`betting.enabled` and `integrations.vault`.
 
-- `/oa bet place <arena> <player> <amount>`: the arena must have a live match that is not
-  ENDING/RESETTING, and the target must be online and a participant (not a spectator) of that arena.
-  Non-OP players need the `omniarena.bet` node (see section 16).
+- `/oa bet place <arena> <player> <amount>` (also `/bet`): the arena must have a live match that is
+  not ENDING/RESETTING, and the target must be online and a participant (not a spectator) of that
+  arena. Non-OP players need the `omniarena.bet` node (declared in `plugin.yml`, default true).
 - `/oa bet cancel`: refund your bet while the betting window is open.
 - `/oa bet info [arena]`: your active bet and, with an arena, its bet count and pool.
 
 Rules: **one active bet per player at a time** (cancel it before placing another); amount between `betting.min-bet` (default 100) and `betting.max-bet`
 (default 10000) and within the player's balance; money is withdrawn on placement. The window is
 open before the match starts and for `betting.bet-window-seconds` (default 30) after it starts;
-afterwards you cannot place or cancel.
+afterwards you cannot place or cancel. With `betting.allow-spectator-bet: false` spectators of the
+arena cannot place bets.
 
 Settlement when a match ends: winner pool = bets on the winner. If there is no winner (draw,
 timeout, forfeit without winner id) or nobody backed the winner, **every bet is refunded**.
 Otherwise each winning bet receives `totalPool x (yourBet / winnerPool)` rounded down to cents
 (paid even to offline players); losing bets are lost. Bets still pending at match cleanup (aborted match) are refunded;
-all bets are refunded on `/oa stop` and on plugin disable. `betting.allow-spectator-bet` exists in
-`config.yml` but is not read.
+all bets are refunded on `/oa stop` and on plugin disable.
 
 ---
 
 ## 13. Tournaments
 
-Single elimination on one arena (one live match at a time). Command `/oa tournament`.
+Single elimination on one arena (one live match at a time). Command `/oa tournament` (also the
+standalone `/tournament`).
 
 | Command | Who | Notes |
 |---------|-----|-------|
@@ -576,8 +707,8 @@ who is not in the current round's pending match. Seed order is join order. For a
 (for 6 players: 2 byes, 2 real matches). Each launch picks the first pending match, removes both
 players from any queue, joins them to the arena via the normal join path, and waits for the match
 to end before launching the next (`match.end-delay + 2` seconds later). A 5-second safety tick
-(`TournamentManager` task, every 100 ticks) relaunches matches that had to wait (arena busy, a
-player busy elsewhere) or that vanished without a result. If a player is offline, the opponent
+(`TournamentManager` task, every 100 ticks) relaunches matches that had to wait (arena busy or still
+regenerating, a player busy elsewhere) or that vanished without a result. If a player is offline, the opponent
 gets a walkover after `tournament.walkover-grace-seconds` (default 60); if a player leaves the arena
 during a running tournament match the other player is declared the winner. Tournament matches are
 **not ranked** (no ELO).
@@ -608,21 +739,27 @@ tournaments, `/oa start` reloads them.
 
 ## 14. Integrations and placeholders
 
-Soft dependencies (auto-detected on enable): Vault (economy), PlaceholderAPI, WorldGuard, LuckPerms.
-`plugin.yml` additionally lists WorldEdit, FastAsyncWorldEdit, PermissionsEx, EssentialsX,
-DiscordSRV and HolographicDisplays for load order only. The `integrations.*` toggles (other than
-`integrations.tab.takeover`) are not read; LibsDisguises is reached by reflection (soft dependency) only for
-the combat undisguise.
+Soft dependencies (auto-detected on enable and again on `/oa reload`): Vault (economy), PlaceholderAPI,
+WorldGuard, LuckPerms. Each can be switched off with `integrations.vault`, `integrations.placeholderapi`,
+`integrations.worldguard`, `integrations.luckperms` (default true). Vault is used for betting,
+tournament prizes and `rewards.*` money; the LuckPerms hook object exists but no shipped feature
+uses it. `plugin.yml` additionally lists WorldEdit, FastAsyncWorldEdit, PermissionsEx, EssentialsX,
+DiscordSRV and HolographicDisplays for load order only. LibsDisguises is reached by reflection (soft
+dependency) only for the combat undisguise.
 
 ### Placeholders `%omniarena_<name>%`
 
-Lifetime: `kills`, `deaths`, `wins`, `losses`, `kd`, `winrate` (suffix `%`), `time_played`.
-Context: `in_arena`, `arena` / `arena_name`, `gamemode`, `gamemode_name`, `gamemode_desc`, `goal`,
-`state`, `arena_kills`, `arena_deaths`, `arena_streak`, `alive`, `players`, `max_players`,
-`time_left` (`m:ss`), `time_left_seconds`, `team`, `team_color`.
+Lifetime (work anywhere): `kills`, `deaths`, `wins`, `losses`, `kd`, `winrate` (suffix `%`),
+`time_played`.
+Context: `in_arena` (`true`/`false`), `arena` / `arena_name`, `gamemode`, `gamemode_name`,
+`gamemode_desc`, `goal` (the arena's effective goal type), `state`, `arena_kills`, `arena_deaths`,
+`arena_streak`, `alive`, `players`, `max_players`, `time_left` (`m:ss`), `time_left_seconds`, `team`,
+`team_color`.
 
-Outside an arena: text placeholders return an empty string, numeric ones `0`, `arena` returns
-`N/A`. Unknown names return `null`.
+Outside an arena: `arena` / `arena_name` return `N/A`; `gamemode`, `gamemode_name`, `gamemode_desc`,
+`state`, `team`, `team_color` return an empty string; `arena_kills`, `arena_deaths`, `alive`,
+`players`, `max_players`, `goal`, `time_left`, `time_left_seconds` return `0`; `arena_streak` and
+unknown names return `null`. For an offline player every placeholder returns an empty string.
 
 ### TAB
 
@@ -633,40 +770,69 @@ sidebar and boss bar; build them from the placeholders above in TAB's config.
 
 ## 15. Command reference
 
-Run `/oa <subcommand> help` for usage of any subcommand and `/oa help [guide]` for guides
-(`makingarena`, `regenarena`, `regenstyles`, `signjoin`, `kits`, `startmatch`, `stopmatch`,
-`settings`, `permissions`, `troubleshooting`, `performance`).
+Run `/oa <subcommand> help` for usage of any subcommand (automatic, except `regen`, `kit` and
+`adminkit`, which print their own help) and `/oa help [guide]` for guides (`makingarena`, `regenarena`,
+`regenstyles`, `signjoin`, `kits`, `startmatch`, `stopmatch`, `settings`, `permissions`,
+`troubleshooting`, `performance`). Tab completion exists for every subcommand and argument.
+
+### Commands registered in `plugin.yml`
+
+`/oa` (aliases `/omniarena`, `/arena`; `omniarena.use`), `/kit` (`omniarena.kit.use`), `/join`,
+`/leave`, `/party`, `/stats`, `/list`, `/info`, `/ready`, `/help` (all `omniarena.use`),
+`/spectate` (`omniarena.spectate`), `/bet` (`omniarena.bet`), `/tournament` (`omniarena.use`;
+the command itself checks the tournament nodes), `/pvp`, `/pvpstatus`, `/newbie` (`omniarena.pvp`),
+`/pvptag`, `/untag`, `/pvpglobal` (`omniarena.pvp.admin`). Standalone commands forward to the
+matching `/oa` subcommand (`/kit`, `/join`, `/leave` and `/party` have their own executors). There
+is no standalone `/queue`: use `/oa queue`.
 
 ### Dispatcher rules
 
-- `/oa` (aliases `omniarena`, `arena`) requires `omniarena.use` to be run at all.
+- `/oa` requires `omniarena.use` to be run at all.
 - While stopped, only `/oa start` runs.
 - Admin subcommands require `PermissionChecker.hasAdmin`: console, OP, `omniarena.admin`, or the
   specific node. Player subcommands are checked against the subcommand's own required node for
-  non-OP players (`omniarena.use`, `omniarena.spectate`, `omniarena.kit.use`, `omniarena.pvp`,
-  `omniarena.bet`, `omniarena.tournament.create`); the console and OPs always pass.
-- When a name exists as both a player and admin command (`kit`), admins get the admin version only
-  for `setpublic`, `setprivate`, `icon`, `description`, `cooldown`, `permission`.
+  non-OP players (table below); the console and OPs always pass.
+- The name `kit` exists in both maps. Admins get the admin command for
+  `/oa kit admin <action> ...` and, for compatibility, for `setpublic`, `setprivate`, `icon`,
+  `description`, `cooldown`, `permission`; everything else is the player command.
+  `/oa adminkit <action> ...` is the same admin command.
+- Unexpected exceptions in a subcommand are logged with a full stack trace and the player sees a
+  short message with the usage.
 
 ### Player subcommands
 
-`join`, `leave`, `spectate`, `list`, `info`, `stats`, `ready`, `kit`, `party`, `bet`,
-`tournament`, `help`, `pvp`, `pvpstatus`, `pvptag`, `untag`, `pvpglobal`, `newbie`, `pvpinfo`,
-`pvplist`, `pvpoverride` (the last group enforces `omniarena.pvp.admin` inside for admin actions).
+| Subcommand | Permission |
+|------------|-----------|
+| `join <arena>`, `leave`, `list`, `info <arena>`, `stats ...`, `ready`, `party ...`, `help [guide]` | `omniarena.use` |
+| `spectate <arena>` | `omniarena.spectate` |
+| `kit ...` | `omniarena.kit.use` |
+| `queue <join [kit]\|leave\|status>` | `omniarena.queue` |
+| `bet <place\|cancel\|info>` | `omniarena.bet` |
+| `tournament <create\|join\|leave\|start\|status\|list\|delete\|setprize>` | `omniarena.tournament.create` (admin actions check `omniarena.tournament.admin`) |
+| `pvp [player]`, `pvpstatus [player]`, `newbie [disable]`, `pvpinfo [player]` | `omniarena.pvp` |
+| `pvptag`, `untag`, `pvpglobal`, `pvplist`, `pvpoverride`, `newbie add\|remove\|checktime` | `omniarena.pvp.admin` |
 
 ### Admin subcommands
 
-`create`, `delete`, `enable`, `disable`, `config`, `spawn`, `region`, `goal`, `module`, `match`,
-`force`, `forcewin`, `regen`, `sign`, `kit` (metadata actions), `tp`, `debug`, `announcements`,
-`chat`, `override`, `reload`, `version`, `wand`, `website`, `settings`, `start`, `stop`, `restart`,
-`pmr`.
+| Subcommand | Permission |
+|------------|-----------|
+| `create`, `delete`, `enable`, `disable`, `config`, `spawn`, `region`, `goal`, `module`, `regen`, `chat`, `announcements`, `tp`, `debug`, `wand` | `omniarena.admin.arena` |
+| `match`, `force`, `forcewin` | `omniarena.admin.match` |
+| `sign` | `omniarena.admin.sign` |
+| `hologram` | `omniarena.admin.hologram` |
+| `kit admin ...`, `adminkit ...` (and the metadata shortcuts) | `omniarena.admin.kit` |
+| `override` | `omniarena.admin.override` |
+| `reload`, `version`, `settings` | `omniarena.admin.reload` |
+| `website`, `start`, `stop`, `restart`, `pmr` | `omniarena.admin` |
+
+`/oa stats reset <player>` additionally needs `omniarena.admin.stats`.
 
 ### `/oa stats`
 
 `/oa stats [player]` (unknown players are reported), `/oa stats global [kills|wins|kd]` (top 10),
 `/oa stats reset <player>` (online or known offline player; needs `omniarena.admin.stats`).
 
-### `/oa match <start|stop> <arena>` (`omniarena.admin.match`)
+### `/oa match <start|stop|reset> <arena>` (`omniarena.admin.match`)
 
 `start` begins the arena's existing match immediately (needs at least one player; refused when
 already running/ending); `stop` ends it as a forfeit with no winner; `reset` removes every player
@@ -693,26 +859,34 @@ See section 20.
 
 ## 16. Permissions
 
+Declared in `plugin.yml`:
+
 | Node | Default | Used by |
 |------|---------|---------|
-| `omniarena.use` | true | `/oa`, join/leave/list/info/stats/ready/help/party |
+| `omniarena.use` | true | `/oa`, join/leave/list/info/stats/ready/help/party, `/tournament` |
 | `omniarena.kit.use` | true | `/kit` |
+| `omniarena.queue` | true | `/oa queue` |
+| `omniarena.bet` | true | `/oa bet`, `/bet` |
 | `omniarena.spectate` | true | `/spectate` |
 | `omniarena.pvp` | true | player PvP commands |
-| `omniarena.pvp.admin` | op | tag, untag, global, override, targeting others |
 | `omniarena.tournament.create` | true | create, join, leave, start own |
-| `omniarena.tournament.admin` | op | start/delete/setprize any |
-| `omniarena.admin` | op | parent of the admin nodes; lifecycle, website, pmr |
-| `omniarena.admin.arena` | op | arena, region, spawn, config, regen, wand, modules |
-| `omniarena.admin.kit` | op | preset kit metadata |
-| `omniarena.admin.match` | op | `/oa match` |
-| `omniarena.admin.sign` | op | `/oa sign` |
+| `omniarena.kit.slots.5`, `.10` | false | personal kit limits |
+| `omniarena.admin` | op | parent of the nodes below it in this table; lifecycle, website, pmr |
+| `omniarena.admin.arena` | op | arena, region, spawn, config, regen, wand, modules, chat, goal |
+| `omniarena.admin.kit` | op | preset kit management |
+| `omniarena.admin.match` | op | `/oa match`, `force`, `forcewin` |
+| `omniarena.admin.sign` | op | `/oa sign`, creating and breaking arena signs |
+| `omniarena.admin.hologram` | op | `/oa hologram` |
 | `omniarena.admin.stats` | op | `/oa stats reset` |
 | `omniarena.admin.reload` | op | reload, version, settings |
-| `omniarena.admin.override` | op | `/oa override` (child of `omniarena.admin`) |
-| `omniarena.bet` | **not declared** | required by `/oa bet` for non-OP players; grant it explicitly |
+| `omniarena.admin.override` | op | `/oa override` |
+| `omniarena.pvp.admin` | op | tag, untag, global, override, targeting others |
+| `omniarena.tournament.admin` | op | start/delete/setprize any tournament |
 | `omniarena.join.bypass` | op | skips the whitelist and full-arena checks on `/oa join` |
-| `omniarena.kit.slots.5`, `.10` | false | personal kit limits |
+
+`omniarena.admin` has as children: `.admin.arena`, `.admin.kit`, `.admin.match`, `.admin.sign`,
+`.admin.hologram`, `.admin.stats`, `.admin.reload`, `.admin.override`, `omniarena.pvp.admin`,
+`omniarena.tournament.admin` and `omniarena.join.bypass`.
 
 Per-kit permission nodes (preset kit `permission` field) are free-form.
 
@@ -720,74 +894,206 @@ Per-kit permission nodes (preset kit `permission` field) are free-form.
 
 ## 17. Building and the jar matrix
 
-### Current build
-
-Java 21, Maven. `mvn package` runs the compiler, the surefire tests (JUnit 5), and the shade
-plugin, producing `target/OmniArena-1.0.0.jar` (FastBoard and HikariCP relocated under
-`com.omniarena.shaded`; Gson and MySQL connector bundled). A `maven-antrun-plugin` step copies the
-jar to a Windows desktop path; that step is developer-machine specific and should be removed or
-made conditional for CI. The `target/` directory is committed to the repository.
-
-Dependencies (provided): Paper API `26.2.build.31-alpha`, VaultAPI 1.7, PlaceholderAPI 2.11.6,
-WorldGuard 7.0.12, LuckPerms API 5.4.
-
-### Planned matrix (24 jars)
-
-Platforms: `paper`, `spigot`, `bukkit`, `purpur`. Versions: `26.3`, `26.2`, `26.1` (Java 25) and
-`1.21.11`, `1.21.10`, `1.21.9` (Java 21). Artifact name `OmniArena-<platform>-<mcversion>.jar`.
-Planned invocation:
+Maven 3.9+. Every build needs **one platform profile and one Minecraft-version profile**; always
+pass both, for example:
 
 ```bash
-mvn -P<platform>,mc-<version> package     # e.g. mvn -Ppaper,mc-26.2 package
+mvn -q -Ppaper,mc-26.2 package        # target/OmniArena-paper-26.2.jar
+mvn -q -Pspigot,mc-1.21.11 package    # target/OmniArena-spigot-1.21.11.jar
+mvn -q test                           # JUnit 5 only (default profiles)
 ```
 
-The profiles are being added; until they exist use plain `mvn package`. Build commands for the
-whole matrix are tracked in [CLAUDE.md](CLAUDE.md) (Build section) so they stay next to the
-developer rules. Java 25 profiles need a JDK 25 toolchain.
+(`paper` and `mc-26.2` are active by default, but passing any `-P` switches the default profiles
+off, so a lone `-Pmc-1.21.11` would have no server API on the classpath.)
+
+| Platform profile | Server API | Source folder added | Adventure |
+|------------------|------------|---------------------|-----------|
+| `paper` | `paper-api` | `src/paper/java` | native |
+| `purpur` | `purpur-api` (repo.purpurmc.org) | `src/paper/java` | native |
+| `spigot` | `spigot-api` | `src/spigot/java` | shaded and relocated (`net.kyori` -> `com.omniarena.libs.kyori`) plus `adventure-platform-bukkit` |
+| `bukkit` | `spigot-api` (the only published Bukkit-flavoured API) | `src/spigot/java` | same as `spigot`; only the jar name differs |
+
+| Version profile | Java | `api-version` in `plugin.yml` | Paper API | Purpur API | Spigot API |
+|-----------------|:----:|-------------------------------|-----------|------------|------------|
+| `mc-26.3` | 25 | 26.3 | 26.3.build.253-stable | 26.3-R0.1-SNAPSHOT | 26.3-R0.1-SNAPSHOT |
+| `mc-26.2` (default) | 25 | 26.2 | 26.2.build.135-stable | 26.2-R0.1-SNAPSHOT | 26.2-R0.1-SNAPSHOT |
+| `mc-26.1` | 25 | 26.1 | 26.1.2.build.74-stable | 26.1.2-R0.1-SNAPSHOT | 26.1-R0.1-SNAPSHOT |
+| `mc-1.21.11` | 21 | 1.21 | 1.21.11-R0.1-SNAPSHOT | 1.21.11-R0.1-SNAPSHOT | 1.21.11-R0.1-SNAPSHOT |
+| `mc-1.21.10` | 21 | 1.21 | 1.21.10-R0.1-SNAPSHOT | 1.21.10-R0.1-SNAPSHOT | 1.21.10-R0.1-SNAPSHOT |
+| `mc-1.21.9` | 21 | 1.21 | 1.21.9-R0.1-SNAPSHOT | 1.21.9-R0.1-SNAPSHOT | 1.21.9-R0.1-SNAPSHOT |
+
+The output is `target/OmniArena-<platform>-<mcversion>.jar`: 4 platforms x 6 versions = **24 jars**.
+`plugin.yml` is resource-filtered (`${project.version}`, `${api.version}`). The 26.x profiles
+compile with `--release 25` and need a JDK 25; the 1.21.x profiles compile with `--release 21`
+and need a JDK 21.
+
+### Building every jar
+
+`scripts/build-all.sh` loops over the matrix, runs `mvn -P<platform>,mc-<version> clean package`
+and copies each jar to `dist/` (git-ignored):
+
+```bash
+JAVA25_HOME=/path/to/jdk25 JAVA21_HOME=/path/to/jdk21 scripts/build-all.sh
+PLATFORMS="paper spigot" VERSIONS="26.2 1.21.11" scripts/build-all.sh     # a subset
+```
+
+`JAVA25_HOME` is used for 26.x and `JAVA21_HOME` for 1.21.x (without them the `java` on the PATH is
+used, so only matching versions will compile). It prints the failed combinations and exits
+non-zero. The Spigot snapshot repository (hub.spigotmc.org) and repo.purpurmc.org must be
+reachable; the `purpur-api` coordinates were not verified in this documentation pass (no
+network/JDK 25 in the authoring environment, only an older Paper API was cached), so treat the
+Purpur and 26.x builds as unverified until you have run them.
+
+### Platform layer (`com.omniarena.platform`)
+
+Common code talks only to `PlatformAdapter` (obtained from `Platform.get()`); exactly one
+`PlatformImpl` is compiled per jar. `Platform.init` runs first in `onEnable` and disables the
+plugin with an actionable message when a paper/purpur jar is installed on a non-Paper server (use
+the spigot or bukkit jar there). The adapter covers text delivery (messages, titles, action bar,
+boss bars), item names/lore, inventory titles, sign lines, `TextDisplay` text, chat (Paper
+`AsyncChatEvent` vs Spigot `AsyncPlayerChatEvent`), kick detection, server-stopping detection,
+async chunk loading and chunk tickets, `BlockState` access and item (container) serialization. The
+spigot/bukkit jars also run on Paper, just without the Paper fast paths. Paper-only extras: the
+elytra firework-boost block while combat-tagged (`PaperCombatListener`) and the native NBT item
+bytes used in regen snapshots (section 5).
+
+### Shading
+
+FastBoard and HikariCP are relocated under `com.omniarena.shaded`; Gson and the MySQL connector
+are bundled (the database layer is unused). On spigot/bukkit, Adventure (api, MiniMessage, legacy
+and plain serializers) and `adventure-platform-bukkit` are bundled and relocated to
+`com.omniarena.libs.kyori`. Other dependencies (provided): VaultAPI 1.7, PlaceholderAPI 2.11.6,
+WorldGuard 7.0.12, LuckPerms API 5.4. The old Windows-specific `maven-antrun-plugin` copy step is
+gone; `target/` is not tracked by git.
+
+Tests (12 `@Test` methods): `RegenAnimationTypeTest` (5), `TournamentBracketTest` (6),
+`ConfigSchemaServiceTest` (1).
 
 ---
 
 ## 18. Configuration reference
 
-`config.yml` keys, grouped. "Read" means some code reads the key; "-" means it exists in the file
-and the dashboard but nothing reads it.
+Every key of the bundled `config.yml`, grouped. All keys are read by code except `plugin.debug`
+(a helper exists but nothing calls it). Defaults are the values shipped in `config.yml`.
 
-| Key | Default | Read | Meaning |
-|-----|---------|:----:|---------|
-| `plugin.debug` | false | yes | Verbose logging flag |
-| `plugin.language`, `plugin.metrics` | en, true | - | |
-| `tools.wand-material` | WOODEN_HOE | yes | Selection wand item |
-| `database.*` | disabled | - | Placeholder for a MySQL backend |
-| `arena.inventory-restore` | true | yes | Save/restore inventories |
-| `arena.default-*`, `lobby-timeout`, `spectator-allowed`, `mid-match-join`, `respawn-delay`, `spawn-protection`, `teleport-back-on-leave`, `region-protection` | | - | Per-arena values are used instead |
-| `match.end-commands` | [] | yes | Global end commands |
-| `match.end-delay` | 5 | yes | Seconds before reset |
-| `match.announce-global` | false | yes | Broadcast results server-wide |
-| `match.announce-arena` | true | - | |
-| `regen.batch-size` | 4000 | yes | Blocks per tick (see section 5) |
-| `regen.progress.enabled`, `interval-percent` | true, 10 | yes | Chat progress for command-driven restores |
-| `regen.animation.type` | SPHERE | yes | Default style |
-| `regen.animation.particles`, `sound` | true | yes | |
-| `pvp.*` | see section 9 | mostly | |
-| `rewards.*` | | - | Not implemented |
-| `kits.default-slot-limit` | 3 | yes | |
-| `kits.sharing-enabled` | true | yes | |
-| `kits.power-cap.enabled`, `max-enchant-level` | true, 5 | yes | |
-| `kits.player-kits-enabled`, `power-cap.banned-items` | | - | |
-| `signs.glow-effect`, `update-interval` | true, 20 | yes | |
-| `visual.*` | | - | Use per-arena visual flags |
-| `killstreak.milestones` | 5/10/15/20 | yes | Map of kills to title |
-| `killstreak.sound`, `particle` | | - | |
-| `scoreboard.*`, `boss-bar.timer-color`, `low-time-color` | | - | |
-| `boss-bar.low-time-threshold` | 60 | yes | |
-| `integrations.tab.takeover` | false | yes | |
-| `integrations.*` (others) | | - | |
-| `anticheat.*`, `performance.*` | | - | |
-| `web.enabled`, `bind-address`, `port`, `public-url`, `session-minutes`, `max-sessions` | true, 127.0.0.1, 8123, "", 30, 1 | yes | |
-| `web.title` | | - | |
-| `betting.enabled`, `min-bet`, `max-bet`, `bet-window-seconds` | true, 100, 10000, 30 | yes | |
-| `betting.allow-spectator-bet` | true | - | |
-| `tournament.walkover-grace-seconds` | 60 | yes | Wait for an offline player before a walkover |
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `plugin.debug` | false | Not read: no code consults it |
+| `tools.wand-material` | WOODEN_HOE | Selection wand item |
+| `arena.default-min-players` | 2 | Seeds new arenas (section 2) |
+| `arena.default-max-players` | 16 | Seeds new arenas |
+| `arena.default-countdown` | 10 | Seeds new arenas |
+| `arena.default-match-duration` | 600 | Seeds new arenas (seconds) |
+| `arena.default-game-mode` | DEATHMATCH | Seeds new arenas |
+| `arena.lobby-timeout` | 120 | Seconds below the minimum players before the lobby closes (0 = never) |
+| `arena.spectator-allowed` | true | Seeds new arenas |
+| `arena.mid-match-join` | false | Seeds new arenas |
+| `arena.respawn-delay` | 3 | Seeds new arenas (seconds) |
+| `arena.spawn-protection` | 3 | Seeds new arenas (seconds) |
+| `arena.inventory-restore` | true | Save and restore inventory and armor |
+| `arena.persist-player-state` | true | Also write each player's pre-arena state to `player-states/<uuid>.yml` |
+| `arena.region-protection` | true | Block break/place in an arena region while it is not RUNNING and the rule is off (admins bypass) |
+| `match.end-commands` | [] | Global end commands |
+| `match.end-delay` | 5 | Seconds before reset after the end |
+| `match.announce-global` | false | Broadcast results server-wide |
+| `match.announce-arena` | true | Announce results to the arena (also needs the arena's `announcements`) |
+| `regen.auto` | true | Rebuild arenas automatically after played matches; per arena `regen.arenas.<name>.auto` (not in the shipped file) overrides |
+| `regen.batch-size` | 4000 | Blocks per tick (section 5) |
+| `regen.progress.enabled` | true | Chat progress for command-driven restores |
+| `regen.progress.interval-percent` | 10 | Progress step |
+| `regen.animation.type` | SPHERE | Default style (10 styles, old names mapped) |
+| `regen.animation.particles` | true | |
+| `regen.animation.sound` | true | |
+| `rewards.enabled` | false | Master switch (money needs Vault) |
+| `rewards.kill-money` | 10.0 | Money per kill |
+| `rewards.win-money` | 50.0 | Money per winner |
+| `rewards.kill-xp` | 5 | XP per kill |
+| `rewards.win-xp` | 20 | XP per winner |
+| `rewards.win-commands` | [] | Console commands per winner (`{player}`, `{arena}`) |
+| `rewards.kill-commands` | [] | Console commands per kill (`{player}`, `{victim}`, `{arena}`) |
+| `kits.player-kits-enabled` | true | Allow `/kit create` |
+| `kits.default-slot-limit` | 3 | Personal kit slots |
+| `kits.power-cap.enabled` | true | Cap enchant levels and ban items in saved kits |
+| `kits.power-cap.max-enchant-level` | 5 | |
+| `kits.power-cap.banned-items` | BEDROCK, COMMAND_BLOCK, BARRIER, SPAWNER, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK, STRUCTURE_BLOCK | Refused while the power cap is enabled |
+| `kits.sharing-enabled` | true | `/kit share` |
+| `party.max-size` | 10 | Maximum party members (minimum 2) |
+| `signs.glow-effect` | true | Glowstone behind wall signs |
+| `signs.update-interval` | 20 | Ticks between sign refreshes |
+| `holograms.refresh-seconds` | 30 | Leaderboard hologram refresh |
+| `visual.titles` / `sounds` / `particles` / `scoreboard` / `boss-bar` / `action-bar` / `holograms` | true | Seed the per-arena visual flags of new arenas; `visual.holograms` also switches leaderboard holograms on or off globally |
+| `visual.killstreak-titles` | true | Killstreak titles |
+| `visual.kill-announcements` | true | Kill announcements |
+| `visual.victory-fireworks` | true | Fireworks for the winner |
+| `visual.countdown-sounds` | true | Countdown sounds |
+| `visual.spectator-invisibility` | true | Spectators are invisible |
+| `killstreak.milestones` | 5 KILLING SPREE, 10 DOMINATING, 15 UNSTOPPABLE, 20 GODLIKE | Map of kills to title |
+| `killstreak.sound` | ENTITY_LIGHTNING_BOLT_THUNDER | Milestone sound |
+| `killstreak.particle` | FLAME | Milestone particle |
+| `scoreboard.title` | gradient "OmniArena" | MiniMessage sidebar title |
+| `scoreboard.update-interval` | 20 | Ticks (minimum effective 20) |
+| `boss-bar.timer-color` | GREEN | |
+| `boss-bar.waiting-color` | YELLOW | Waiting/starting |
+| `boss-bar.ending-color` | PURPLE | |
+| `boss-bar.low-time-color` | RED | Below the threshold |
+| `boss-bar.low-time-threshold` | 60 | Seconds |
+| `integrations.vault` / `placeholderapi` / `worldguard` / `luckperms` | true | Per-hook switch (section 14) |
+| `integrations.tab.takeover` | false | TAB renders sidebar and boss bar |
+| `web.enabled` | true | |
+| `web.bind-address` | 127.0.0.1 | |
+| `web.port` | 8123 | |
+| `web.public-url` | "" | Base URL for generated links |
+| `web.session-minutes` | 30 | Sliding session lifetime (read at plugin enable) |
+| `web.max-sessions` | 1 | 0 = unlimited (read at plugin enable) |
+| `web.title` | OmniArena Control | Browser tab title |
+| `betting.enabled` | true | |
+| `betting.min-bet` / `max-bet` | 100.0 / 10000.0 | |
+| `betting.allow-spectator-bet` | true | Spectators may bet |
+| `betting.bet-window-seconds` | 30 | Window after match start |
+| `tournament.walkover-grace-seconds` | 60 | Wait for an offline player before a walkover |
+
+`pvp.*`:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `pvp.enabled` | true | Master switch |
+| `pvp.combat.tag-duration` | 15 | Seconds in combat |
+| `pvp.combat.tag-on-damage` / `tag-on-attack` | true | Tag the victim / the attacker |
+| `pvp.combat.block-teleport` | true | Block non-plugin command teleports while tagged (legacy `cancel-teleport`) |
+| `pvp.combat.block-elytra` | true | Block elytra gliding (and, on Paper, firework boost) while tagged |
+| `pvp.combat.block-ender-pearl` | false | Block ender pearl teleports (legacy `block-enderpearls`) |
+| `pvp.combat.block-commands` | true | Block commands except `allowed-commands` |
+| `pvp.combat.allowed-commands` | /oa, /pvp, /pvpstatus, /pvptag, /msg, /r, /helpop | |
+| `pvp.combat.block-block-place` | true | |
+| `pvp.combat.disable-fly` / `disable-gamemode` / `disable-invisibility` / `disable-disguise` | true | Applied when the tag starts |
+| `pvp.combat.punish-combat-log` | true | |
+| `pvp.combat.combat-log-action` | KILL | KILL, COMMAND or NOTHING |
+| `pvp.combat.combat-log-commands` | [] | For COMMAND (`{player}`) |
+| `pvp.combat.drop-on-combat-log` | true | Combat-logger's inventory drops |
+| `pvp.combat.broadcast-combat-log` | true | |
+| `pvp.toggle.enabled` | true | Players may toggle their own PvP |
+| `pvp.toggle.cooldown` | 5 | Seconds between toggles |
+| `pvp.toggle.default-state` | true | PvP on by default |
+| `pvp.global.pvp-enabled` | true | Server-wide switch |
+| `pvp.newbie.enabled` | true | |
+| `pvp.newbie.duration` | 300 | Seconds |
+| `pvp.newbie.disable-on-attack` | true | |
+| `pvp.newbie.block-pickup` | false | Newbies cannot pick up items |
+| `pvp.killabuse.enabled` | true | |
+| `pvp.killabuse.max-kills` | 3 | Kills on one victim before they stop counting |
+| `pvp.killabuse.time-window` | 300 | Seconds |
+| `pvp.respawn-protection.enabled` | true | |
+| `pvp.respawn-protection.duration` | 5 | Seconds |
+| `pvp.border-hopping.prevent` | true | Needs WorldGuard |
+| `pvp.auto-soup.enabled` | false | |
+| `pvp.auto-soup.heal-amount` | 3.5 | |
+| `pvp.auto-soup.soup-material` | MUSHROOM_STEW | |
+| `pvp.blood.enabled` | true | |
+| `pvp.blood.block` | REDSTONE_BLOCK | |
+| `pvp.transfer-drops` | false | Victim's drops go to the killer |
+| `pvp.block-lava-fire-near-disabled` | true | |
+| `pvp.lava-fire-radius` | 5.0 | Blocks |
+| `pvp.disabled-worlds` | [] | Worlds with PvP off |
 
 `messages.yml`: every player-facing string, MiniMessage format, with a `prefix` key prepended by
 `ConfigManager.getMessage`. Missing keys fall back to the defaults bundled in the jar (so upgrades
@@ -796,8 +1102,10 @@ do not show "Missing message"). Tournament messages: `tournament-usage`, `-no-pe
 `-players-only`. Placeholders inside messages use `{name}` style.
 
 Changing config: edit the file and `/oa reload`; or `/oa config set`, `/oa settings`, or the web
-Config tab (all write the live config and save). Reload also reloads arenas, but only when no
-match is running.
+Config tab (all write the live config and save). Reload also reloads kits and the integration
+hooks, and reloads arenas only when no match is running. Keys removed from older versions
+(`plugin.language`, `plugin.metrics`, `database.*`, `arena.teleport-back-on-leave`, `anticheat.*`,
+`performance.*`) no longer exist; a stale copy in your file is ignored.
 
 ---
 
@@ -807,11 +1115,13 @@ All under `plugins/OmniArena/`:
 
 - `arenas/<name>.yml`: `name`, `enabled`, `game-mode`, `min-players`, `max-players`,
   `match-duration`, `countdown`, `chat-mode`, `announcements`, `mid-match-join`, `spectator-allowed`,
-  `spawn-protection`, `goal.type|value`, `respawn.type|delay`, `rules.*`, `team.enabled|count`,
-  `modules.enabled`, `lives`, `region.world|min-x..max-z`, `spawns.battle|lobby|spectator` (each a list
+  `spawn-protection`, `goal.type|value` (plus `goal.type-override: true` when the goal type differs
+  from the game type's), `respawn.type|delay`, `lives`, `rules.*`, `team.enabled|count`,
+  `modules.enabled`, `region.world|min-x..max-z`, `spawns.battle|lobby|spectator` (each a list
   of `world:x:y:z:yaw:pitch`), `signs` (same format), `end-commands`, `visual.*`. The bundled
-  `example.yml` also shows `team.colors` and `classes`, which the loader does not read.
-- `snapshots/<arena-lowercase>.yml`: **format v2**:
+  `example.yml` also shows `team.colors` and `classes`, which the loader does not read. The arena
+  whitelist/blacklist and `whitelist-enabled` are not saved.
+- `snapshots/<arena-lowercase>.yml`: **format v2** (written atomically):
   ```yaml
   world: world
   format: 2
@@ -820,25 +1130,33 @@ All under `plugins/OmniArena/`:
     - AIR|minecraft:air
   runs:               # "x,z,y0,length,paletteIndex" vertical run-length columns
     - "100,200,64,5,0"
+  tiles:              # optional: tile entities, "x,y,z|C|<b64 items>", "x,y,z|S|<b64 front>|<b64 back>|<style>", "x,y,z|B|<banner patterns>"
+    - "100,64,200|C|H4sIAAAA..."
   ```
-  The legacy format 1 (`x,y,z|MATERIAL|blockdata` lines) is still loaded.
+  The legacy format 1 (`x,y,z|MATERIAL|blockdata` lines) is still loaded. Container item bytes are
+  platform specific (section 5).
 - `sign-glowstone.yml`: `locations: ["world,x,y,z"]`.
+- `holograms.yml`: `holograms.<id>.{type,size,world,x,y,z}`.
 - `admin-kits/<name>.yml`, `player-kits/<uuid>.yml` (section `kits.<name>`), `kit-cooldowns.yml`
   (preset-kit cooldown expiries per player).
 - `stats.yml`: `stats.<uuid>.{name,kills,deaths,wins,losses,assists,draws,time-played}`.
 - `elo.yml`: `ratings.<uuid>.{name,rating,wins,losses,draws,highestRating}`.
 - `tournaments.yml`: `tournaments.<name>.{name,arena,maxPlayers,creator,state,participants,prizes.first|second|third,bracket.rounds,bracket.currentRound}`.
+- `pvp-toggles.yml`: `pvp-off: [uuid, ...]` (players who switched PvP off).
+- `newbie.yml`: `<uuid>: <expiry epoch millis>` (running newbie protection windows).
 - `player-states/<uuid>.yml`: crash-safe copy of a player's pre-arena state (location, game mode,
   health, food, XP, effects, flight, speeds, inventory when enabled). Written asynchronously on a
   single writer thread (atomic temp file + move) when a player joins an arena or spectates; deleted
   when their state is restored; if it still exists when the player next joins the server (crash or
-  kill during a match) `PlayerJoinListener` restores it and tells the player.
+  kill during a match) `PlayerJoinListener` restores it and tells the player. Disabled by
+  `arena.persist-player-state: false`.
 - `config.yml`, `messages.yml`.
 
 Save behaviour: arenas, kits and tournaments are written synchronously. Stats are written on an
 async task when the plugin is enabled and inline during `onDisable`. ELO snapshots on the main
 thread and writes on a single daemon executor (inline when the plugin is disabled), flushed with
-`shutdown()` on disable. Snapshots serialize on the main thread in slices and write async.
+`shutdown()` on disable. PvP toggles and newbie windows are saved on an async task (inline on
+shutdown). Snapshots serialize on the main thread in slices and write async.
 
 ---
 
@@ -846,52 +1164,67 @@ thread and writes on a single daemon executor (inline when the plugin is disable
 
 ### onEnable order
 
-Config load; construct managers (visual, stats, kits, kit share, signs, modules, block restore,
-arenas, matches, kit command, combat, ELO, queue, party, betting, tournaments); load data
-(stats, kits, arenas, ELO); start queue, party, tournaments; integrations; web server; commands
-and tab completers; listeners; sign update task; startup banner.
+Platform layer (`Platform.init`; a wrong-flavor jar disables the plugin here); config load;
+construct managers (visual, stats, kits, kit share, signs, modules, block restore, arenas, matches,
+kit command, combat, ELO, queue, party, betting, tournaments); load data (stats, kits, arenas,
+ELO); start queue, party, tournaments; integrations; web server; commands and tab completers;
+listeners (including the platform's chat listener); sign update task; startup banner.
+`VisualController` starts the leaderboard holograms.
 
 ### onDisable order
 
-Set `stopped`; cancel sign task; leave all online players of active matches (so results are
-included in saves); `BlockRestoreModule.cancelAll`; stop queue and party; save tournaments;
-refund all bets; save stats, arenas, ELO (flush ELO executor); shut down visuals and modules; stop
-the web server; release integrations; also closes open kit/settings GUIs and flushes the player-state
-writer. Each step is individually guarded so one failure does not skip the rest.
+Set `stopped`; cancel sign task; close open kit/settings GUIs; leave all online players of active
+matches (so results are included in saves); flush the player-state writer; `BlockRestoreModule.cancelAll`
+(finishes regens, including ones started by the matches that just ended); shut down combat; stop
+queue and party; save tournaments; refund all bets; save stats, arenas, ELO (flush ELO executor);
+shut down visuals (removes holograms) and modules; stop the web server; release integrations; shut
+down the platform layer. Each step is individually guarded so one failure does not skip the rest.
 
 ### `/oa stop`, `/oa start`, `/oa restart` (`omniarena.admin`)
 
 - **stop:** sets `stopped = true`; finishes running regens; cancels **all** scheduler tasks of the
-  plugin; removes all players and spectators from matches; saves stats and arenas; refunds bets; saves and clears
-  tournaments; stops the web server; shuts down visuals and modules; stops queue and party.
+  plugin; removes all players and spectators from matches and finishes the regens that started;
+  closes open GUIs; saves ELO, stats and arenas; refunds bets; saves and clears tournaments; stops
+  the web server (revoking sessions); shuts down visuals and modules; stops queue and party.
   While stopped, listeners check `isStopped()` and do nothing, all commands except `/oa start`
   are refused, and `/kit` and `/party` report the stopped message.
 - **start:** only when stopped. Clears `stopped`, reloads config, arenas, kits, stats, ELO; restarts
-  queue, party, tournaments (restoring saved brackets), the web server, the sign task, and combat
-  tasks. It does not rebuild the PlaceholderAPI hook, Vault economy lookup (betting keeps its
+  queue, party, tournaments (restoring saved brackets), the web server, the sign task, combat
+  tasks and visuals (holograms). It does not rebuild the Vault economy lookup (betting keeps its
   startup state) or listeners (they stay registered).
 - **restart:** stop now, start 20 ticks later (the stop cancels all tasks, so use `/oa restart`
   rather than scheduling around it).
-- **reload:** reloads config and messages; reloads arenas only if no match is active; reloads the
-  killstreak module; restarts the sign task and combat tasks; refreshes all signs.
+- **reload:** reloads config and messages and the kits; reloads arenas only if no match is active;
+  reloads the killstreak module; restarts the sign task and combat tasks; re-runs the integration
+  hooks (so `integrations.*` toggles and the PlaceholderAPI expansion are refreshed); refreshes all
+  signs.
 
 ---
 
 ## 21. Known limitations
 
-- No command or sign enters the queue for the first time (`QueueManager.joinQueue` is only called
-  by `MatchManager` to re-queue a player whose ranked match fell apart) and no command shows ELO.
-  Ranked matches, and therefore ELO changes, only come from the queue.
-- Older documentation described `/oa elo ...`, `/oa queue ...`, `/oa class`, `/oa editor`, `elo.*`,
-  `queue.*`, `party.*` config keys, 16/15 regen counts and `rewards`; those are not present. The
-  dashboard command is `/oa website`.
-- Arena `goal-type` (stored but not read by the engine), `respawn-type` WAVE timing (flat 1 s),
-  arena whitelist/blacklist population (no command stores them and they are not persisted),
-  global `visual.*`, `rewards.*`, `database.*` are unimplemented or inert, as described in the
-  sections above.
-- Admin preset kits cannot be created, deleted or equipped through `/oa kit` (player version
-  wins); manage them as files (the metadata actions work through `/oa kit`; `/oa kit rename` for admins is routed to the player command).
-- `omniarena.bet` is required by `/oa bet` but not declared in `plugin.yml`, so non-OP players are
-  denied unless a permissions plugin grants it.
-- The Docs tab serves a separate bundled copy of this documentation.
-- The Spigot/Bukkit/Purpur and non-26.2 builds are pending the build-matrix work (section 17).
+- **Arena whitelist/blacklist.** `join`/signs consult them and `/oa config set <arena>
+  whitelist-enabled` exists, but no command fills the lists and neither the lists nor the flag are
+  saved to the arena file.
+- **Per-arena visual flags.** `visual-scoreboard`, `visual-boss-bar` and `visual-action-bar` work;
+  `visual-titles`, `visual-sounds`, `visual-particles` and `visual-holograms` are stored and
+  editable but not consulted by the engine (titles, sounds and effects follow the global
+  `visual.*` keys; leaderboard holograms follow the global `visual.holograms`).
+- **Respawn type WAVE** is a flat 1 s respawn; `respawn-delay` only applies to DELAYED (INSTANT
+  respawns after 1 tick).
+- **`plugin.debug`** is not read by any code.
+- **Modules** `item-spawner`, `environmental` and `leveling` are accepted by `/oa module` but
+  have no code behind them.
+- **Database.** Everything is YAML; the shaded MySQL/Hikari libraries are unused.
+- **No `/oa elo` command.** Ratings are shown by `/oa queue status`, the `elo` hologram and the web
+  Players tab only.
+- **`regen.arenas.<name>.auto`** can only be set by editing `config.yml` (not in the settings
+  schema, so not in `/oa config`, the GUI or the dashboard).
+- **Snapshots with containers are not portable** between paper/purpur and spigot/bukkit jars
+  (re-take them after switching); the elytra firework-boost block while tagged exists only on
+  paper/purpur.
+- **Build verification.** The 24-jar matrix is defined in the POM and `scripts/build-all.sh`; the
+  Purpur API coordinates and the 26.x / Spigot snapshot repositories could not be verified in the
+  environment these docs were written in (section 17).
+- The Docs tab serves a separate bundled copy of this documentation (`web/docs.md`, kept identical
+  to this file).

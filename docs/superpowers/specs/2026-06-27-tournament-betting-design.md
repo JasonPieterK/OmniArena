@@ -216,8 +216,8 @@ authoritative; see `DOCS.md` sections 12 and 13).
   is reserved for the current pending match.
 - **Command wiring.** `TournamentCommand` lives in `commands/player/` (not `commands/admin/`) and is
   registered as the `/oa tournament` player subcommand; `delete` also accepts `cancel` and `status`
-  also accepts `info`. There is no `plugin.yml` command entry for a
-  standalone `/tournament`. No entry fees exist, so `delete` has nothing to refund. Tournament
+  also accepts `info`. A standalone `/tournament` command is registered in `plugin.yml` and
+  forwarded to `/oa tournament`. No entry fees exist, so `delete` has nothing to refund. Tournament
   matches are not ranked (no ELO change).
 
 **Betting**
@@ -228,6 +228,10 @@ authoritative; see `DOCS.md` sections 12 and 13).
 - Settlement: if there is no winner or nobody backed the winner, all bets are refunded; otherwise
   the whole pool is shared pro rata by stake (rounded down to cents). Bets cannot be placed on a
   match that is ENDING/RESETTING or not live.
-- `betting.allow-spectator-bet` is present in `config.yml` but is not read.
-- `/oa bet` requires the permission node `omniarena.bet`, which is not declared in `plugin.yml`
-  (non-OP players need it granted).
+- `betting.allow-spectator-bet: false` makes spectators of the arena unable to place bets
+  (`BettingManager.placeBet`); `betting.enabled` and `integrations.vault` are also checked on every
+  bet.
+- `/oa bet` (and the standalone `/bet`) requires the permission node `omniarena.bet`, declared in
+  `plugin.yml` with default true.
+- With automatic arena regeneration a tournament arena is RESETTING until its rebuild finishes; the
+  100-tick safety task retries launches that fail for that reason.
