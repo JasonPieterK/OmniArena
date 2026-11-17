@@ -13,13 +13,26 @@ public final class ColorUtil {
 
     private ColorUtil() {}
 
+    /** Parsed Components are immutable, so repeated static texts (scoreboard/actionbar lines, messages) are cached. Bounded. */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Component> PARSE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int PARSE_CACHE_MAX = 1024;
+
     public static Component parse(String miniMessage) {
         if (miniMessage == null || miniMessage.isBlank()) return Component.empty();
+        Component cached = PARSE_CACHE.get(miniMessage);
+        if (cached != null) return cached;
+        Component result;
         // If string contains legacy formatting codes (§), parse as legacy
         if (miniMessage.contains("§")) {
-            return parseLegacy(miniMessage);
+            result = parseLegacy(miniMessage);
+        } else {
+            result = MM.deserialize(translateAmpersandsToMiniMessage(miniMessage));
         }
-        return MM.deserialize(translateAmpersandsToMiniMessage(miniMessage));
+        if (miniMessage.length() <= 256) {
+            if (PARSE_CACHE.size() >= PARSE_CACHE_MAX) PARSE_CACHE.clear();
+            PARSE_CACHE.put(miniMessage, result);
+        }
+        return result;
     }
 
     private static String translateAmpersandsToMiniMessage(String text) {

@@ -98,6 +98,8 @@ public class BlockRestoreModule {
     // Human-readable reason of the last failed restore/snapshot per arena
     private final Map<String, String> lastErrors = new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<BukkitTask> snapshotTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // Chunk-ticket releasers of running snapshots (arena key -> idempotent release), run by cancelAll
+    private final Map<String, Runnable> snapshotReleasers = new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<FallingBlock> descenderEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile boolean shuttingDown = false;
     // Columns*height scanned per tick while snapshotting
@@ -189,6 +191,7 @@ public class BlockRestoreModule {
             }
         };
 
+        snapshotReleasers.put(key, release);
         Runnable step = () -> {
             try {
                 if (shuttingDown || Bukkit.getWorld(worldName) != world) {
@@ -308,6 +311,8 @@ public class BlockRestoreModule {
         for (BukkitTask t : new ArrayList<>(snapshotTasks)) { try { t.cancel(); } catch (Exception ignored) {} }
         snapshotTasks.clear();
         snapshotting.clear();
+        for (Runnable r : new ArrayList<>(snapshotReleasers.values())) { try { r.run(); } catch (Exception ignored) {} }
+        snapshotReleasers.clear();
         // Each finalizer places what is left and then runs the completion callbacks (so arenas leave RESETTING)
         for (Map.Entry<String, Runnable> en : new ArrayList<>(activeRegens.entrySet())) {
             try { en.getValue().run(); }
@@ -374,6 +379,29 @@ public class BlockRestoreModule {
         final double cz = (region.getMinZ() + region.getMaxZ()) / 2.0;
         final int[] bounds = {region.getMinX(), region.getMinY(), region.getMinZ(),
                 region.getMaxX(), region.getMaxY(), region.getMaxZ()};
+        // While the plan loads/chunks preload, a cancel (plugin stop/disable) restores synchronously instead of
+        // leaving the arena unrestored; the async continuation then sees syncDone and only frees its tickets.
+        final java.util.concurrent.atomic.AtomicBoolean syncDone = new java.util.concurrent.atomic.AtomicBoolean(false);
+        activeRegens.put(key, () -> {
+            if (!syncDone.compareAndSet(false, true)) return;
+            try {
+                Plan p = loadPlan(YamlConfiguration.loadConfiguration(file), t, cx, cy, cz);
+                World w = p.worldName != null ? Bukkit.getWorld(p.worldName) : null;
+                if (w == null || p.order.length == 0 || (regionWorld != null && !regionWorld.equals(p.worldName))) {
+                    restoreFail(key, null, "Regen of " + name + " could not finish during shutdown (snapshot missing/corrupt or world unloaded). Run /oa regen " + name + " after startup.");
+                    fFail.run();
+                    return;
+                }
+                while (p.hasMore()) {
+                    for (BlockEntry e : p.nextBatch(w, Integer.MAX_VALUE, Integer.MAX_VALUE)) placeEntry(w, p, e);
+                }
+                clearTransientEntities(w, bounds);
+                fComplete.run();
+            } catch (Throwable ex) {
+                restoreFail(key, null, "Regen of " + name + " failed during shutdown (" + ex + "). Run /oa regen " + name + " after startup.");
+                fFail.run();
+            }
+        });
         AsyncUtil.runAsyncThenSync(
             () -> {
                 try {
@@ -385,6 +413,7 @@ public class BlockRestoreModule {
                 }
             },
             result -> {
+                if (syncDone.get()) return; // finalized synchronously by cancelAll
                 if (shuttingDown) { restoreFail(key, null, "Regen of " + name + " cancelled (plugin stopping)."); fFail.run(); return; }
                 String fix = " Fix: run /oa regen snapshot " + name + " to recreate it.";
                 if (result.plan() == null || result.plan().order.length == 0) {
@@ -407,7 +436,9 @@ public class BlockRestoreModule {
                     return;
                 }
                 preloadChunks(world, plan, () -> {
-                    if (shuttingDown) { releaseTickets(world, plan); fFail.run(); return; }
+                    if (syncDone.get()) { releaseTickets(world, plan); return; }
+                    if (shuttingDown) { releaseTickets(world, plan); syncDone.set(true); fFail.run(); return; }
+                    syncDone.set(true); // startPlacing installs its own finalizer
                     startPlacing(key, world, plan, bounds, result.plan().type, onProgress, fComplete, fFail);
                 });
             }

@@ -221,11 +221,21 @@ public class EloManager {
     /**
      * Get top players by rating
      */
+    private volatile List<EloRating> topCache;
+    private volatile int topCacheLimit = -1;
+    private volatile long topCacheAt;
+
     public List<EloRating> getTopPlayers(int limit) {
-        return ratings.values().stream()
+        // Several holograms refresh in the same tick; share one sort (1s TTL keeps results effectively live).
+        long now = System.currentTimeMillis();
+        List<EloRating> c = topCache;
+        if (c != null && topCacheLimit == limit && now - topCacheAt < 1000L) return c;
+        List<EloRating> res = ratings.values().stream()
                 .sorted(Comparator.comparingInt(EloRating::getRating).reversed())
                 .limit(limit)
                 .toList();
+        topCache = res; topCacheLimit = limit; topCacheAt = now;
+        return res;
     }
 
     /**

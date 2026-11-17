@@ -53,6 +53,7 @@ public class StatsManager {
                     plugin.getLogger().warning("Skipped corrupt stats entry for player " + uuidStr + " in plugins/OmniArena/stats.yml (" + e + "). Fix: correct or remove the 'players." + uuidStr + "' section; that player's stats start from 0.");
                 }
             }
+            invalidateTop();
             plugin.getLogger().info("Loaded stats for " + statsCache.size() + " player(s).");
         } catch (Exception e) {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load plugins/OmniArena/stats.yml (" + e.getMessage() + "). Stats will start empty and may overwrite the file. Fix: back up the file now, fix its YAML syntax (or delete it) and restart.", e);
@@ -106,6 +107,7 @@ public class StatsManager {
     /** Get-or-create: for write paths (match results, join). Use {@link #peekStats} for reads. */
     public PlayerStats getStats(UUID uuid) {
         return statsCache.computeIfAbsent(uuid, id -> {
+            invalidateTop();
             OfflinePlayer op = Bukkit.getOfflinePlayer(id);
             return new PlayerStats(id, op.getName() != null ? op.getName() : "Unknown");
         });
@@ -131,6 +133,7 @@ public class StatsManager {
             }
         }
 
+        invalidateTop();
         saveAll();
     }
 
@@ -138,27 +141,35 @@ public class StatsManager {
         statsCache.put(uuid, new PlayerStats(uuid,
                 Bukkit.getOfflinePlayer(uuid).getName() != null
                         ? Bukkit.getOfflinePlayer(uuid).getName() : "Unknown"));
+        invalidateTop();
         saveAll();
     }
 
+    // Leaderboard cache: invalidated whenever stats mutate (recordResult/reset/load/create).
+    private final Map<String, List<PlayerStats>> topCache = new ConcurrentHashMap<>();
+    private final Map<String, Integer> topCacheLimit = new ConcurrentHashMap<>();
+
+    private void invalidateTop() { topCache.clear(); topCacheLimit.clear(); }
+
+    private List<PlayerStats> top(String key, int limit, Comparator<PlayerStats> cmp) {
+        List<PlayerStats> cached = topCache.get(key);
+        Integer cl = topCacheLimit.get(key);
+        if (cached != null && cl != null && cl == limit) return cached;
+        List<PlayerStats> res = statsCache.values().stream().sorted(cmp).limit(limit).toList();
+        topCache.put(key, res);
+        topCacheLimit.put(key, limit);
+        return res;
+    }
+
     public List<PlayerStats> getTopKills(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingInt(PlayerStats::getKills).reversed())
-                .limit(limit)
-                .toList();
+        return top("kills", limit, Comparator.comparingInt(PlayerStats::getKills).reversed());
     }
 
     public List<PlayerStats> getTopWins(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingInt(PlayerStats::getWins).reversed())
-                .limit(limit)
-                .toList();
+        return top("wins", limit, Comparator.comparingInt(PlayerStats::getWins).reversed());
     }
 
     public List<PlayerStats> getTopKD(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingDouble(PlayerStats::getKDRatio).reversed())
-                .limit(limit)
-                .toList();
+        return top("kd", limit, Comparator.comparingDouble(PlayerStats::getKDRatio).reversed());
     }
 }

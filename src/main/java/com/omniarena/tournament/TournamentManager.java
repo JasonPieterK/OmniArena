@@ -37,7 +37,7 @@ public class TournamentManager {
         // Periodic safety net: launches matches that had to wait (arena busy, player busy/offline)
         // and recovers matches that were cancelled without producing a result.
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (plugin.isStopped()) return;
+            if (plugin.isStopped() || tournaments.isEmpty()) return;
             for (Tournament t : new ArrayList<>(tournaments.values())) {
                 if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
                 try { launchPendingMatches(t); }

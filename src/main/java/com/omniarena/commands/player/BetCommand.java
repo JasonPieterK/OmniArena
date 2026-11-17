@@ -132,7 +132,7 @@ public class BetCommand extends SubCommand {
         String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) return TabUtil.filter(List.of("place", "cancel", "info"), cur);
         String a = args[0].toLowerCase(java.util.Locale.ROOT);
-        if (args.length == 2 && List.of("place", "cancel", "info").contains(a)) return TabUtil.arenas(cur);
+        if (args.length == 2 && List.of("place", "info").contains(a)) return TabUtil.arenas(cur);
         if (args.length == 3 && a.equals("place")) return TabUtil.players(sender, cur);
         if (args.length == 4 && a.equals("place")) return TabUtil.hint("<amount>", cur);
         return List.of();

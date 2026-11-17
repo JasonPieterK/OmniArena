@@ -61,6 +61,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.getWebDashboardServer().start();
             plugin.startSignUpdateTask();
             plugin.getCombatManager().start();
+            plugin.getVisual().start();
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "
@@ -105,7 +106,12 @@ public class LifecycleCommand extends SubCommand {
                 }
             }
 
+            // Close every open plugin GUI so no viewer keeps a dead menu
+            try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable ignored) {}
+            try { com.omniarena.settings.SettingsGUI.closeAll(); } catch (Throwable ignored) {}
+
             // Save all data
+            plugin.getEloManager().saveAll();
             plugin.getStatsManager().saveAll();
             plugin.getArenaManager().saveAll();
             plugin.getBettingManager().refundAll();

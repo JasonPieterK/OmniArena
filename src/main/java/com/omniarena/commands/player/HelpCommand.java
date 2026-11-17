@@ -50,7 +50,7 @@ public class HelpCommand extends SubCommand {
             if (canSee(sender, cmd, false)) MessageUtil.send(sender, entry(name, cmd));
         });
         List<Map.Entry<String, SubCommand>> admin = adminCommands.entrySet().stream()
-                .filter(e -> canSee(sender, e.getValue(), true)).toList();
+                .filter(e -> !playerCommands.containsKey(e.getKey()) && canSee(sender, e.getValue(), true)).toList(); // "kit" is listed once (player entry); admin kit actions show under /oa adminkit
         if (!admin.isEmpty()) {
             MessageUtil.send(sender, "");
             MessageUtil.send(sender, "<red>Admin commands:");

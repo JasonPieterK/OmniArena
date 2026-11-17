@@ -228,7 +228,16 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             return switch (sub) {
                 case "create" -> TabUtil.hint("<name>", cur);
-                case "delete", "equip", "share", "rename", "preview" -> TabUtil.playerKits(sender, cur);
+                case "delete", "share", "rename" -> TabUtil.playerKits(sender, cur);
+                case "equip", "preview" -> {
+                    // The executor also accepts public admin kits (or any admin kit for admins).
+                    java.util.Set<String> kits = new java.util.LinkedHashSet<>(TabUtil.playerKits(sender, ""));
+                    boolean admin = sender.hasPermission("omniarena.admin");
+                    for (AdminKit k : KitManager.getInstance().getAllAdminKits()) {
+                        if (k.isPublic() || admin) kits.add(k.getName());
+                    }
+                    yield TabUtil.filter(kits, cur);
+                }
                 case "accept" -> TabUtil.hint("<kit>", cur);
                 default -> List.of();
             };

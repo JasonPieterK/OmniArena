@@ -415,6 +415,7 @@ public class CombatManager {
     public synchronized void start() {
         if (tagExpiryTask != null) { tagExpiryTask.cancel(); tagExpiryTask = null; }
         tagExpiryTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (combatTags.isEmpty()) return; // idle: nothing to expire
             long now = System.currentTimeMillis();
             combatTags.entrySet().removeIf(e -> {
                 if (e.getValue() >= now) return false;

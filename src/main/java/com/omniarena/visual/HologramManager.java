@@ -85,6 +85,8 @@ public class HologramManager implements Listener {
     /** Entries in holograms.yml that could not be parsed; written back verbatim on save. */
     private final Map<String, Object> unparsed = new LinkedHashMap<>();
     private BukkitTask refreshTask;
+    private boolean listenerRegistered = false; // registered once; start() may run again after /oa stop + start
+    private volatile boolean running = false;
 
     public HologramManager(OmniArena plugin) {
         this.plugin = plugin;
@@ -96,7 +98,12 @@ public class HologramManager implements Listener {
     /** Loads holograms.yml, sweeps stale entities, spawns holograms in loaded chunks and starts the refresh timer. */
     public void start() {
         load();
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        if (!listenerRegistered) {
+            plugin.getServer().getPluginManager().registerEvents(this, plugin);
+            listenerRegistered = true;
+        }
+        running = true;
+        if (refreshTask != null) { refreshTask.cancel(); refreshTask = null; }
         for (World w : plugin.getServer().getWorlds()) {
             for (org.bukkit.Chunk c : w.getLoadedChunks()) removeStale(c);
         }
@@ -111,6 +118,7 @@ public class HologramManager implements Listener {
 
     /** Despawns every hologram entity and stops the timer. Definitions stay in holograms.yml. */
     public void removeAll() {
+        running = false;
         if (refreshTask != null) { refreshTask.cancel(); refreshTask = null; }
         for (Holo h : holograms.values()) despawn(h);
     }
@@ -214,6 +222,7 @@ public class HologramManager implements Listener {
     }
 
     private void refreshAll() {
+        if (holograms.isEmpty()) return;
         for (Holo h : holograms.values()) refresh(h);
     }
 
@@ -286,6 +295,7 @@ public class HologramManager implements Listener {
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
+        if (!running) return;
         org.bukkit.Chunk chunk = event.getChunk();
         if (!event.isNewChunk()) removeStale(chunk);
         if (!plugin.getConfig().getBoolean("visual.holograms", true)) return;

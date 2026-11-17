@@ -34,6 +34,11 @@ public class VisualController {
     public HologramManager getHologramManager() { return hologramManager; }
     public EffectManager getEffectManager() { return effectManager; }
 
+    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa start). */
+    public void start() {
+        hologramManager.start();
+    }
+
     public void shutdown() {
         hologramManager.removeAll();
         scoreboardManager.removeAllBoards();
