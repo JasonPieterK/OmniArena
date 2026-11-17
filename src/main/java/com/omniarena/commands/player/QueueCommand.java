@@ -33,11 +33,18 @@ public class QueueCommand extends SubCommand {
             return;
         }
         QueueManager qm = QueueManager.getInstance();
-        if (qm == null) return;
+        if (qm == null || plugin.isStopped()) {
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("plugin-stopped"));
+            return;
+        }
         String action = args.length == 0 ? "status" : args[0].toLowerCase();
         switch (action) {
             case "join" -> {
                 String queue = args.length > 1 ? args[1] : DEFAULT_QUEUE;
+                if (qm.isQueued(player)) {
+                    MessageUtil.send(player, "<red>You are already in a queue. <gray>Use <yellow>/oa queue leave</yellow> first.");
+                    return;
+                }
                 if (plugin.getMatchManager().isLockdown()) {
                     MessageUtil.send(player, "<red>Arenas are currently locked down by an administrator.");
                     return;
@@ -47,7 +54,8 @@ public class QueueCommand extends SubCommand {
                             + DEFAULT_QUEUE + "</yellow> or an admin kit name.");
                     return;
                 }
-                qm.joinQueue(player, queue);
+                var kit = KitManager.getInstance().getAdminKit(queue);
+                qm.joinQueue(player, kit.isPresent() ? kit.get().getName() : DEFAULT_QUEUE);
             }
             case "leave" -> qm.leaveQueue(player);
             case "status" -> {

@@ -73,7 +73,7 @@ public class PlayerStateStore {
                 cfg.set("offhand", off == null ? null : off.clone());
             }
         } catch (Throwable t) {
-            plugin.getLogger().warning("Could not snapshot state of " + p.getName() + ": " + t.getMessage());
+            plugin.getLogger().warning("Could not snapshot the inventory/state of " + p.getName() + " before the match (" + t + "). Their items may not be restored after the match; check for conflicting inventory plugins.");
             return;
         }
         final File f = file(p.getUniqueId());
@@ -86,7 +86,7 @@ public class PlayerStateStore {
                 java.nio.file.Files.move(tmp.toPath(), f.toPath(),
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
-                plugin.getLogger().warning("Could not save player state " + f.getName() + ": " + e.getMessage());
+                plugin.getLogger().warning("Could not save player state file " + f.getPath() + " (" + e + "). Fix: make sure the folder is writable and the disk is not full, otherwise this player's items cannot be restored after a crash.");
             }
         });
     }
@@ -120,7 +120,7 @@ public class PlayerStateStore {
         try {
             cfg = YamlConfiguration.loadConfiguration(f);
         } catch (Throwable t) {
-            plugin.getLogger().warning("Corrupt player state " + f.getName() + ": " + t.getMessage());
+            plugin.getLogger().warning("Corrupt player state file " + f.getPath() + " (" + t + "). It was deleted and the player's saved inventory could not be restored. Fix: restore it from a backup if you need those items.");
             delete(p.getUniqueId());
             return false;
         }

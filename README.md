@@ -371,13 +371,13 @@ web:
   bind-address: 127.0.0.1   # local only by default
   port: 8123
   public-url: ""            # base URL used in generated links (e.g. https://arena.example.com)
-  session-minutes: 30       # fixed lifetime of a session token
+  session-minutes: 30       # idle lifetime of a session token (renewed on each request)
   max-sessions: 1           # 0 = unlimited
 ```
 
 **Access.** Run `/oa website` in game (or from the console) to create a session. You get a link of
 the form `<public-url or http://127.0.0.1:<port>>/?token=<token>`. Every `/api/*` request must carry
-the token (`?token=`); the HTML/JS/CSS shell is served without it. If the session limit is
+the token (`Authorization: Bearer`, or legacy `?token=`); the HTML/JS/CSS shell is served without it. If the session limit is
 reached, free a slot with `/oa override killweb`. Tokens are 24 random bytes, URL-safe base64.
 
 **Security guidance.**

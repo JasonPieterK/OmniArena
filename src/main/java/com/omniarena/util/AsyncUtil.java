@@ -57,13 +57,12 @@ public final class AsyncUtil {
                         try {
                             syncConsumer.accept(result);
                         } catch (Exception e) {
-                            OmniArena.getInstance().getLogger().severe("Sync consumer error: " + e.getMessage());
+                            OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "A background task finished but its main-thread follow-up failed (" + e + "). Full trace below; please report it with your plugin version.", e);
                         }
                     });
                 }
             } catch (Exception e) {
-                OmniArena.getInstance().getLogger().severe("Async task error: " + e.getMessage());
-                e.printStackTrace();
+                OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "A background (async) task failed (" + e + "). Full trace below; the action was not completed. Please report it with your plugin version.", e);
             }
         });
     }

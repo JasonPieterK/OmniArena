@@ -50,13 +50,12 @@ public class EloManager {
                             cfg.getInt(path + ".highestRating", rating.getRating())));
                     ratings.put(uuid, rating);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to load ELO for " + uuidStr + ": " + e.getMessage());
+                    plugin.getLogger().warning("Skipped corrupt ELO entry for player " + uuidStr + " in plugins/OmniArena/elo.yml (" + e + "). Fix: correct or remove that entry; the player restarts at the default rating.");
                 }
             }
             plugin.getLogger().info("Loaded ELO ratings for " + ratings.size() + " player(s).");
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to load ELO file: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load plugins/OmniArena/elo.yml (" + e.getMessage() + "). Ratings will start at defaults. Fix: back up the file, repair its YAML syntax (or delete it) and restart.", e);
         }
     }
 

@@ -101,10 +101,9 @@ public class SettingsMenuListener implements Listener {
                 }
             }
         } catch (Exception e) {
-            plugin.getLogger().severe("Error in settings menu click: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error handling a click in the settings menu (" + e + "). Full trace below; the menu was closed. Please report it with your plugin version.", e);
             runNextTick(player::closeInventory);
-            player.sendMessage("§cAn error occurred. Please try again.");
+            player.sendMessage("§cThe settings menu hit a problem and was closed. §7Try again, or use §f/oa settings set <key> <value>§7; an admin can check the console for details.");
         }
     }
 
@@ -112,7 +111,7 @@ public class SettingsMenuListener implements Listener {
     private void runNextTick(Runnable r) {
         if (!plugin.isEnabled()) return;
         org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
-            try { r.run(); } catch (Exception e) { plugin.getLogger().warning("Settings menu action failed: " + e.getMessage()); }
+            try { r.run(); } catch (Exception e) { plugin.getLogger().warning("Settings menu action failed (" + e + "). Retry from the menu or use /oa settings set <key> <value>; see the trace with debug on (/oa debug)."); }
         });
     }
 

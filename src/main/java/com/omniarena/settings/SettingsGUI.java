@@ -95,9 +95,8 @@ public final class SettingsGUI {
             }
             player.openInventory(inv);
         } catch (Exception e) {
-            OmniArena.getInstance().getLogger().severe("Failed to open settings GUI: " + e.getMessage());
-            e.printStackTrace();
-            player.sendMessage("§cFailed to open settings menu. Check console for details.");
+            OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "Failed to open the settings GUI (" + e + "). Full trace below. Fix: use the chat version /oa settings, and report the trace.", e);
+            player.sendMessage("§cCould not open the settings menu. §7Use §f/oa settings§7 (chat version) instead; an admin can check the console for the cause.");
         }
     }
 

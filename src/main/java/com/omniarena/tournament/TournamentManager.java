@@ -315,8 +315,8 @@ public class TournamentManager {
 
             var qm = com.omniarena.queue.QueueManager.getInstance();
             if (qm != null) {
-                if (qm.isQueued(p1)) qm.leaveQueue(p1);
-                if (qm.isQueued(p2)) qm.leaveQueue(p2);
+                qm.forceRemove(p1.getUniqueId(), "a member was called to a tournament match");
+                qm.forceRemove(p2.getUniqueId(), "a member was called to a tournament match");
             }
             boolean ok1 = mm.joinArena(p1, arena);
             boolean ok2 = ok1 && mm.joinArena(p2, arena);

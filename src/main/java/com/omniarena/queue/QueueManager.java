@@ -52,7 +52,9 @@ public class QueueManager {
             return false;
         }
         if (plugin.getMatchManager().isInArena(player)) {
-            MessageUtil.send(player, "<red>You cannot queue while in an arena.");
+            MessageUtil.send(player, "<red>You cannot queue while in an arena"
+                    + (plugin.getMatchManager().isSpectating(player) ? " (or while spectating)" : "")
+                    + ". <gray>Use <yellow>/oa leave</yellow> first.");
             return false;
         }
 
@@ -94,6 +96,11 @@ public class QueueManager {
             }
         }
 
+        if (members.size() == 1 && !canHost(1)) {
+            MessageUtil.send(player, "<red>No enabled arena is available to host a queued match right now.");
+            return false;
+        }
+
         Queue queue = queues.computeIfAbsent(kitName.toLowerCase(), k -> new Queue(k));
         QueuedPlayer qp = members.size() > 1
                 ? new QueuedPlayer(members.stream().map(Player::getUniqueId).toList(),
@@ -131,13 +138,29 @@ public class QueueManager {
                     + "party (this also removes the party from the queue).");
             return false;
         }
-        removeEntry(qp, qp.isParty() ? player.getName() + " left the queue" : null);
+        removeEntry(qp, qp.isParty() ? player.getName() + " left the queue" : null, player.getUniqueId());
         MessageUtil.send(player, "<green>Left the queue.");
         return true;
     }
 
+    /**
+     * Internal removal: drops the whole entry (solo or party unit) containing this player, with no
+     * leader check and no message to the player. Other party members are told why.
+     * Used by tournaments, arena joins and quit hooks; the user-facing check lives in leaveQueue.
+     */
+    public boolean forceRemove(UUID uuid, String reason) {
+        QueuedPlayer qp = queuedPlayers.get(uuid);
+        if (qp == null) return false;
+        removeEntry(qp, reason, uuid);
+        return true;
+    }
+
+    public boolean forceRemove(UUID uuid) { return forceRemove(uuid, "a party member left the queue"); }
+
     /** Takes a queue entry out entirely, telling its other online members why when it is a party. */
-    private void removeEntry(QueuedPlayer qp, String reason) {
+    private void removeEntry(QueuedPlayer qp, String reason) { removeEntry(qp, reason, null); }
+
+    private void removeEntry(QueuedPlayer qp, String reason, UUID exclude) {
         for (UUID id : qp.getMembers()) queuedPlayers.remove(id, qp);
         String key = qp.getKitName().toLowerCase();
         Queue queue = queues.get(key);
@@ -147,6 +170,7 @@ public class QueueManager {
         }
         if (qp.isParty() && reason != null) {
             for (UUID id : qp.getMembers()) {
+                if (id.equals(exclude)) continue;
                 Player m = Bukkit.getPlayer(id);
                 if (m != null && m.isOnline()) {
                     MessageUtil.send(m, "<red>Your party was removed from the queue: <gray>" + reason + ".");
@@ -242,7 +266,7 @@ public class QueueManager {
         QueuedPlayer qp = queuedPlayers.get(uuid);
         if (qp == null) return;
         String who = Bukkit.getOfflinePlayer(uuid).getName();
-        removeEntry(qp, (who != null ? who : "A party member") + " left or entered an arena");
+        removeEntry(qp, (who != null ? who : "A party member") + " left or entered an arena", uuid);
     }
 
     /**

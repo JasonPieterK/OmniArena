@@ -19,7 +19,7 @@ public final class YamlUtil {
         try {
             config.save(file);
         } catch (IOException e) {
-            logger.severe("Failed to save " + file.getName() + ": " + e.getMessage());
+            logger.severe("Failed to save " + file.getPath() + " (" + e.getMessage() + "). Fix: make sure the plugins/OmniArena folder is writable by the server user and the disk is not full; unsaved changes will be lost on restart.");
         }
     }
 
@@ -30,7 +30,7 @@ public final class YamlUtil {
                 if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
                 file.createNewFile();
             } catch (IOException e) {
-                logger.severe("Failed to create " + name + ": " + e.getMessage());
+                logger.severe("Failed to create " + new File(parent, name).getPath() + " (" + e.getMessage() + "). Fix: check that the folder exists and is writable by the server user, and that the disk has free space.");
             }
         }
         return file;

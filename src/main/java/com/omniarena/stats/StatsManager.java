@@ -50,13 +50,12 @@ public class StatsManager {
                     stats.setTimePlayed(cfg.getLong(path + ".time-played"));
                     statsCache.put(uuid, stats);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to load stats for " + uuidStr + ": " + e.getMessage());
+                    plugin.getLogger().warning("Skipped corrupt stats entry for player " + uuidStr + " in plugins/OmniArena/stats.yml (" + e + "). Fix: correct or remove the 'players." + uuidStr + "' section; that player's stats start from 0.");
                 }
             }
             plugin.getLogger().info("Loaded stats for " + statsCache.size() + " player(s).");
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to load stats file: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load plugins/OmniArena/stats.yml (" + e.getMessage() + "). Stats will start empty and may overwrite the file. Fix: back up the file now, fix its YAML syntax (or delete it) and restart.", e);
         }
     }
 

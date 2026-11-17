@@ -127,7 +127,7 @@ public class BettingManager {
 
         double balance = economy.getBalance(player);
         if (balance < amount) {
-            MessageUtil.send(player, "<red>You don't have enough money to bet <yellow>" + economy.format(amount) + "</yellow>. <gray>Your balance is <yellow>" + economy.format(balance) + "</yellow>; bet a smaller amount."
+            MessageUtil.send(player, "<red>You don't have enough money to bet <yellow>" + economy.format(amount) + "</yellow>. <gray>Your balance is <yellow>" + economy.format(balance) + "</yellow>; bet a smaller amount.");
             return false;
         }
 
@@ -136,12 +136,12 @@ public class BettingManager {
         double maxBet = plugin.getConfigManager().getConfig().getDouble("betting.max-bet", 10000);
 
         if (amount < minBet) {
-            MessageUtil.send(player, "<red>Your bet of <yellow>" + economy.format(amount) + "</yellow> is below the minimum of <yellow>" + economy.format(minBet) + "</yellow>. <gray>Bet at least that much (admins: <white>betting.min-bet</white> in config.yml).");
+            MessageUtil.send(player, "<red>Your bet of <yellow>" + economy.format(amount) + "</yellow> is below the minimum of <yellow>" + economy.format(minBet) + "</yellow>. <gray>Bet at least that much (admins: <white>betting.min-bet</white> in config.yml)");
             return false;
         }
 
         if (amount > maxBet) {
-            MessageUtil.send(player, "<red>Your bet of <yellow>" + economy.format(amount) + "</yellow> is above the maximum of <yellow>" + economy.format(maxBet) + "</yellow>. <gray>Bet less (admins: <white>betting.max-bet</white> in config.yml).");
+            MessageUtil.send(player, "<red>Your bet of <yellow>" + economy.format(amount) + "</yellow> is above the maximum of <yellow>" + economy.format(maxBet) + "</yellow>. <gray>Bet less (admins: <white>betting.max-bet</white> in config.yml)");
             return false;
         }
 

@@ -56,7 +56,7 @@ public class KitManager {
                 AdminKit kit = loadAdminKitFile(f);
                 adminKits.put(kit.getName().toLowerCase(), kit);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load admin kit: " + f.getName() + " (" + e + ")");
+                plugin.getLogger().warning("Failed to load admin kit file plugins/OmniArena/admin-kits/" + f.getName() + " (" + e + "). The kit was skipped. Fix: repair the YAML in that file (item/material names must be valid) or delete it and re-create the kit with /oa kit admin create <name>.");
             }
         }
     }
@@ -70,13 +70,13 @@ public class KitManager {
             // Copy directly from the plugin jar's resource stream into admin-kits/
             try (java.io.InputStream in = plugin.getResource("kits/" + name + ".yml")) {
                 if (in == null) {
-                    plugin.getLogger().warning("Default kit resource not found: kits/" + name + ".yml");
+                    plugin.getLogger().warning("Bundled default kit '" + name + "' is missing from the plugin jar (kits/" + name + ".yml), so it was not installed. Fix: re-download OmniArena.jar, or create the kit yourself with /oa kit admin create " + name + ".");
                     continue;
                 }
                 java.nio.file.Files.copy(in, target.toPath(),
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to install default kit '" + name + "': " + e.getMessage());
+                plugin.getLogger().warning("Failed to install default kit '" + name + "' into " + target.getPath() + " (" + e.getMessage() + "). Fix: check that the admin-kits folder is writable by the server user.");
             }
         }
     }
@@ -104,7 +104,7 @@ public class KitManager {
                         PlayerKit kit = loadPlayerKitSection(cfg, "kits." + name, id, name);
                         kits.add(kit);
                     } catch (Exception e) {
-                        plugin.getLogger().warning("Failed to load player kit " + name + " for " + id);
+                        plugin.getLogger().warning("Failed to load player kit '" + name + "' of player " + id + " (" + e + "). It was skipped. Fix: repair or remove the 'kits." + name + "' section in plugins/OmniArena/player-kits/" + id + ".yml.");
                     }
                 }
             }
@@ -185,7 +185,7 @@ public class KitManager {
             try {
                 java.nio.file.Files.move(oldFile.toPath(), newFile.toPath());
             } catch (java.io.IOException e) {
-                plugin.getLogger().warning("Failed to rename admin kit file: " + e.getMessage());
+                plugin.getLogger().warning("Failed to rename admin kit file " + oldFile.getName() + " to " + newFile.getName() + " (" + e + "). Fix: check that plugins/OmniArena/admin-kits is writable and the target name is not locked by another program.");
                 return RenameResult.FAILED;
             }
         }

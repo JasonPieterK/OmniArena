@@ -294,10 +294,10 @@ public final class OmniArena extends JavaPlugin {
                     }));
             }
         } catch (Exception e) {
-            getLogger().severe("Error ending matches on disable: " + e.getMessage());
+            getLogger().severe("Error ending matches on disable (" + e + "). Players may keep match items/positions; they are restored from plugins/OmniArena/player-state on next join.");
         }
 
-        try { if (matchManager != null) matchManager.shutdownStateStore(); } catch (Exception e) { getLogger().warning("Player state flush failed: " + e.getMessage()); }
+        try { if (matchManager != null) matchManager.shutdownStateStore(); } catch (Exception e) { getLogger().warning("Player state flush failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
 
         // Finalize running regens/snapshots so no preview blocks are left in the world
         try { if (blockRestoreModule != null) blockRestoreModule.cancelAll(); } catch (Exception e) { getLogger().warning("Regen shutdown failed: " + e.getMessage()); }
@@ -307,11 +307,11 @@ public final class OmniArena extends JavaPlugin {
         try { if (partyManager != null) partyManager.stop(); } catch (Exception e) { getLogger().warning("Party stop failed: " + e.getMessage()); }
 
         // Save all data (each guarded so one failure does not skip the rest)
-        try { if (tournamentManager != null) tournamentManager.stop(); } catch (Exception e) { getLogger().severe("Tournament save failed: " + e.getMessage()); }
-        try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed: " + e.getMessage()); }
-        try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed: " + e.getMessage()); }
-        try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed: " + e.getMessage()); }
-        try { if (eloManager != null) { eloManager.shutdown(); eloManager.saveAll(); } } catch (Exception e) { getLogger().severe("Elo save failed: " + e.getMessage()); }
+        try { if (tournamentManager != null) tournamentManager.stop(); } catch (Exception e) { getLogger().severe("Tournament save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (eloManager != null) { eloManager.shutdown(); eloManager.saveAll(); } } catch (Exception e) { getLogger().severe("Elo save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
 
         // Shutdown visual systems
         try { if (visual != null) visual.shutdown(); } catch (Exception e) { getLogger().warning("Visual shutdown failed: " + e.getMessage()); }

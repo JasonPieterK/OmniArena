@@ -219,7 +219,7 @@ public class MatchManager {
 
         // Joining an arena manually cancels any queue entry
         var qm = com.omniarena.queue.QueueManager.getInstance();
-        if (qm != null) qm.removeOnQuit(player.getUniqueId());
+        if (qm != null) qm.forceRemove(player.getUniqueId(), player.getName() + " entered an arena");
 
         saveState(player);
         player.getInventory().clear();

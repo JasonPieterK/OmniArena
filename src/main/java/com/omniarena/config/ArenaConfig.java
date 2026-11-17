@@ -38,7 +38,7 @@ public class ArenaConfig {
                 Arena arena = load(file);
                 if (arena != null) arenas.add(arena);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load arena from " + file.getName() + ": " + e.getMessage());
+                plugin.getLogger().warning("Failed to load arena file plugins/OmniArena/arenas/" + file.getName() + " (" + e + "). The arena was skipped. Fix: open that file and correct the YAML (indentation, quotes, valid world/enum names) or delete it, then run /oa reload; recreate with /oa create <name> if needed.");
             }
         }
         return arenas;

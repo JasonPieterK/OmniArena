@@ -396,15 +396,21 @@ Tabs: **Dashboard** (live stats and arena cards), **Live Matches** (polled every
 setting with controls and search), **Docs** (bundled markdown). Edits are drafted in the browser
 and applied with the Apply button.
 
-Endpoints (all but the static shell require `?token=`): `GET /` (page), `/styles.css`, `/app.js`
-(public); `GET /api/state` (snapshot of settings and arenas), `POST /api/apply` (validated
+Endpoints (all `/api/*` calls need the session token, sent as `Authorization: Bearer <token>`, or
+`X-OmniArena-Token`, or the legacy `?token=` query parameter): `GET /` (page), `/styles.css`,
+`/app.js` (public); `POST /api/logout` (revokes the session); `GET /api/state` (snapshot of settings and arenas), `POST /api/apply` (validated
 changes), `POST /api/create-arena`, `POST /api/delete-arena`, `GET /api/docs`,
 `GET /api/live-matches`, `GET /api/players?search=`.
 
 Behaviour and limits:
-- Sessions: random 24-byte tokens; fixed lifetime `web.session-minutes` (default 30, minimum 1);
+- Sessions: random 24-byte tokens; sliding lifetime `web.session-minutes` (default 30, minimum 1; each request renews it);
+  tokens are compared in constant time; the page removes the token from the address bar and keeps it
+  in `sessionStorage`; the Log out button revokes it; `/oa stop` revokes all sessions;
   at most `web.max-sessions` at once (default 1, `0` = unlimited). `/oa override killweb` revokes all.
-- `POST` bodies are limited to 1 MiB.
+- `POST` bodies are limited to 1 MiB. Wrong methods get `405`; errors are JSON `{"ok":false,"error":"..."}`.
+- Same-origin only: no CORS headers are sent; responses carry `Cache-Control: no-store`, a CSP,
+  `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
+- If the port is taken the console says so; change `web.port` and run `/oa restart`.
 - `/api/apply` validates everything first (types, ranges, known keys, enums, min <= max players,
   region and rule fields) and applies nothing if any value is invalid, then writes all config keys
   in one save per file. Arena names must match `[A-Za-z0-9_-]{1,32}`.
@@ -414,11 +420,12 @@ Behaviour and limits:
   on `/oa start`.
 - Remote use: see README, "Web dashboard": bind to `127.0.0.1` behind an HTTPS reverse proxy and set
   `web.public-url`.
-- The page loads Phosphor icons from unpkg without a Subresource Integrity attribute. To generate
+- The page loads Phosphor icons from unpkg without a Subresource Integrity attribute (if unpkg is
+  unreachable the icons are hidden and all buttons keep their text labels). To generate
   one: `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`
   and add `integrity="sha384-<output>"` to the `<link>` in `web/index.html`.
-- The Docs tab serves `src/main/resources/web/docs.md`, which is a separate copy from this file and
-  can drift; keep them in sync when editing.
+- The Docs tab serves `src/main/resources/web/docs.md`, which is a copy of this file; after editing
+  DOCS.md run `cp DOCS.md src/main/resources/web/docs.md`.
 
 ### Settings GUI
 

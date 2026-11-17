@@ -25,7 +25,7 @@ public class IntegrationManager {
         if (enabled("vault") && isPresent("Vault")) {
             vault = new VaultIntegration(plugin);
             if (vault.setup()) plugin.getLogger().info("[Integrations] Vault hooked.");
-            else { vault = null; plugin.getLogger().warning("[Integrations] Vault found but economy provider missing."); }
+            else { vault = null; plugin.getLogger().warning("[Integrations] Vault is installed but no economy provider is registered, so betting/rewards are disabled. Fix: install an economy plugin that supports Vault (e.g. EssentialsX) and restart."); }
         }
 
         if (enabled("placeholderapi") && isPresent("PlaceholderAPI")) {

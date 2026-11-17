@@ -135,7 +135,7 @@ public class SignManager {
                 if (l.getWorld() != null) out.add(l.getWorld().getName() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ());
             cfg.set("locations", out);
             cfg.save(glowFile());
-        } catch (Exception e) { plugin.getLogger().warning("Failed to save sign glowstone: " + e.getMessage()); }
+        } catch (Exception e) { plugin.getLogger().warning("Failed to save sign glow data (" + e + "). Sign highlights may be lost on restart. Fix: check that plugins/OmniArena is writable and the disk is not full."); }
     }
 
     private void loadGlow() {

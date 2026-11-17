@@ -37,7 +37,7 @@ public class SettingsCommand extends SubCommand {
             tmpSettings = new ArrayList<>(tmpSchema.settings());
             tmpSettings.forEach(setting -> byKey.put(setting.key().toLowerCase(Locale.ROOT), setting));
         } catch (Exception e) {
-            com.omniarena.OmniArena.getInstance().getLogger().severe("Failed to initialize SettingsCommand: " + e.getMessage());
+            com.omniarena.OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "Failed to initialize /oa settings (" + e + "): the settings schema could not be built, so /oa settings will show no keys. Fix: check config.yml for YAML errors and run /oa reload.", e);
         }
         this.schema = tmpSchema;
         this.settings = tmpSettings;

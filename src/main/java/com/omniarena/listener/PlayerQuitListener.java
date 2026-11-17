@@ -23,7 +23,7 @@ public class PlayerQuitListener implements Listener {
             plugin.getVisual().getScoreboardManager().removeBoard(player);
         }
         com.omniarena.queue.QueueManager qm = com.omniarena.queue.QueueManager.getInstance();
-        if (qm != null) qm.removeOnQuit(player.getUniqueId());
+        if (qm != null) qm.forceRemove(player.getUniqueId(), player.getName() + " disconnected");
         com.omniarena.party.PartyManager pm = com.omniarena.party.PartyManager.getInstance();
         if (pm != null) pm.handleQuit(player);
         com.omniarena.kit.KitManager km = com.omniarena.kit.KitManager.getInstance();

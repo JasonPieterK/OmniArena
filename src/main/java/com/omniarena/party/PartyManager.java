@@ -81,13 +81,14 @@ public class PartyManager {
         // Notify all members
         for (UUID member : party.getMembers()) {
             Player p = Bukkit.getPlayer(member);
-            if (p != null && p.isOnline()) {
+            if (p != null && p.isOnline() && !member.equals(leader.getUniqueId())) {
                 MessageUtil.send(p, "<red>Your party has been disbanded.");
             }
             playerToParty.remove(member);
         }
 
         parties.remove(leader.getUniqueId());
+        pendingInvites.values().removeIf(inv -> party.isMember(inv.getLeaderUuid()));
         MessageUtil.send(leader, "<green>Party disbanded.");
         return true;
     }
@@ -108,12 +109,14 @@ public class PartyManager {
         }
 
         if (isInParty(target)) {
-            MessageUtil.send(leader, "<red>That player is already in a party.");
+            MessageUtil.send(leader, party.isMember(target.getUniqueId())
+                    ? "<red>That player is already in your party."
+                    : "<red>That player is already in a party.");
             return false;
         }
 
         if (party.isFull()) {
-            MessageUtil.send(leader, "<red>Your party is full.");
+            MessageUtil.send(leader, "<red>Your party is full <gray>(max " + Party.MAX_MEMBERS + " players).");
             return false;
         }
 
@@ -140,28 +143,49 @@ public class PartyManager {
      */
     public boolean acceptInvite(Player player) {
         PartyInvite invite = pendingInvites.get(player.getUniqueId());
-        if (invite == null || invite.isExpired()) {
+        if (invite == null) {
             MessageUtil.send(player, "<red>You have no pending party invites.");
+            return false;
+        }
+        if (invite.isExpired()) {
+            pendingInvites.remove(player.getUniqueId());
+            MessageUtil.send(player, "<red>That party invite has expired. <gray>Ask for a new one.");
             return false;
         }
         if (isInParty(player)) {
             pendingInvites.remove(player.getUniqueId());
-            MessageUtil.send(player, "<red>You are already in a party.");
+            MessageUtil.send(player, "<red>You are already in a party. <gray>Use <yellow>/party leave</yellow> first.");
+            return false;
+        }
+        if (plugin.getMatchManager().isInArena(player)) {
+            MessageUtil.send(player, "<red>You cannot join a party while in an arena.");
             return false;
         }
 
-        Player leader = Bukkit.getPlayer(invite.getLeaderUuid());
+        // The inviter may have transferred leadership since: resolve the party they are in now
+        UUID leaderId = playerToParty.get(invite.getLeaderUuid());
+        Party party = leaderId != null ? parties.get(leaderId) : null;
+        Player leader = party != null ? Bukkit.getPlayer(party.getLeaderUuid()) : null;
+        if (party == null) {
+            MessageUtil.send(player, "<red>That party no longer exists.");
+            pendingInvites.remove(player.getUniqueId());
+            return false;
+        }
         if (leader == null || !leader.isOnline()) {
             MessageUtil.send(player, "<red>The party leader is no longer online.");
             pendingInvites.remove(player.getUniqueId());
             return false;
         }
-
-        Party party = parties.get(leader.getUniqueId());
-        if (party == null || party.isFull()) {
-            MessageUtil.send(player, "<red>The party is no longer available.");
+        if (party.isFull()) {
+            MessageUtil.send(player, "<red>That party is full.");
             pendingInvites.remove(player.getUniqueId());
             return false;
+        }
+
+        // A solo queue entry would conflict with party membership: drop it
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null && qm.forceRemove(player.getUniqueId(), player.getName() + " joined the party")) {
+            MessageUtil.send(player, "<yellow>You were removed from the queue to join the party.");
         }
 
         dequeueParty(party, player.getName() + " joined the party");
@@ -172,7 +196,7 @@ public class PartyManager {
         pendingInvites.remove(player.getUniqueId());
 
         // Notify party
-        MessageUtil.send(player, "<green>You joined <yellow>" + leader.getName() + "'s</yellow> party.");
+        MessageUtil.send(player, "<green>You joined <yellow>" + party.getLeaderName() + "'s</yellow> party.");
         for (UUID member : party.getMembers()) {
             Player p = Bukkit.getPlayer(member);
             if (p != null && p.isOnline() && !p.equals(player)) {
@@ -250,6 +274,10 @@ public class PartyManager {
             return false;
         }
 
+        if (leader.getUniqueId().equals(target.getUniqueId())) {
+            MessageUtil.send(leader, "<red>You cannot kick yourself. <gray>Use <yellow>/party disband</yellow> or <yellow>/party leave</yellow>.");
+            return false;
+        }
         if (!party.isMember(target.getUniqueId())) {
             MessageUtil.send(leader, "<red>That player is not in your party.");
             return false;
@@ -281,10 +309,17 @@ public class PartyManager {
             return false;
         }
 
+        if (currentLeader.getUniqueId().equals(newLeader.getUniqueId())) {
+            MessageUtil.send(currentLeader, "<red>You are already the party leader.");
+            return false;
+        }
         if (!party.isMember(newLeader.getUniqueId())) {
             MessageUtil.send(currentLeader, "<red>That player is not in your party.");
             return false;
         }
+
+        // A queued party unit is ordered leader-first: drop it so it is re-queued under the new leader
+        dequeueParty(party, "party leadership changed");
 
         UUID oldLeader = party.getLeaderUuid();
         party.setLeader(newLeader.getUniqueId(), newLeader.getName());
@@ -380,7 +415,7 @@ public class PartyManager {
         private String leaderName;
         private final Set<UUID> members = new LinkedHashSet<>();
         private String kitName;
-        private static final int MAX_MEMBERS = 10;
+        static final int MAX_MEMBERS = 10;
 
         public Party(UUID leaderUuid, String leaderName) {
             this.leaderUuid = leaderUuid;
