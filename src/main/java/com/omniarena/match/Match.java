@@ -31,6 +31,7 @@ public class Match {
     private final Map<UUID, String>     selectedKit  = new HashMap<>();
     private final Map<UUID, Long>       spawnProtection = new HashMap<>(); // expiry millis
     private final Map<UUID, MatchTeam>  teamMap     = new HashMap<>();
+    private final Map<UUID, BukkitTask> spawnProtectionTasks = new HashMap<>();
 
     // Teams
     private final List<MatchTeam> teams = new ArrayList<>();
@@ -110,6 +111,8 @@ public class Match {
         joinedAt.remove(uuid);
         spawnProtection.remove(uuid);
         teamMap.remove(uuid);
+        BukkitTask spTask = spawnProtectionTasks.remove(uuid);
+        if (spTask != null) spTask.cancel();
         lives.remove(uuid);
         lastKilledBy.remove(uuid);
         lastKilledBy.values().removeIf(uuid::equals);
@@ -159,6 +162,16 @@ public class Match {
     }
 
     public Map<UUID, Long> getSpawnProtection() { return spawnProtection; }
+
+    /** Tracks the spawn-protection expiry task so it can be cancelled when the player leaves. */
+    public void setSpawnProtectionTask(UUID uuid, BukkitTask task) {
+        BukkitTask old = spawnProtectionTasks.put(uuid, task);
+        if (old != null) old.cancel();
+    }
+
+    public void clearSpawnProtectionTask(UUID uuid) {
+        spawnProtectionTasks.remove(uuid);
+    }
 
     public void setSpawnProtection(UUID uuid, int seconds) {
         spawnProtection.put(uuid, System.currentTimeMillis() + (seconds * 1000L));
@@ -222,6 +235,8 @@ public class Match {
     }
 
     public void cancelTasks() {
+        spawnProtectionTasks.values().forEach(BukkitTask::cancel);
+        spawnProtectionTasks.clear();
         if (countdownTask != null) {
             countdownTask.cancel();
             countdownTask = null;

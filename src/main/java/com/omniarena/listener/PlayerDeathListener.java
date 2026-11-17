@@ -17,6 +17,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public class PlayerDeathListener implements Listener {
 
@@ -45,7 +46,20 @@ public class PlayerDeathListener implements Listener {
 
         Arena arena = arenaOpt.get();
         Optional<Match> matchOpt = mm.getMatch(arena);
-        if (matchOpt.isEmpty() || matchOpt.get().getState() != MatchState.RUNNING) return;
+        if (matchOpt.isEmpty()) return;
+        MatchState st = matchOpt.get().getState();
+
+        // Death while the match is winding down: no drops/keep inventory, respawn at arena lobby
+        if (st == MatchState.ENDING || st == MatchState.RESETTING) {
+            event.setDeathMessage(null);
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            event.setKeepInventory(true);
+            event.setKeepLevel(true);
+            scheduleEndingRespawn(victim.getUniqueId(), arena);
+            return;
+        }
+        if (st != MatchState.RUNNING) return;
 
         Match match = matchOpt.get();
 
@@ -127,10 +141,22 @@ public class PlayerDeathListener implements Listener {
         }
     }
 
-    /** One-life modes: drop the player into spectator instead of respawning. */
-    private void eliminate(Player victim, Match match) {
+    private void scheduleEndingRespawn(UUID uuid, Arena arena) {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!victim.isOnline()) return;
+            Player p = Bukkit.getPlayer(uuid);
+            if (p == null || !p.isOnline()) return;
+            if (p.isDead()) p.spigot().respawn();
+            var spot = arena.getLobbySpawn();
+            if (spot != null) p.teleport(spot);
+        }, 1L);
+    }
+
+    /** One-life modes: drop the player into spectator instead of respawning. */
+    private void eliminate(Player victimPlayer, Match match) {
+        final UUID victimId = victimPlayer.getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player victim = Bukkit.getPlayer(victimId);
+            if (victim == null || !victim.isOnline()) return;
             victim.spigot().respawn();
             victim.setGameMode(org.bukkit.GameMode.SPECTATOR);
             int left = match.getAlivePlayers().size();
@@ -140,7 +166,8 @@ public class PlayerDeathListener implements Listener {
         }, 2L);
     }
 
-    private void scheduleRespawn(Player victim, Match match, Arena arena) {
+    private void scheduleRespawn(Player victimPlayer, Match match, Arena arena) {
+        final UUID victimId = victimPlayer.getUniqueId();
         int delay = switch (arena.getRespawnType()) {
             case INSTANT  -> 1;
             case DELAYED  -> arena.getRespawnDelay() * 20;
@@ -148,7 +175,8 @@ public class PlayerDeathListener implements Listener {
         };
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!victim.isOnline() || !MatchManager.getInstance().isInArena(victim)) return;
+            Player victim = Bukkit.getPlayer(victimId);
+            if (victim == null || !victim.isOnline() || !MatchManager.getInstance().isInArena(victim)) return;
             if (match.getState() != MatchState.RUNNING) return;
 
             victim.spigot().respawn();
@@ -157,7 +185,7 @@ public class PlayerDeathListener implements Listener {
             // Teleport to spawn + re-equip this game type's loadout
             var spawn = arena.getRandomBattleSpawn();
             if (spawn != null) victim.teleport(spawn);
-            arena.getGameMode().applyLoadout(victim);
+            MatchManager.getInstance().applyLoadout(victim, match);
 
             // Spawn protection
             if (arena.getSpawnProtection() > 0) {
@@ -166,11 +194,14 @@ public class PlayerDeathListener implements Listener {
                 plugin.getVisual().getSoundManager().playSpawnProtection(victim);
 
                 // Remove protection after duration
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    match.getSpawnProtection().remove(victim.getUniqueId());
-                    plugin.getVisual().getEffectManager().removeSpawnProtectionEffect(victim);
-                    plugin.getVisual().getActionBarManager().sendSpawnProtectionExpired(victim);
-                }, (long) arena.getSpawnProtection() * 20);
+                match.setSpawnProtectionTask(victimId, Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    match.clearSpawnProtectionTask(victimId);
+                    match.getSpawnProtection().remove(victimId);
+                    Player p = Bukkit.getPlayer(victimId);
+                    if (p == null || !p.isOnline()) return;
+                    plugin.getVisual().getEffectManager().removeSpawnProtectionEffect(p);
+                    plugin.getVisual().getActionBarManager().sendSpawnProtectionExpired(p);
+                }, (long) arena.getSpawnProtection() * 20));
             }
 
             plugin.getVisual().getEffectManager().playSpawnEffect(victim);
