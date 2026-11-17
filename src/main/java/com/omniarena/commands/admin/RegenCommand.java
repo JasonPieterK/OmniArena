@@ -1,5 +1,7 @@
 package com.omniarena.commands.admin;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -182,20 +184,21 @@ public class RegenCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
             List<String> options = new java.util.ArrayList<>(List.of("help", "snapshot", "style", "batch", "settings", "progress", "particles", "sound"));
-            options.addAll(ArenaManager.getInstance().getAll().stream().map(Arena::getName).toList());
-            return options.stream().filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase())).toList();
+            options.addAll(TabUtil.arenas(""));
+            return TabUtil.filter(options, cur);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("snapshot")) {
-            return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("style")) {
-            return Arrays.stream(RegenAnimationType.values()).map(Enum::name)
-                    .filter(n -> n.startsWith(args[1].toUpperCase())).toList();
-        }
-        if (args.length == 2 && List.of("progress", "particles", "sound").contains(args[0].toLowerCase())) {
-            return List.of("true", "false").stream().filter(n -> n.startsWith(args[1].toLowerCase())).toList();
+        String a = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2) {
+            return switch (a) {
+                case "snapshot" -> TabUtil.arenas(cur);
+                case "style" -> TabUtil.enums(RegenAnimationType.class, cur);
+                case "batch" -> TabUtil.hint("<amount>", cur);
+                case "progress", "particles", "sound" -> TabUtil.bools(cur);
+                default -> List.of();
+            };
         }
         return List.of();
     }

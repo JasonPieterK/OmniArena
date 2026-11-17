@@ -210,23 +210,28 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) return List.of();
+        return tabComplete(sender, args);
+    }
 
+    /** Shared by /kit and /oa kit (player side). */
+    public List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!(sender instanceof Player)) return List.of();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            return List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview")
-                    .stream().filter(s -> s.startsWith(args[0])).toList();
+            return TabUtil.filter(List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview"), cur);
         }
-        if (args.length == 2 && "help".startsWith(args[1].toLowerCase())) return List.of("help");
+        String sub = args[0].toLowerCase(java.util.Locale.ROOT);
         if (args.length == 2) {
-            String sub = args[0].toLowerCase();
-            if (List.of("delete", "equip", "share", "rename", "preview").contains(sub)) {
-                return KitManager.getInstance().getPlayerKits(player.getUniqueId())
-                        .stream().map(PlayerKit::getName).filter(n -> n.startsWith(args[1])).toList();
-            }
+            return switch (sub) {
+                case "create" -> TabUtil.hint("<name>", cur);
+                case "delete", "equip", "share", "rename", "preview" -> TabUtil.playerKits(sender, cur);
+                case "accept" -> TabUtil.hint("<kit>", cur);
+                default -> List.of();
+            };
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("share")) {
-            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
-                    .filter(n -> n.startsWith(args[2])).toList();
+        if (args.length == 3) {
+            if (sub.equals("share")) return TabUtil.players(sender, cur);
+            if (sub.equals("rename")) return TabUtil.hint("<new-name>", cur);
         }
         return List.of();
     }

@@ -1,5 +1,6 @@
 package com.omniarena.commands.player;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -117,18 +118,16 @@ public class StatsCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        boolean admin = PermissionChecker.hasAdminStats(sender);
         if (args.length == 1) {
-            List<String> names = Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(n -> n.startsWith(args[0])).toList();
-            List<String> opts = new java.util.ArrayList<>(names);
+            List<String> opts = new java.util.ArrayList<>(TabUtil.players(sender, ""));
             opts.add("global");
-            if (PermissionChecker.hasAdminStats(sender)) {
-                opts.add("reset");
-            }
-            return opts.stream().filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase())).toList();
+            if (admin) opts.add("reset");
+            return TabUtil.filter(opts, cur);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("global")) {
-            return List.of("kills", "wins", "kd").stream().filter(n -> n.startsWith(args[1].toLowerCase())).toList();
-        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("global")) return TabUtil.filter(List.of("kills", "wins", "kd"), cur);
+        if (args.length == 2 && args[0].equalsIgnoreCase("reset") && admin) return TabUtil.players(sender, cur);
         return List.of();
     }
 }

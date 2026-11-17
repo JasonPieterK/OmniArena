@@ -1,5 +1,6 @@
 package com.omniarena.combat;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.util.MessageUtil;
 import org.bukkit.Bukkit;
@@ -7,6 +8,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -164,6 +167,41 @@ public class PvpCommandHandler {
         if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
         boolean now = cm().toggleOverride(p);
         MessageUtil.send(p, "<green>Attack override: " + onOff(now) + " <gray>(you can " + (now ? "now" : "no longer") + " attack anywhere).");
+    }
+
+    // ── tab completion ─────────────────────────────────────────────────────────
+    /** True when the sender may use the admin variants of the PvP commands. */
+    public boolean isAdminSender(CommandSender sender) {
+        return sender.hasPermission(ADMIN) || sender.isOp();
+    }
+
+    public List<String> tabComplete(String name, CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        boolean admin = isAdminSender(sender);
+        switch (name) {
+            case "pvp", "pvpstatus", "pvpinfo", "untag" -> {
+                if (args.length == 1 && admin) return TabUtil.players(sender, cur);
+            }
+            case "pvptag" -> {
+                if (!admin) return List.of();
+                if (args.length == 1) return TabUtil.players(sender, cur);
+                if (args.length == 2) return TabUtil.hint("<seconds>", cur);
+            }
+            case "pvpglobal" -> {
+                if (admin && args.length == 1) return TabUtil.filter(List.of("on", "off"), cur);
+            }
+            case "newbie" -> {
+                if (args.length == 1) {
+                    return TabUtil.filter(admin ? List.of("add", "remove", "checktime", "disable") : List.of("disable"), cur);
+                }
+                if (!admin) return List.of();
+                String sub = args[0].toLowerCase(Locale.ROOT);
+                if (args.length == 2 && List.of("add", "remove", "checktime").contains(sub)) return TabUtil.players(sender, cur);
+                if (args.length == 3 && sub.equals("add")) return TabUtil.hint("<seconds>", cur);
+            }
+            default -> { }
+        }
+        return List.of();
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

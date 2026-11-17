@@ -124,17 +124,34 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (!(sender instanceof Player player)) return List.of();
         if (args.length == 1) {
-            return Arrays.asList("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info")
-                    .stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .collect(Collectors.toList());
+            return com.omniarena.commands.TabUtil.filter(
+                    List.of("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info"), cur);
         }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("invite") || args[0].equalsIgnoreCase("kick") || args[0].equalsIgnoreCase("leader"))) {
-            return plugin.getServer().getOnlinePlayers().stream()
-                    .map(Player::getName)
-                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
-                    .collect(Collectors.toList());
+        if (args.length == 2) {
+            String a = args[0].toLowerCase(java.util.Locale.ROOT);
+            PartyManager.Party party = partyManager.getParty(player);
+            if (a.equals("invite")) {
+                java.util.Set<java.util.UUID> inParty = party != null ? party.getMembers() : java.util.Set.of();
+                List<String> names = new java.util.ArrayList<>();
+                for (Player p : plugin.getServer().getOnlinePlayers()) {
+                    if (p.equals(player) || inParty.contains(p.getUniqueId()) || !player.canSee(p)) continue;
+                    names.add(p.getName());
+                }
+                return com.omniarena.commands.TabUtil.filter(names, cur);
+            }
+            if (a.equals("kick") || a.equals("leader")) {
+                if (party == null) return List.of();
+                List<String> names = new java.util.ArrayList<>();
+                for (java.util.UUID id : party.getMembers()) {
+                    if (id.equals(player.getUniqueId())) continue;
+                    String n = org.bukkit.Bukkit.getOfflinePlayer(id).getName();
+                    if (n != null) names.add(n);
+                }
+                return com.omniarena.commands.TabUtil.filter(names, cur);
+            }
         }
         return List.of();
     }

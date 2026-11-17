@@ -1,5 +1,7 @@
 package com.omniarena.commands.player;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.commands.SubCommand;
@@ -129,19 +131,27 @@ public class TournamentCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        String last = args.length == 0 ? "" : args[args.length - 1].toLowerCase();
-        if (args.length == 1)
-            return List.of("create", "join", "leave", "start", "status", "list", "delete", "setprize").stream()
-                    .filter(s -> s.startsWith(last)).toList();
-        String a = args[0].toLowerCase();
-        if (args.length == 2 && List.of("join", "leave", "start", "status", "info", "delete", "cancel", "setprize").contains(a))
-            return plugin.getTournamentManager().getAll().stream().map(Tournament::getName)
-                    .filter(n -> n.toLowerCase().startsWith(last)).toList();
-        if (args.length == 3 && a.equals("create"))
-            return plugin.getArenaManager().getAll().stream().map(Arena::getName)
-                    .filter(n -> n.toLowerCase().startsWith(last)).toList();
-        if (args.length == 3 && a.equals("setprize"))
-            return List.of("1st", "2nd", "3rd").stream().filter(s -> s.startsWith(last)).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        boolean admin = isAdmin(sender);
+        if (args.length == 1) {
+            List<String> opts = new java.util.ArrayList<>(List.of("join", "leave", "start", "status", "list", "info"));
+            if (admin || sender.hasPermission(PERM_CREATE)) opts.add("create");
+            if (admin) opts.addAll(List.of("delete", "cancel", "setprize"));
+            return TabUtil.filter(opts, cur);
+        }
+        String a = args[0].toLowerCase(java.util.Locale.ROOT);
+        if (args.length == 2) {
+            if (a.equals("create")) return TabUtil.hint("<name>", cur);
+            if (List.of("join", "leave", "start", "status", "info", "delete", "cancel", "setprize").contains(a)) return TabUtil.tournaments(cur);
+        }
+        if (args.length == 3) {
+            if (a.equals("create")) return TabUtil.arenas(cur);
+            if (a.equals("setprize")) return TabUtil.filter(List.of("1st", "2nd", "3rd"), cur);
+        }
+        if (args.length == 4) {
+            if (a.equals("create")) return TabUtil.hint("<maxPlayers>", cur);
+            if (a.equals("setprize")) return TabUtil.hint("<amount>", cur);
+        }
         return List.of();
     }
 }

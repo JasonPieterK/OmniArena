@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -291,31 +292,51 @@ public class ConfigCommand extends SubCommand {
                 + Arrays.stream(type.getEnumConstants()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")));
     }
 
+
+    private static final List<String> ARENA_KEYS = List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
+            "goal-type", "goal-value", "respawn-type", "respawn-delay", "spawn-protection", "chat-mode",
+            "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
+            "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
+            "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+            "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z");
+    private static final java.util.Set<String> ARENA_BOOLEAN_KEYS = java.util.Set.of("enabled", "announcements", "mid-match-join",
+            "spectator-allowed", "whitelist-enabled", "team-enabled", "fall-damage", "fire-damage", "drowning", "suffocation",
+            "friendly-fire", "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms");
+
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set", "get");
-        if (args.length == 2 && args[0].equalsIgnoreCase("get")) {
-            return schema.settings().stream().map(SettingDefinition::key).filter(s -> s.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set", "get"), cur);
+        String a = args[0].toLowerCase(Locale.ROOT);
+        if (!a.equals("set") && !a.equals("get")) return List.of();
+        boolean arenaScoped = args.length >= 2 && ArenaManager.getInstance().get(args[1]).isPresent();
+        if (args.length == 2) {
+            List<String> opts = new java.util.ArrayList<>(TabUtil.arenas(""));
+            schema.settings().forEach(d -> opts.add(d.key()));
+            return TabUtil.filter(opts, cur);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            Optional<Arena> arena = ArenaManager.getInstance().get(args[1]);
-            if (arena.isPresent()) {
-                return List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
-                        "goal-type", "goal-value", "respawn-type", "respawn-delay", "spawn-protection", "chat-mode",
-                        "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
-                        "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
-                        "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
-                        "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
-                        "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z")
-                        .stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        if (args.length == 3) {
+            if (arenaScoped) return TabUtil.filter(ARENA_KEYS, cur);
+            if (a.equals("set")) {
+                SettingDefinition def = schema.settings().stream()
+                        .filter(s -> s.key().equalsIgnoreCase(args[1])).findFirst().orElse(null);
+                return TabUtil.settingValue(def, cur);
             }
-            SettingDefinition def = schema.settings().stream()
-                    .filter(setting -> setting.key().equalsIgnoreCase(args[1]))
-                    .findFirst()
-                    .orElse(null);
-            if (def != null && def.type() == SettingDefinition.SettingType.BOOLEAN) {
-                return List.of("true", "false").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
-            }
+            return List.of();
+        }
+        if (args.length == 4 && a.equals("set") && arenaScoped) {
+            String key = args[2].toLowerCase(Locale.ROOT);
+            if (ARENA_BOOLEAN_KEYS.contains(key)) return TabUtil.bools(cur);
+            return switch (key) {
+                case "game-mode", "gamemode" -> TabUtil.enums(GameModeType.class, cur);
+                case "goal-type" -> TabUtil.enums(GoalType.class, cur);
+                case "respawn-type" -> TabUtil.enums(RespawnType.class, cur);
+                case "chat-mode" -> TabUtil.enums(ChatMode.class, cur);
+                case "region-world" -> TabUtil.worlds(cur);
+                default -> ARENA_KEYS.contains(key) ? TabUtil.hint("<number>", cur) : List.of();
+            };
         }
         return List.of();
     }

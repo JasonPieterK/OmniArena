@@ -1,5 +1,6 @@
 package com.omniarena.commands.player;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -131,9 +132,7 @@ public class HelpCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) {
-            return guides.keySet().stream().filter(n -> n.startsWith(normalize(args[0]))).toList();
-        }
+        if (args.length == 1) return TabUtil.filter(new java.util.ArrayList<>(guides.keySet()), normalize(args[0]));
         return List.of();
     }
 }

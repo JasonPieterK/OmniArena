@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.arena.regen.RegenAnimationType;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -188,20 +189,11 @@ public class SettingsCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set", "help").stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
-        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-            return settings.stream().map(SettingDefinition::key).filter(s -> s.startsWith(args[1])).toList();
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            SettingDefinition entry = byKey.get(args[1].toLowerCase(Locale.ROOT));
-            if (entry == null) return List.of();
-            if (entry.type() == SettingDefinition.SettingType.BOOLEAN) {
-                return List.of("true", "false").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
-            }
-            if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
-                return Arrays.stream(RegenAnimationType.values()).map(Enum::name)
-                        .filter(s -> s.startsWith(args[2].toUpperCase(Locale.ROOT))).toList();
-            }
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set", "help"), cur);
+        if (args.length >= 2 && args[0].equalsIgnoreCase("set")) {
+            if (args.length == 2) return TabUtil.filter(settings.stream().map(SettingDefinition::key).toList(), cur);
+            if (args.length == 3) return TabUtil.settingValue(byKey.get(args[1].toLowerCase(Locale.ROOT)), cur);
         }
         return List.of();
     }

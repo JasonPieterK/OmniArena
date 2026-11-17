@@ -1,5 +1,7 @@
 package com.omniarena.commands.player;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.betting.BettingManager;
@@ -127,16 +129,12 @@ public class BetCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("place", "cancel", "info").stream()
-                .filter(s -> s.startsWith(args[0].toLowerCase())).toList();
-        if (args.length == 2 && (args[0].equalsIgnoreCase("place") || args[0].equalsIgnoreCase("info")))
-            return plugin.getArenaManager().getAll().stream()
-                    .map(Arena::getName)
-                    .filter(n -> n.toLowerCase().startsWith(args[1].toLowerCase())).toList();
-        if (args.length == 3 && args[0].equalsIgnoreCase("place"))
-            return Bukkit.getOnlinePlayers().stream()
-                    .map(Player::getName)
-                    .filter(n -> n.toLowerCase().startsWith(args[2].toLowerCase())).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("place", "cancel", "info"), cur);
+        String a = args[0].toLowerCase(java.util.Locale.ROOT);
+        if (args.length == 2 && List.of("place", "cancel", "info").contains(a)) return TabUtil.arenas(cur);
+        if (args.length == 3 && a.equals("place")) return TabUtil.players(sender, cur);
+        if (args.length == 4 && a.equals("place")) return TabUtil.hint("<amount>", cur);
         return List.of();
     }
 }

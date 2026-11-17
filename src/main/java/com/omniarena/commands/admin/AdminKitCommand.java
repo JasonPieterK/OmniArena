@@ -1,5 +1,7 @@
 package com.omniarena.commands.admin;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -152,9 +154,28 @@ public class AdminKitCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("create", "delete", "equip", "setpublic", "setprivate", "icon", "description", "cooldown", "permission", "rename", "list");
-        if (args.length == 2 && !args[0].equalsIgnoreCase("list"))
-            return KitManager.getInstance().getAllAdminKits().stream().map(AdminKit::getName).filter(n -> n.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("create", "delete", "equip", "setpublic", "setprivate", "icon", "description", "cooldown", "permission", "rename", "list"), cur);
+        String a = args[0].toLowerCase(java.util.Locale.ROOT);
+        if (args.length == 2) {
+            if (a.equals("create")) return TabUtil.hint("<name>", cur);
+            if (a.equals("list")) return List.of();
+            return TabUtil.adminKits(cur);
+        }
+        if (args.length == 3) {
+            return switch (a) {
+                case "icon" -> TabUtil.materials(cur);
+                case "description" -> TabUtil.hint("<text>", cur);
+                case "cooldown" -> TabUtil.hint("<seconds>", cur);
+                case "permission" -> {
+                    List<String> r = new java.util.ArrayList<>(TabUtil.filter(List.of("none"), cur));
+                    r.addAll(TabUtil.hint("<node>", cur));
+                    yield r;
+                }
+                case "rename" -> TabUtil.hint("<new-name>", cur);
+                default -> List.of();
+            };
+        }
         return List.of();
     }
 }

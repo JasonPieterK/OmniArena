@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -59,9 +60,10 @@ public class ModuleCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("enable", "disable");
-        if (args.length == 2) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
-        if (args.length == 3) return KNOWN_MODULES.stream().filter(m -> m.startsWith(args[2])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("enable", "disable"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
+        if (args.length == 3) return TabUtil.filter(KNOWN_MODULES, cur);
         return List.of();
     }
 }

@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -335,18 +336,17 @@ public class OverrideCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            return List.of("killweb", "forceend", "endarena", "evacuate", "freeze", "lockdown", "unlockdown", "purge", "god", "broadcast", "snapshotall", "resetstats", "forcewin", "forcestart", "startarena")
-                    .stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
+            return TabUtil.filter(List.of("killweb", "forceend", "endarena", "evacuate", "freeze", "lockdown", "unlockdown", "purge", "god", "broadcast", "snapshotall", "resetstats", "forcewin", "forcestart", "startarena"), cur);
         }
-        if (args.length == 2 && List.of("forceend", "endarena", "evacuate", "freeze", "purge", "god", "forcestart", "startarena", "forcewin").contains(args[0].toLowerCase(Locale.ROOT))) {
-            return ArenaManager.getInstance().getAll().stream().map(Arena::getName)
-                    .filter(n -> n.startsWith(args[1])).toList();
+        String a = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2) {
+            if (List.of("forceend", "endarena", "evacuate", "freeze", "purge", "god", "forcestart", "startarena", "forcewin").contains(a)) return TabUtil.arenas(cur);
+            if (a.equals("resetstats")) return TabUtil.players(sender, cur);
+            if (a.equals("broadcast")) return TabUtil.hint("<message>", cur);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("forcewin")) {
-            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
-                    .filter(n -> n.startsWith(args[2])).toList();
-        }
+        if (args.length == 3 && a.equals("forcewin")) return TabUtil.forceWinTargets(sender, args[1], cur);
         return List.of();
     }
 }

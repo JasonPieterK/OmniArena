@@ -285,6 +285,8 @@ public final class OmniArena extends JavaPlugin {
             getLogger().severe("Error ending matches on disable: " + e.getMessage());
         }
 
+        try { if (matchManager != null) matchManager.shutdownStateStore(); } catch (Exception e) { getLogger().warning("Player state flush failed: " + e.getMessage()); }
+
         // Finalize running regens/snapshots so no preview blocks are left in the world
         try { if (blockRestoreModule != null) blockRestoreModule.cancelAll(); } catch (Exception e) { getLogger().warning("Regen shutdown failed: " + e.getMessage()); }
 

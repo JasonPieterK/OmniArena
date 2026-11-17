@@ -40,9 +40,24 @@ public class MatchManager {
                                org.bukkit.inventory.ItemStack[] armor) {}
 
     private final Map<UUID, PlayerState> savedStates = new ConcurrentHashMap<>();
+    private PlayerStateStore stateStore;
+
+    /** Crash-safe on-disk copy of saved pre-arena states (lazy: needs the plugin data folder). */
+    public PlayerStateStore getStateStore() {
+        if (stateStore == null) stateStore = new PlayerStateStore(plugin);
+        return stateStore;
+    }
+
+    /** Flushes pending state-file writes/deletes; call on plugin disable after players were restored. */
+    public void shutdownStateStore() {
+        if (stateStore != null) stateStore.shutdown();
+    }
 
     private void saveState(Player p) {
         boolean inv = ConfigManager.getInstance().getConfig().getBoolean("arena.inventory-restore", true);
+        if (ConfigManager.getInstance().getConfig().getBoolean("arena.persist-player-state", true)) {
+            getStateStore().save(p, inv);
+        }
         savedStates.put(p.getUniqueId(), new PlayerState(p.getLocation().clone(), p.getGameMode(), p.getHealth(),
                 p.getFoodLevel(), p.getSaturation(), p.getLevel(), p.getExp(),
                 new ArrayList<>(p.getActivePotionEffects()), p.getAllowFlight(), p.isFlying(),
@@ -54,6 +69,7 @@ public class MatchManager {
     /** Puts the player back exactly as they were before joining (or sane defaults if unknown). */
     private void restoreState(Player p) {
         PlayerState s = savedStates.remove(p.getUniqueId());
+        if (stateStore != null) stateStore.delete(p.getUniqueId());
         if (p.isDead()) {
             try { p.spigot().respawn(); } catch (Throwable ignored) {}
         }

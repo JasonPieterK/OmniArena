@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.ArenaManager;
 import com.omniarena.commands.SubCommand;
@@ -44,6 +45,6 @@ public class CreateArenaCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        return args.length == 1 ? List.of("<name>") : List.of();
+        return args.length == 1 ? TabUtil.hint("<name>", args[0]) : List.of();
     }
 }
