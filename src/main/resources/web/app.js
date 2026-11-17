@@ -255,6 +255,7 @@
           ${field('Match duration (s)', numInput('matchDuration', d.matchDuration))}
           ${field('Countdown (s)', numInput('countdown', d.countdown))}
           ${field('Respawn delay (s)', numInput('respawnDelay', d.respawnDelay))}
+          ${field('Lives (0 = mode default)', numInput('lives', d.lives))}
         </div>
         ${cfgToggle('enabled', 'Enabled', d.enabled)}
         ${cfgToggle('midMatchJoin', 'Mid-match join', d.midMatchJoin)}
@@ -492,7 +493,7 @@
     return {
       enabled: a.enabled, gameMode: a.gameMode,
       minPlayers: a.minPlayers, maxPlayers: a.maxPlayers,
-      matchDuration: a.matchDuration, countdown: a.countdown, respawnDelay: a.respawnDelay,
+      matchDuration: a.matchDuration, countdown: a.countdown, respawnDelay: a.respawnDelay, lives: a.lives,
       midMatchJoin: a.midMatchJoin, spectatorAllowed: a.spectatorAllowed, whitelistEnabled: a.whitelistEnabled,
       region: {
         worldName: a.regionWorld || '',

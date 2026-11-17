@@ -220,6 +220,7 @@ public class ConfigApplyService {
         intIn(obj, "goalValue", 0, MAX_INT, p, errors);
         intIn(obj, "respawnDelay", 0, 3600, p, errors);
         intIn(obj, "spawnProtection", 0, 3600, p, errors);
+        intIn(obj, "lives", 0, 100, p, errors);
 
         if (obj.has("region") && obj.get("region").isJsonObject()) {
             JsonObject r = obj.getAsJsonObject("region");
@@ -294,6 +295,7 @@ public class ConfigApplyService {
         if (present(obj, "respawnType")) arena.setRespawnType(RespawnType.fromString(obj.get("respawnType").getAsString()));
         if (present(obj, "respawnDelay")) arena.setRespawnDelay(num(obj.get("respawnDelay")));
         if (present(obj, "spawnProtection")) arena.setSpawnProtection(num(obj.get("spawnProtection")));
+        if (present(obj, "lives")) arena.setLives(num(obj.get("lives")));
         if (present(obj, "chatMode")) arena.setChatMode(ChatMode.fromString(obj.get("chatMode").getAsString()));
         if (present(obj, "announcements")) arena.setAnnouncements(bool(obj.get("announcements")));
         if (present(obj, "midMatchJoin")) arena.setMidMatchJoin(bool(obj.get("midMatchJoin")));

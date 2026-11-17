@@ -183,6 +183,18 @@ public final class OmniArena extends JavaPlugin {
         Objects.requireNonNull(getCommand("newbie")).setExecutor(forwarder);
         Objects.requireNonNull(getCommand("newbie")).setTabCompleter(forwarder);
 
+        for (String standalone : new String[]{"bet", "tournament"}) {
+            var fwd = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, standalone);
+            var pc = getCommand(standalone);
+            if (pc == null) {
+                getLogger().warning("Command '/" + standalone + "' is missing from plugin.yml, so it was not registered. "
+                        + "Fix: re-add the '" + standalone + ":' entry under 'commands:' in plugin.yml (use /oa " + standalone + " meanwhile).");
+                continue;
+            }
+            pc.setExecutor(fwd);
+            pc.setTabCompleter(fwd);
+        }
+
         // ── Listeners ─────────────────────────────────────────────
         var pm = getServer().getPluginManager();
         pm.registerEvents(new PlayerJoinListener(this),      this);

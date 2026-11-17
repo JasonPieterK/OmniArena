@@ -46,6 +46,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "regen",         new RegenCommand(plugin));
         reg(adminCommands, "sign",          new SignCommand(plugin));
         reg(adminCommands, "kit",           new AdminKitCommand(plugin));
+        reg(adminCommands, "adminkit",      new AdminKitCommand(plugin));
         reg(adminCommands, "tp",            new TeleportArenaCommand(plugin));
         reg(adminCommands, "debug",         new DebugCommand(plugin));
         reg(adminCommands, "announcements", new AnnouncementsCommand(plugin));
@@ -134,6 +135,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             @Override public void execute(CommandSender sender, String[] args) { partyCmd.onCommand(sender, null, "party", args); }
             @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) { return partyCmd.onTabComplete(sender, null, "party", args); }
         });
+        reg(playerCommands, "queue",    new QueueCommand(plugin));
         reg(playerCommands, "bet",      new BetCommand(plugin));
         reg(playerCommands, "tournament", new TournamentCommand(plugin));
         reg(playerCommands, "help",     new HelpCommand(plugin, adminCommands, playerCommands));
@@ -203,34 +205,34 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         String sub = args[0].toLowerCase();
         String[] subArgs = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new String[0];
 
+        // "/oa kit admin <action> ..." is an unambiguous route to the ADMIN preset kit actions.
+        if (sub.equals("kit") && subArgs.length > 0 && subArgs[0].equalsIgnoreCase("admin")) {
+            SubCommand adminKit = adminCommands.get("adminkit");
+            if (!PermissionChecker.hasAdmin(sender, adminKit.getRequiredPermission())) {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission")
+                        + " <gray>Admin kit actions need <white>" + adminKit.getRequiredPermission() + "</white> (or OP).");
+                return true;
+            }
+            runSafely(sender, "kit admin", adminKit, Arrays.copyOfRange(subArgs, 1, subArgs.length));
+            return true;
+        }
+
         SubCommand adminCmd = adminCommands.get(sub);
         if (adminCmd != null) {
-            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help") && !sub.equals("regen") && !sub.equals("kit")) {
+            if (subArgs.length > 0 && subArgs[0].equalsIgnoreCase("help") && !sub.equals("regen") && !sub.equals("kit") && !sub.equals("adminkit")) {
                 showCommandHelp(sender, sub, adminCmd);
                 return true;
             }
             SubCommand playerCmd = playerCommands.get(sub);
             if (playerCmd != null && shouldUsePlayerCommand(sender, sub, subArgs, adminCmd)) {
-                try {
-                    playerCmd.execute(sender, subArgs);
-                } catch (Exception e) {
-                    plugin.getLogger().severe("Error executing player command " + sub + ": " + e.getMessage());
-                    e.printStackTrace();
-                    MessageUtil.send(sender, "<red>An error occurred while executing this command.");
-                }
+                runSafely(sender, sub, playerCmd, subArgs);
                 return true;
             }
             if (!PermissionChecker.hasAdmin(sender, adminCmd.getRequiredPermission())) {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission"));
                 return true;
             }
-            try {
-                adminCmd.execute(sender, subArgs);
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error executing admin command " + sub + ": " + e.getMessage());
-                e.printStackTrace();
-                MessageUtil.send(sender, "<red>An error occurred while executing this command.");
-            }
+            runSafely(sender, sub, adminCmd, subArgs);
             return true;
         }
 
@@ -245,18 +247,27 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission"));
                 return true;
             }
-            try {
-                playerCmd.execute(sender, subArgs);
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error executing player command " + sub + ": " + e.getMessage());
-                e.printStackTrace();
-                MessageUtil.send(sender, "<red>An error occurred while executing this command.");
-            }
+            runSafely(sender, sub, playerCmd, subArgs);
             return true;
         }
 
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("unknown-command"));
         return true;
+    }
+
+    /** Runs a subcommand; unexpected exceptions are logged in full to the console and never shown to the player. */
+    private void runSafely(CommandSender sender, String sub, SubCommand cmd, String[] subArgs) {
+        try {
+            cmd.execute(sender, subArgs);
+        } catch (Exception e) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Unexpected error while " + sender.getName() + " ran '/oa " + sub + " " + String.join(" ", subArgs)
+                            + "' (" + e.getClass().getSimpleName() + ": " + e.getMessage() + "). Full stack trace follows; "
+                            + "please report it with your server version and plugin version.", e);
+            MessageUtil.send(sender, "<red>Something went wrong while running <yellow>/oa " + sub
+                    + "</yellow>. <gray>It was not your fault: ask an admin to check the server console for the full error. "
+                    + "Usage: <white>" + cmd.getUsage() + "</white>");
+        }
     }
 
     private boolean shouldUsePlayerCommand(CommandSender sender, String sub, String[] args, SubCommand adminCmd) {
@@ -265,6 +276,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         if (sub.equals("kit")) {
             if (args.length == 0) return true; // open GUI — player side
             String action = args[0].toLowerCase();
+            // Legacy shortcut kept for compatibility; the unambiguous form is "/oa kit admin <action>" or "/oa adminkit <action>".
             return !Set.of("setpublic", "setprivate", "icon", "description", "cooldown", "permission").contains(action);
         }
         return false;
@@ -297,6 +309,11 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         SubCommand adminCmd = adminCommands.get(sub);
         SubCommand playerCmd = playerCommands.get(sub);
         boolean adminOk = adminCmd != null && PermissionChecker.hasAdmin(sender, adminCmd.getRequiredPermission());
+        if (sub.equals("kit") && subArgs.length >= 1 && subArgs[0].equalsIgnoreCase("admin")) {
+            SubCommand ak = adminCommands.get("adminkit");
+            if (!PermissionChecker.hasAdmin(sender, ak.getRequiredPermission())) return List.of();
+            return TabUtil.filter(ak.tabComplete(sender, Arrays.copyOfRange(subArgs, 1, subArgs.length)), typed);
+        }
         boolean playerOk = playerCmd != null && canUse(sender, playerCmd, false);
         if (!adminOk && !playerOk) return List.of();
 
@@ -306,6 +323,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             if (subArgs.length == 1) {
                 res.addAll(playerCmd.tabComplete(sender, subArgs));
                 res.addAll(adminCmd.tabComplete(sender, subArgs));
+                res.add("admin");
             } else if (shouldUsePlayerCommand(sender, sub, subArgs, adminCmd)) {
                 res.addAll(playerCmd.tabComplete(sender, subArgs));
             } else {
@@ -318,7 +336,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
         // "/oa <sub> help" is handled centrally for everything except regen/kit (which have their own help).
         boolean placeholderOnly = res.size() == 1 && res.iterator().next().startsWith("<");
-        if (subArgs.length == 1 && !sub.equals("kit") && !sub.equals("regen") && !placeholderOnly) res.add("help");
+        if (subArgs.length == 1 && !sub.equals("kit") && !sub.equals("adminkit") && !sub.equals("regen") && !placeholderOnly) res.add("help");
         // Re-filter by the typed prefix (placeholder hints like "<name>" are kept when nothing is typed).
         return TabUtil.filter(res, typed);
     }

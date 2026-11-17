@@ -97,9 +97,23 @@ public class BettingManager {
             return false;
         }
 
+        if (!plugin.getConfigManager().isIntegrationEnabled("vault")) {
+            MessageUtil.send(player, "<red>Betting is unavailable (Vault integration disabled).");
+            return false;
+        }
+
         // Normalise to the canonical arena name so payout/refund lookups match
-        arenaName = plugin.getArenaManager().get(arenaName)
-                .map(com.omniarena.arena.Arena::getName).orElse(arenaName);
+        var arenaOpt = plugin.getArenaManager().get(arenaName);
+        arenaName = arenaOpt.map(com.omniarena.arena.Arena::getName).orElse(arenaName);
+
+        if (!plugin.getConfigManager().getConfig().getBoolean("betting.allow-spectator-bet", true)
+                && arenaOpt.isPresent()) {
+            var match = plugin.getMatchManager().getMatch(arenaOpt.get());
+            if (match.isPresent() && match.get().isSpectator(player.getUniqueId())) {
+                MessageUtil.send(player, "<red>Spectators cannot place bets on this server.");
+                return false;
+            }
+        }
 
         if (!isBettingWindowOpen(arenaName)) {
             MessageUtil.send(player, "<red>Betting window closed for this match.");

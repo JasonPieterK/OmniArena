@@ -200,6 +200,25 @@ public class QueueManager {
         return new QueueInfo(qp.getKitName(), queue.getPosition(qp), queue.getSize());
     }
 
+    /** The queue entry (solo or party unit) containing this player, or null. */
+    public QueuedPlayer getEntry(Player player) { return queuedPlayers.get(player.getUniqueId()); }
+
+    /** Average ELO of an entry's members. */
+    public int averageElo(QueuedPlayer qp) {
+        long sum = 0;
+        for (UUID id : qp.getMembers()) sum += plugin.getEloManager().peekElo(id);
+        return (int) Math.round((double) sum / qp.size());
+    }
+
+    /** Current accepted rating gap (+/-) for an entry given its wait time. */
+    public int currentRange(QueuedPlayer qp) {
+        long steps = (System.currentTimeMillis() - qp.getQueueTime()) / (RANGE_STEP_SECONDS * 1000L);
+        return (int) Math.min(MAX_RANGE, BASE_RANGE + steps * RANGE_STEP);
+    }
+
+    /** Names of queues that currently exist (for tab completion). */
+    public java.util.Set<String> getQueueNames() { return new java.util.TreeSet<>(queues.keySet()); }
+
     /** Base allowed rating gap, widened over time so nobody waits forever. */
     private static final int BASE_RANGE = 200;
     private static final int RANGE_STEP = 50;          // added every RANGE_STEP_SECONDS of waiting

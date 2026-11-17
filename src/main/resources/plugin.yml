@@ -66,6 +66,14 @@ commands:
     description: Get OmniArena help
     usage: /help [guide]
     permission: omniarena.use
+  bet:
+    description: Bet on arena match outcomes (same as /oa bet)
+    usage: /bet <place|cancel|info> [arena] [player] [amount]
+    permission: omniarena.bet
+  tournament:
+    description: Create and play bracket tournaments (same as /oa tournament)
+    usage: /tournament <create|join|leave|start|status|list|delete|setprize> [args]
+    permission: omniarena.use
   pvp:
     description: Toggle PvP status
     usage: /pvp [player]
@@ -98,6 +106,10 @@ permissions:
 
   omniarena.kit.use:
     description: Access to /kit player commands
+    default: true
+
+  omniarena.queue:
+    description: Use /oa queue (ranked matchmaking queue)
     default: true
 
   omniarena.bet:

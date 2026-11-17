@@ -33,6 +33,7 @@ arena:
   respawn-delay: 3  # seconds
   spawn-protection: 3  # seconds of invulnerability on spawn
   inventory-restore: true  # restore player gear on leave
+  persist-player-state: true  # also write each player's pre-arena state to plugins/OmniArena/player-states/<uuid>.yml (async) so a crash cannot lose inventories; restored + deleted on next join
   teleport-back-on-leave: true
   region-protection: true  # prevent block damage outside match
 

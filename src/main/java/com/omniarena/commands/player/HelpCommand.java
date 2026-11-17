@@ -103,15 +103,15 @@ public class HelpCommand extends SubCommand {
         guides.put("regenarena", List.of(
                 "<yellow>1.</yellow> Make sure region is set.",
                 "<yellow>2.</yellow> Save original blocks: <white>/oa regen snapshot <arena></white>.",
-                "<yellow>3.</yellow> Pick default style: <white>/oa regen style WAVE_SHUFFLE</white>.",
+                "<yellow>3.</yellow> Pick default style: <white>/oa regen style RADIATE_OUTWARD</white>.",
                 "<yellow>4.</yellow> Rebuild: <white>/oa regen <arena></white>.",
                 "<yellow>5.</yellow> Watch chat progress bar until 100%."));
-        guides.put("regenstyles", List.of(
-                "<yellow>WAVE_SHUFFLE</yellow> - bottom-up waves with organized shuffle.",
-                "<yellow>CENTER_OUT</yellow> - rebuild from middle outward.",
-                "<yellow>OUTSIDE_IN</yellow> - rebuild walls/border inward.",
-                "<yellow>TOP_DOWN</yellow> - rebuild from sky downward.",
-                "<yellow>RANDOM_BURST</yellow> - fast scattered burst."));
+        java.util.List<String> styles = new java.util.ArrayList<>();
+        for (com.omniarena.arena.regen.RegenAnimationType t : com.omniarena.arena.regen.RegenAnimationType.values()) {
+            styles.add("<yellow>" + t.name() + "</yellow> - <white>/oa regen style " + t.name() + "</white>");
+        }
+        styles.add("<gray>Legacy names (TOP_DOWN, CENTER_OUT, OUTSIDE_IN, RANDOM_BURST...) still work and map to the styles above.");
+        guides.put("regenstyles", styles);
         guides.put("signjoin", List.of(
                 "<yellow>1.</yellow> Look at block where sign should go.",
                 "<yellow>2.</yellow> Run <white>/oa sign create <arena></white>.",
@@ -119,8 +119,9 @@ public class HelpCommand extends SubCommand {
                 "<yellow>4.</yellow> Remove with <white>/oa sign remove</white>."));
         guides.put("kits", List.of(
                 "<yellow>Players:</yellow> <white>/kit create <name></white>, <white>/kit equip <name></white>, <white>/kit list</white>.",
-                "<yellow>Admins:</yellow> hold items, run <white>/oa kit create <name></white>.",
-                "<yellow>Public kits:</yellow> run <white>/oa kit setpublic <name></white>.",
+                "<yellow>Admin preset kits:</yellow> hold items, run <white>/oa kit admin create <name></white> (or <white>/oa adminkit create <name></white>).",
+                "<yellow>Other admin actions:</yellow> <white>/oa kit admin <delete|rename|equip|setpublic|setprivate|icon|description|cooldown|permission|list></white>.",
+                "<yellow>Public kits:</yellow> run <white>/oa kit admin setpublic <name></white>.",
                 "<yellow>Kit menu:</yellow> run <white>/kit</white> or <white>/oa kit</white>."));
         guides.put("startmatch", List.of(
                 "<yellow>1.</yellow> Enable arena: <white>/oa enable <arena></white>.",
@@ -144,7 +145,7 @@ public class HelpCommand extends SubCommand {
         guides.put("troubleshooting", List.of(
                 "<yellow>No regen snapshot?</yellow> Run <white>/oa regen snapshot <arena></white> first.",
                 "<yellow>Players cannot join?</yellow> Check <white>/oa info <arena></white> and arena enabled.",
-                "<yellow>Kits hidden?</yellow> Run <white>/oa kit setpublic <name></white>.",
+                "<yellow>Kits hidden?</yellow> Run <white>/oa kit admin setpublic <name></white>.",
                 "<yellow>Need reload?</yellow> Run <white>/oa reload</white>."));
         guides.put("performance", List.of(
                 "<yellow>Fast regen:</yellow> <white>/oa regen batch 4000</white>.",

@@ -17,6 +17,7 @@ public final class PermissionChecker {
 
     public static final String PLAYER_USE    = "omniarena.use";
     public static final String PLAYER_KIT    = "omniarena.kit.use";
+    public static final String PLAYER_QUEUE  = "omniarena.queue";
     public static final String PLAYER_SPEC   = "omniarena.spectate";
     public static final String JOIN_BYPASS   = "omniarena.join.bypass";
 

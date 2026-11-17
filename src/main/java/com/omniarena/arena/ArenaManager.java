@@ -56,9 +56,27 @@ public class ArenaManager {
             throw new IllegalArgumentException("Arena already exists: " + name);
         }
         Arena arena = new Arena(name);
+        applyDefaults(arena);
         arenas.put(name.toLowerCase(), arena);
         arenaConfig.save(arena);
         return arena;
+    }
+
+    /** Seeds a newly created arena from the arena.* defaults in config.yml. */
+    private void applyDefaults(Arena arena) {
+        var cm = com.omniarena.config.ConfigManager.getInstance();
+        if (cm == null || cm.getConfig() == null) return;
+        var c = cm.getConfig();
+        arena.setMinPlayers(Math.max(1, c.getInt("arena.default-min-players", arena.getMinPlayers())));
+        arena.setMaxPlayers(Math.max(arena.getMinPlayers(), c.getInt("arena.default-max-players", arena.getMaxPlayers())));
+        arena.setCountdown(Math.max(0, c.getInt("arena.default-countdown", arena.getCountdown())));
+        arena.setMatchDuration(Math.max(1, c.getInt("arena.default-match-duration", arena.getMatchDuration())));
+        arena.setGameMode(com.omniarena.gamemode.GameModeType.fromString(
+                c.getString("arena.default-game-mode", arena.getGameMode().name())));
+        arena.setSpectatorAllowed(c.getBoolean("arena.spectator-allowed", arena.isSpectatorAllowed()));
+        arena.setMidMatchJoin(c.getBoolean("arena.mid-match-join", arena.isMidMatchJoin()));
+        arena.setRespawnDelay(Math.max(0, c.getInt("arena.respawn-delay", arena.getRespawnDelay())));
+        arena.setSpawnProtection(Math.max(0, c.getInt("arena.spawn-protection", arena.getSpawnProtection())));
     }
 
     public boolean delete(String name) {

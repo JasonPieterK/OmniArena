@@ -34,6 +34,10 @@ public class ReloadCommand extends SubCommand {
             }
             plugin.getModuleManager().reload();
             plugin.startSignUpdateTask();
+            if (plugin.getIntegrationManager() != null) {
+                plugin.getIntegrationManager().shutdown();
+                plugin.getIntegrationManager().load();
+            }
             plugin.getCombatManager().start();
             // Re-update all arena signs
             ArenaManager.getInstance().getAll().forEach(arena ->
