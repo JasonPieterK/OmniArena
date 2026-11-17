@@ -43,7 +43,7 @@ public class ForceWinCommand extends SubCommand {
 
         Match m = matchOpt.get();
         if (m.getState() != com.omniarena.match.MatchState.RUNNING) {
-            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is not running.");
+            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is not in the RUNNING state (now: " + m.getState().name() + "). <gray>Force-win only works on a running match; start it with <white>/oa force start " + arena.getName() + "</white>.");
             return;
         }
         String target = args[1];
@@ -51,7 +51,7 @@ public class ForceWinCommand extends SubCommand {
 
         if (player != null) {
             if (!m.hasPlayer(player.getUniqueId())) {
-                MessageUtil.send(sender, "<red>" + player.getName() + " is not playing in <yellow>" + arena.getName() + "</yellow>.");
+                MessageUtil.send(sender, "<red>" + player.getName() + " is not playing in <yellow>" + arena.getName() + "</yellow>, so they can't be awarded the win. <gray>Pick a participant (tab-complete after <white>/oa forcewin " + arena.getName() + "</white>).");
                 return;
             }
             MatchManager.getInstance().forceWin(matchOpt.get(), player.getUniqueId());
@@ -61,7 +61,7 @@ public class ForceWinCommand extends SubCommand {
             String teamName = m.getTeams().stream().map(com.omniarena.match.MatchTeam::getName)
                     .filter(n -> n.equalsIgnoreCase(target)).findFirst().orElse(null);
             if (teamName == null) {
-                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", target));
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", target) + " <gray>It is also not a team name in this match; valid teams: <white>" + m.getTeams().stream().map(com.omniarena.match.MatchTeam::getName).collect(java.util.stream.Collectors.joining(", ")) + "</white>.");
                 return;
             }
             MatchManager.getInstance().forceWinTeam(m, teamName);

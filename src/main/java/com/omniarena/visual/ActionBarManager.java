@@ -54,6 +54,12 @@ public class ActionBarManager {
             bar.append("<red>").append(streak).append("x Streak ");
         }
 
+        // Lives (only for running matches on arenas with lives enabled)
+        if (match.getState() == com.omniarena.match.MatchState.RUNNING && match.getArena().getLives() > 0) {
+            int lives = match.getLives(uuid);
+            bar.append("<red>\u2764 ").append(lives).append(lives == 1 ? " life " : " lives ");
+        }
+
         // Rank
         bar.append("<gray>Rank: <white>#").append(rank);
 

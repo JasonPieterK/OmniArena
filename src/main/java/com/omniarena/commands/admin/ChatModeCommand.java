@@ -40,8 +40,8 @@ public class ChatModeCommand extends SubCommand {
         ChatMode mode;
         try { mode = ChatMode.valueOf(args[2].toUpperCase()); }
         catch (IllegalArgumentException e) {
-            MessageUtil.send(sender, "<red>Unknown chat mode <yellow>" + args[2] + "</yellow>. Valid: "
-                    + Arrays.stream(ChatMode.values()).map(ChatMode::name).collect(java.util.stream.Collectors.joining(", ")));
+            MessageUtil.send(sender, "<red>Unknown chat mode <yellow>" + args[2] + "</yellow>. <gray>Valid modes: <white>"
+                    + Arrays.stream(ChatMode.values()).map(ChatMode::name).collect(java.util.stream.Collectors.joining(", ")) + "</white>. Example: <white>/oa chat set " + arena.getName() + " " + ChatMode.values()[0].name() + "</white>");
             return;
         }
         arena.setChatMode(mode);

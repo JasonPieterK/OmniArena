@@ -62,7 +62,7 @@ public class SettingsCommand extends SubCommand {
             setValue(sender, args);
             return;
         }
-        MessageUtil.send(sender, "<red>Usage: <yellow>/oa settings</yellow> or <yellow>/oa settings set <key> <value></yellow>");
+        MessageUtil.send(sender, "<red>Unknown action <yellow>" + args[0] + "</yellow>. <gray>Usage: <white>/oa settings</white> (open the list) or <white>/oa settings set <key> <value></white>.");
     }
 
     private void showSettings(CommandSender sender) {
@@ -121,13 +121,13 @@ public class SettingsCommand extends SubCommand {
 
     private void setValue(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa settings set <key> <value>");
+            MessageUtil.send(sender, "<red>Missing key or value. <gray>Usage: <yellow>/oa settings set <key> <value></yellow> <gray>- click a setting in <white>/oa settings</white> to pre-fill it.");
             return;
         }
         String key = args[1];
         SettingDefinition entry = byKey.get(key.toLowerCase(Locale.ROOT));
         if (entry == null) {
-            MessageUtil.send(sender, "<red>Unknown setting: <yellow>" + key);
+            MessageUtil.send(sender, "<red>Unknown setting <yellow>" + key + "</yellow>. <gray>See all keys with <white>/oa settings</white> or press TAB after <white>/oa settings set</white>.");
             return;
         }
         String raw = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
@@ -145,7 +145,7 @@ public class SettingsCommand extends SubCommand {
                     String v = raw.trim().toLowerCase(Locale.ROOT);
                     if (v.equals("true") || v.equals("yes") || v.equals("on")) yield Boolean.TRUE;
                     if (v.equals("false") || v.equals("no") || v.equals("off")) yield Boolean.FALSE;
-                    MessageUtil.send(sender, "<red>Expected true or false for <yellow>" + entry.key() + "</yellow>.");
+                    MessageUtil.send(sender, "<red>Expected true or false for <yellow>" + entry.key() + "</yellow>, got <yellow>" + raw + "</yellow>. <gray>Use true/false (or yes/no, on/off): <white>/oa settings set " + entry.key() + " true</white>");
                     yield null;
                 }
                 case INTEGER -> Integer.parseInt(raw.trim());
@@ -158,7 +158,7 @@ public class SettingsCommand extends SubCommand {
                     if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
                         try { yield RegenAnimationType.valueOf(raw.trim().toUpperCase(Locale.ROOT)).name(); }
                         catch (IllegalArgumentException e) {
-                            MessageUtil.send(sender, "<red>Unknown style <yellow>" + raw + "</yellow>.");
+                            MessageUtil.send(sender, "<red>Unknown regen style <yellow>" + raw + "</yellow>. <gray>Valid: <white>" + Arrays.stream(RegenAnimationType.values()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")) + "</white> (see <white>/oa help regenstyles</white>).");
                             yield null;
                         }
                     }
@@ -166,7 +166,7 @@ public class SettingsCommand extends SubCommand {
                 }
             };
         } catch (NumberFormatException e) {
-            MessageUtil.send(sender, "<red>Expected number for <yellow>" + entry.key() + "</yellow>.");
+            MessageUtil.send(sender, "<red>Expected a number for <yellow>" + entry.key() + "</yellow>, got <yellow>" + raw + "</yellow>. <gray>Use digits only, e.g. <white>/oa settings set " + entry.key() + " 10</white>.");
             return null;
         }
     }

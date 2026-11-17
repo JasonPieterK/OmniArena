@@ -179,6 +179,16 @@ public class EloManager {
         saveAll();
     }
 
+    /** Record a team draw: every player scores 0.5 against the opposing side's average rating. */
+    public void recordTeamDraw(Collection<UUID> sideA, Collection<UUID> sideB) {
+        if (sideA.isEmpty() || sideB.isEmpty()) return;
+        int avgA = averageRating(sideA), avgB = averageRating(sideB);
+        int now = (int) (System.currentTimeMillis() / 1000);
+        for (UUID u : sideA) { getRating(u).recordDraw(avgB); matchHistory.put(u, now); }
+        for (UUID u : sideB) { getRating(u).recordDraw(avgA); matchHistory.put(u, now); }
+        saveAll();
+    }
+
     private int averageRating(Collection<UUID> ids) {
         if (ids.isEmpty()) return EloRating.DEFAULT_RATING;
         long sum = 0;

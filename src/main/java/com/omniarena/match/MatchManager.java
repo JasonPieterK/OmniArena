@@ -26,6 +26,7 @@ public class MatchManager {
     private final Map<String, Match> activeMatches = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerArena    = new ConcurrentHashMap<>();
     private final EndCommandHandler endCommandHandler;
+    private final RewardHandler rewardHandler;
     private final Set<String> frozenArenas = ConcurrentHashMap.newKeySet();
     private final Set<UUID> godModePlayers = ConcurrentHashMap.newKeySet();
     private volatile boolean lockdown = false;
@@ -118,6 +119,7 @@ public class MatchManager {
     public MatchManager(OmniArena plugin) {
         this.plugin = plugin;
         this.endCommandHandler = new EndCommandHandler(plugin);
+        this.rewardHandler = new RewardHandler(plugin);
         instance = this;
     }
 
@@ -288,6 +290,18 @@ public class MatchManager {
                 forfeit = new MatchResult(arenaName, others.get(0), player.getUniqueId(), null,
                         MatchResult.Outcome.FORFEIT, match.getDurationSeconds(),
                         new ArrayList<>(match.getPlayers()));
+            }
+        }
+
+        // Ranked team forfeit: the last member of a side leaving a running 2-team match loses for that side
+        // (the leaver is removed from the team below, so the end-of-match ELO pass would see no losers).
+        if (match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
+                && match.getTeams().size() == 2 && match.getTeam(player.getUniqueId()) != null) {
+            MatchTeam own = match.getTeam(player.getUniqueId());
+            MatchTeam opp = match.getTeams().get(0) == own ? match.getTeams().get(1) : match.getTeams().get(0);
+            if (own.getMembers().size() == 1 && !opp.getMembers().isEmpty()) {
+                plugin.getEloManager().recordTeamMatch(new ArrayList<>(opp.getMembers()),
+                        List.of(player.getUniqueId()));
             }
         }
 
@@ -552,7 +566,7 @@ public class MatchManager {
 
         // Update ELO ratings for ranked (queue) matches only
         if (match.isRanked() && result.isDraw() && result.getParticipants() != null
-                && result.getParticipants().size() == 2) {
+                && match.getTeams().isEmpty() && result.getParticipants().size() == 2) {
             UUID a = result.getParticipants().get(0), b = result.getParticipants().get(1);
             String an = Bukkit.getOfflinePlayer(a).getName();
             String bn = Bukkit.getOfflinePlayer(b).getName();
@@ -563,6 +577,12 @@ public class MatchManager {
             plugin.getEloManager().recordMatch(result.getWinnerId(), result.getLoserId(), 
                     winnerName != null ? winnerName : "Unknown", 
                     loserName != null ? loserName : "Unknown");
+        }
+
+        // Ranked team draw: each player scores 0.5 against the opposing side's average
+        if (match.isRanked() && result.isDraw() && match.getTeams().size() == 2) {
+            plugin.getEloManager().recordTeamDraw(match.getTeams().get(0).getMembers(),
+                    match.getTeams().get(1).getMembers());
         }
 
         // Ranked team matches (e.g. queued parties): per-player ELO against the opposing side's average
@@ -585,6 +605,7 @@ public class MatchManager {
         plugin.getVisual().getBossBarManager().removeAll(match);
 
         endCommandHandler.execute(match, result);
+        rewardHandler.onWin(match, result);
         StatsManager.getInstance().recordResult(match, result);
 
         if (match.getArena().isAnnouncements()
@@ -829,6 +850,8 @@ public class MatchManager {
     }
 
     // ── Lookup ───────────────────────────────────────────────────
+
+    public RewardHandler getRewardHandler() { return rewardHandler; }
 
     public Optional<Match> getMatch(Arena arena) {
         return Optional.ofNullable(activeMatches.get(arena.getName()));

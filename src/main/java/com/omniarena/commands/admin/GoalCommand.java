@@ -40,8 +40,8 @@ public class GoalCommand extends SubCommand {
         GoalType goal;
         try { goal = GoalType.valueOf(args[2].toUpperCase().replace("-", "_").replace(" ", "_")); }
         catch (IllegalArgumentException e) {
-            MessageUtil.send(sender, "<red>Unknown goal <yellow>" + args[2] + "</yellow>. Valid: "
-                    + Arrays.stream(GoalType.values()).map(GoalType::name).collect(java.util.stream.Collectors.joining(", ")));
+            MessageUtil.send(sender, "<red>Unknown goal <yellow>" + args[2] + "</yellow>. <gray>Valid goals: <white>"
+                    + Arrays.stream(GoalType.values()).map(GoalType::name).collect(java.util.stream.Collectors.joining(", ")) + "</white>.");
             return;
         }
         int value = -1;

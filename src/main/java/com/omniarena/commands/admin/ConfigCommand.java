@@ -98,7 +98,7 @@ public class ConfigCommand extends SubCommand {
         Object parsed;
         try { parsed = parseGlobalValue(key, value); }
         catch (IllegalArgumentException e) {
-            MessageUtil.send(sender, "<red>Invalid value for <yellow>" + key + "</yellow>: " + e.getMessage());
+            MessageUtil.send(sender, "<red>Invalid value <yellow>" + value + "</yellow> for <yellow>" + key + "</yellow>: " + e.getMessage() + " <gray>See valid values by pressing TAB after the key, or <white>/oa config get " + key + "</white>.");
             return;
         }
         ConfigManager.getInstance().setValue(key, parsed);
@@ -114,7 +114,7 @@ public class ConfigCommand extends SubCommand {
         } catch (NumberFormatException e) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", value));
         } catch (IllegalArgumentException e) {
-            MessageUtil.send(sender, "<red>" + e.getMessage());
+            MessageUtil.send(sender, "<red>Could not set <yellow>" + key + "</yellow> to <yellow>" + value + "</yellow> on arena <yellow>" + arena.getName() + "</yellow>: " + e.getMessage() + " <gray>Fix the value and run <white>/oa config set " + arena.getName() + " " + key + " <value></white> again.");
         }
     }
 
@@ -129,14 +129,14 @@ public class ConfigCommand extends SubCommand {
             case "game-mode", "gamemode" -> arena.setGameMode(strictEnum(GameModeType.class, value));
             case "min-players" -> {
                 int n = parseInt(value, 0);
-                if (n < 1) throw new IllegalArgumentException("min-players must be at least 1.");
-                if (arena.getMaxPlayers() > 0 && n > arena.getMaxPlayers()) throw new IllegalArgumentException("min-players cannot exceed max-players (" + arena.getMaxPlayers() + ").");
+                if (n < 1) throw new IllegalArgumentException("min-players must be at least 1 (you gave " + n + ").");
+                if (arena.getMaxPlayers() > 0 && n > arena.getMaxPlayers()) throw new IllegalArgumentException("min-players cannot exceed max-players (" + arena.getMaxPlayers() + "). Raise max-players first: /oa config set " + arena.getName() + " max-players <n>.");
                 arena.setMinPlayers(n);
             }
             case "max-players" -> {
                 int n = parseInt(value, 0);
-                if (n < 1) throw new IllegalArgumentException("max-players must be at least 1.");
-                if (n < arena.getMinPlayers()) throw new IllegalArgumentException("max-players cannot be below min-players (" + arena.getMinPlayers() + ").");
+                if (n < 1) throw new IllegalArgumentException("max-players must be at least 1 (you gave " + n + ").");
+                if (n < arena.getMinPlayers()) throw new IllegalArgumentException("max-players cannot be below min-players (" + arena.getMinPlayers() + "). Lower min-players first: /oa config set " + arena.getName() + " min-players <n>.");
                 arena.setMaxPlayers(n);
             }
             case "match-duration" -> arena.setMatchDuration(parseInt(value, arena.getMatchDuration()));
@@ -277,7 +277,7 @@ public class ConfigCommand extends SubCommand {
         String v = value.trim().toLowerCase(Locale.ROOT);
         if (v.equals("true") || v.equals("yes") || v.equals("on") || v.equals("enabled")) return true;
         if (v.equals("false") || v.equals("no") || v.equals("off") || v.equals("disabled")) return false;
-        throw new IllegalArgumentException("Expected true or false, got: " + value);
+        throw new IllegalArgumentException("Expected true or false (also yes/no/on/off), got '" + value + "'.");
     }
 
     /** Strict: throws NumberFormatException; negatives rejected. */
@@ -294,7 +294,7 @@ public class ConfigCommand extends SubCommand {
     private <E extends Enum<E>> E strictEnum(Class<E> type, String value) {
         String v = value.trim().toUpperCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
         for (E e : type.getEnumConstants()) if (e.name().equals(v)) return e;
-        throw new IllegalArgumentException("Unknown value " + value + ". Valid: "
+        throw new IllegalArgumentException("Unknown value '" + value + "'. Valid values: "
                 + Arrays.stream(type.getEnumConstants()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")));
     }
 

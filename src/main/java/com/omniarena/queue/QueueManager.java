@@ -125,6 +125,12 @@ public class QueueManager {
             MessageUtil.send(player, "<red>You are not in a queue.");
             return false;
         }
+        if (qp.isParty() && !qp.getUuid().equals(player.getUniqueId())) {
+            MessageUtil.send(player, "<red>Only your party leader <yellow>" + qp.getNames().get(0)
+                    + "</yellow> can leave the queue for the party. Use <yellow>/party leave</yellow> to leave the "
+                    + "party (this also removes the party from the queue).");
+            return false;
+        }
         removeEntry(qp, qp.isParty() ? player.getName() + " left the queue" : null);
         MessageUtil.send(player, "<green>Left the queue.");
         return true;

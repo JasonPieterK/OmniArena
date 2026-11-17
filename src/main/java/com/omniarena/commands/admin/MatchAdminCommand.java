@@ -45,11 +45,11 @@ public class MatchAdminCommand extends SubCommand {
                 if (existing.isPresent()) {
                     var st = existing.get().getState();
                     if (st == com.omniarena.match.MatchState.RUNNING || st == com.omniarena.match.MatchState.ENDING) {
-                        MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + st.name().toLowerCase() + ".");
+                        MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + st.name().toLowerCase() + ". <gray>Use <white>/oa match stop " + arena.getName() + "</white> first if you need to restart it.");
                         return;
                     }
                     if (existing.get().getPlayerCount() < 1) {
-                        MessageUtil.send(sender, "<red>No players in <yellow>" + arena.getName() + "</yellow>.");
+                        MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no players, so a match can't start. <gray>Have players join with <white>/oa join " + arena.getName() + "</white>.");
                         return;
                     }
                     mm.startMatch(existing.get());
@@ -65,7 +65,7 @@ public class MatchAdminCommand extends SubCommand {
                     return;
                 }
                 if (match.get().getState() == com.omniarena.match.MatchState.ENDING) {
-                    MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already ending.");
+                    MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already ending. <gray>Wait for the reset to finish.");
                     return;
                 }
                 mm.endMatch(match.get(), new com.omniarena.match.MatchResult(

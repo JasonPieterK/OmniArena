@@ -68,8 +68,8 @@ public class CombatListener implements Listener {
         }
 
         // Valid PvP hit — tag both and show blood.
-        cm().tag(victim, attacker);
-        cm().tag(attacker, victim);
+        if (cfg().getConfig().getBoolean("pvp.combat.tag-on-damage", true)) cm().tag(victim, attacker);
+        if (cfg().getConfig().getBoolean("pvp.combat.tag-on-attack", true)) cm().tag(attacker, victim);
         if (cfg().getConfig().getBoolean("pvp.blood.enabled", true)) spawnBlood(victim);
     }
 
@@ -101,6 +101,7 @@ public class CombatListener implements Listener {
 
         String action = cfg().getConfig().getString("pvp.combat.combat-log-action", "KILL").toUpperCase();
         if (action.equals("KILL")) {
+            if (!cfg().getConfig().getBoolean("pvp.combat.drop-on-combat-log", true)) noDropDeaths.add(player.getUniqueId());
             player.setHealth(0.0); // dies on quit; drops handled by death event
         } else if (action.equals("COMMAND")) {
             for (String c : cfg().getConfig().getStringList("pvp.combat.combat-log-commands")) {
@@ -112,6 +113,28 @@ public class CombatListener implements Listener {
                     cfg().getMessage("combat-log").replace("{player}", player.getName())));
         }
         cm().untag(player);
+    }
+
+    /** Combat-loggers killed on quit whose inventory must not drop (pvp.combat.drop-on-combat-log: false). */
+    private final java.util.Set<java.util.UUID> noDropDeaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onCombatLogDeath(PlayerDeathEvent event) {
+        if (!noDropDeaths.remove(event.getEntity().getUniqueId())) return;
+        event.setKeepInventory(true);
+        event.setKeepLevel(true);
+        event.getDrops().clear();
+        event.setDroppedExp(0);
+    }
+
+    // ── Newbie protection: no item pickup ────────────────────────────────────────
+    @EventHandler(ignoreCancelled = true)
+    public void onNewbiePickup(org.bukkit.event.entity.EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player p)) return;
+        if (!enabled() || inArena(p)) return;
+        if (cfg().getConfig().getBoolean("pvp.newbie.block-pickup", false) && cm().isNewbie(p.getUniqueId())) {
+            event.setCancelled(true);
+        }
     }
 
     // ── Block commands while tagged ──────────────────────────────────────────────

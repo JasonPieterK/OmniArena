@@ -42,6 +42,11 @@ public class WebDashboardServer {
     private static final int MAX_BODY_BYTES = 1024 * 1024;
     private static final java.util.regex.Pattern ARENA_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
+    private static final class HttpError extends RuntimeException {
+        final int status;
+        HttpError(int status, String message) { super(message); this.status = status; }
+    }
+
     @FunctionalInterface
     private interface Handler { void handle(HttpExchange exchange) throws Exception; }
 
@@ -50,9 +55,16 @@ public class WebDashboardServer {
         server.createContext(path, exchange -> {
             try {
                 handler.handle(exchange);
+            } catch (HttpError e) {
+                try { err(exchange, e.status, e.getMessage()); } catch (Throwable ignored) {}
+            } catch (com.google.gson.JsonParseException | IllegalStateException | UnsupportedOperationException | ClassCastException e) {
+                // malformed / wrongly shaped JSON from the client
+                try { err(exchange, 400, "Invalid request body (expected a JSON object)."); } catch (Throwable ignored) {}
             } catch (Throwable t) {
-                plugin.getLogger().warning("[Web] Request failed for " + path + ": " + t);
-                try { send(exchange, 400, "{\"ok\":false}", "application/json; charset=utf-8"); } catch (Throwable ignored) {}
+                Throwable root = t instanceof java.util.concurrent.ExecutionException && t.getCause() != null ? t.getCause() : t;
+                plugin.getLogger().warning("[Web] Request failed for " + path + ": " + root);
+                boolean busy = root instanceof java.util.concurrent.TimeoutException;
+                try { err(exchange, busy ? 503 : 500, busy ? "Server is busy, try again." : "Internal error (see server console)."); } catch (Throwable ignored) {}
             }
         });
     }
@@ -65,8 +77,35 @@ public class WebDashboardServer {
 
     private String readBody(HttpExchange exchange) throws IOException {
         byte[] bytes = exchange.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
-        if (bytes.length > MAX_BODY_BYTES) throw new IOException("Request body too large");
+        if (bytes.length > MAX_BODY_BYTES) throw new HttpError(413, "Request body too large.");
         return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private JsonObject readJson(HttpExchange exchange) throws IOException {
+        JsonObject obj = gson.fromJson(readBody(exchange), JsonObject.class);
+        if (obj == null) throw new HttpError(400, "Request body must be a JSON object.");
+        return obj;
+    }
+
+    private String stringField(JsonObject o, String key) {
+        var e = o.get(key);
+        if (e == null || !e.isJsonPrimitive()) return "";
+        return e.getAsString().trim();
+    }
+
+    /** @return true when the method matches; otherwise sends 405 and returns false. */
+    private boolean requireMethod(HttpExchange exchange, String method) throws IOException {
+        if (method.equalsIgnoreCase(exchange.getRequestMethod())) return true;
+        exchange.getResponseHeaders().set("Allow", method);
+        err(exchange, 405, "Method not allowed; use " + method + ".");
+        return false;
+    }
+
+    private void err(HttpExchange exchange, int code, String message) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("ok", false);
+        body.addProperty("error", message);
+        send(exchange, code, gson.toJson(body), "application/json; charset=utf-8");
     }
 
     public WebDashboardServer(OmniArena plugin) {
@@ -84,9 +123,13 @@ public class WebDashboardServer {
             return;
         }
 
+        if (server != null) {
+            plugin.getLogger().info("[Web] Dashboard already running.");
+            return;
+        }
+        String bindAddress = plugin.getConfigManager().getConfig().getString("web.bind-address", "127.0.0.1");
+        int port = plugin.getConfigManager().getConfig().getInt("web.port", 8123);
         try {
-            String bindAddress = plugin.getConfigManager().getConfig().getString("web.bind-address", "127.0.0.1");
-            int port = plugin.getConfigManager().getConfig().getInt("web.port", 8123);
             server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
             ctx("/", this::handleRoot);
             ctx("/styles.css", exchange -> sendResource(exchange, "web/styles.css", "text/css; charset=utf-8"));
@@ -101,6 +144,7 @@ public class WebDashboardServer {
             ctx("/api/docs", this::handleDocs);
             ctx("/api/live-matches", this::handleLiveMatches);
             ctx("/api/players", this::handlePlayers);
+            ctx("/api/logout", this::handleLogout);
             executor = java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
                 Thread t = new Thread(r, "OmniArena-Web");
                 t.setDaemon(true);
@@ -109,20 +153,26 @@ public class WebDashboardServer {
             server.setExecutor(executor);
             server.start();
             plugin.getLogger().info("[Web] Dashboard running on " + bindAddress + ":" + port);
-        } catch (IOException e) {
-            plugin.getLogger().severe("[Web] Failed to start dashboard: " + e.getMessage());
+        } catch (java.net.BindException e) {
+            plugin.getLogger().severe("[Web] Cannot start dashboard: " + bindAddress + ":" + port + " is unavailable ("
+                    + e.getMessage() + "). Another program (or another server) is using that port. "
+                    + "Fix: set web.port in config.yml to a free port (or web.bind-address to a local address) and run /oa restart.");
+            abortStart();
+        } catch (IOException | IllegalArgumentException | SecurityException e) {
+            plugin.getLogger().severe("[Web] Failed to start dashboard on " + bindAddress + ":" + port + ": " + e
+                    + ". Check web.port / web.bind-address in config.yml.");
+            abortStart();
         }
     }
 
+    private void abortStart() {
+        if (server != null) { try { server.stop(0); } catch (Throwable ignored) {} server = null; }
+        if (executor != null) { executor.shutdownNow(); executor = null; }
+    }
+
     public void stop() {
-        if (server != null) {
-            server.stop(0);
-            server = null;
-        }
-        if (executor != null) {
-            executor.shutdownNow();
-            executor = null;
-        }
+        sessions.killAll();
+        abortStart(); // stops the server (releases the port immediately) and the worker pool
     }
 
     /** @return URL string, or null if session limit reached */
@@ -153,31 +203,39 @@ public class WebDashboardServer {
     }
 
     private void handleRoot(HttpExchange exchange) throws IOException {
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
+        if (!requireMethod(exchange, "GET")) return;
+        String path = exchange.getRequestURI().getPath();
+        if (!"/".equals(path) && !"/index.html".equals(path)) {
+            err(exchange, 404, "Not found.");
             return;
         }
         sendResource(exchange, "web/index.html", "text/html; charset=utf-8");
     }
 
+    private void handleLogout(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "POST")) return;
+        if (!authorize(exchange)) return;
+        sessions.revoke(extractToken(exchange));
+        send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
+    }
+
     private void handleState(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "GET")) return;
         if (!authorize(exchange)) return;
         ConfigSnapshot snapshot = onMain(schemaService::snapshot);
         send(exchange, 200, gson.toJson(snapshot), "application/json; charset=utf-8");
     }
 
     private void handleDocs(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "GET")) return;
         if (!authorize(exchange)) return;
         send(exchange, 200, docsCatalog.loadMarkdown(), "text/markdown; charset=utf-8");
     }
 
     private void handleApply(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "POST")) return;
         if (!authorize(exchange)) return;
-        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
-            return;
-        }
-        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
+        JsonObject payload = readJson(exchange);
         List<String> errors = onMain(() -> applyService.apply(payload, schemaService));
         if (!errors.isEmpty()) {
             JsonObject body = new JsonObject();
@@ -191,40 +249,47 @@ public class WebDashboardServer {
     }
 
     private void handleCreateArena(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "POST")) return;
         if (!authorize(exchange)) return;
-        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
+        final String arenaName = stringField(readJson(exchange), "name");
+        if (!ARENA_NAME.matcher(arenaName).matches()) {
+            err(exchange, 400, "Invalid arena name: use 1-32 letters, digits, '_' or '-'.");
             return;
         }
-        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
-        String name = payload != null && payload.has("name") ? payload.get("name").getAsString().trim() : "";
-        final String arenaName = name;
-        boolean created = ARENA_NAME.matcher(arenaName).matches() && onMain(() -> {
+        boolean created = onMain(() -> {
             if (plugin.getArenaManager().exists(arenaName)) return false;
             plugin.getArenaManager().create(arenaName);
             return true;
         });
         if (!created) {
-            send(exchange, 400, "{\"ok\":false}", "application/json; charset=utf-8");
+            err(exchange, 409, "An arena named '" + arenaName + "' already exists.");
             return;
         }
         send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
     }
 
     private void handleDeleteArena(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "POST")) return;
         if (!authorize(exchange)) return;
-        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
+        final String arenaName = stringField(readJson(exchange), "name");
+        if (!ARENA_NAME.matcher(arenaName).matches()) {
+            err(exchange, 400, "Invalid arena name.");
             return;
         }
-        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
-        String name = payload != null && payload.has("name") ? payload.get("name").getAsString().trim() : "";
-        final String arenaName = name;
-        boolean deleted = ARENA_NAME.matcher(arenaName).matches() && onMain(() -> plugin.getArenaManager().delete(arenaName));
-        send(exchange, deleted ? 200 : 404, deleted ? "{\"ok\":true}" : "{\"ok\":false}", "application/json; charset=utf-8");
+        String problem = onMain(() -> {
+            var arena = plugin.getArenaManager().get(arenaName).orElse(null);
+            if (arena == null) return "No arena named '" + arenaName + "'.";
+            var mm = com.omniarena.match.MatchManager.getInstance();
+            if (mm != null && mm.getMatch(arena).isPresent())
+                return "Arena '" + arenaName + "' has a match in progress; end it first (/oa match stop " + arenaName + ").";
+            return plugin.getArenaManager().delete(arenaName) ? null : "Could not delete '" + arenaName + "'.";
+        });
+        if (problem != null) { err(exchange, problem.startsWith("No arena") ? 404 : 409, problem); return; }
+        send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
     }
 
     private void handleLiveMatches(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "GET")) return;
         if (!authorize(exchange)) return;
         List<LiveMatchData> matches = onMain(() -> {
         List<LiveMatchData> result = new ArrayList<>();
@@ -242,6 +307,7 @@ public class WebDashboardServer {
     }
 
     private void handlePlayers(HttpExchange exchange) throws Exception {
+        if (!requireMethod(exchange, "GET")) return;
         if (!authorize(exchange)) return;
         String search = queryParams(exchange.getRequestURI()).get("search");
         List<PlayerStatsView> players = onMain(() -> {
@@ -321,7 +387,14 @@ public class WebDashboardServer {
         int wins = eloRating != null ? eloRating.getWins() : 0;
         int losses = eloRating != null ? eloRating.getLosses() : 0;
         int matches = wins + losses;
-        double kd = 0.0;
+        var statsMgr = plugin.getStatsManager();
+        var ps = statsMgr != null ? statsMgr.peekStats(player.getUniqueId()) : null;
+        double kd = ps != null ? ps.getKDRatio() : 0.0;
+        if (ps != null) {
+            wins = Math.max(wins, ps.getWins());
+            losses = Math.max(losses, ps.getLosses());
+            matches = Math.max(matches, ps.getWins() + ps.getLosses() + ps.getDraws());
+        }
         return new PlayerStatsView(
             player.getName(),
             player.getUniqueId().toString(),
@@ -330,10 +403,10 @@ public class WebDashboardServer {
             losses,
             kd,
             matches,
+            ps != null ? ps.getKills() : 0,
+            ps != null ? ps.getDeaths() : 0,
             0,
-            0,
-            0,
-            "Now"
+            "Online"
         );
     }
 
@@ -348,13 +421,39 @@ public class WebDashboardServer {
     }
 
     private boolean authorize(HttpExchange exchange) throws IOException {
-        String token = queryParams(exchange.getRequestURI()).get("token");
-        if (sessions.isValid(token)) return true;
-        send(exchange, 401, "Invalid or expired session.", "text/plain; charset=utf-8");
+        if (sessions.isValid(extractToken(exchange))) return true;
+        err(exchange, 401, "Invalid or expired session. Run /oa website in-game for a new link.");
         return false;
     }
 
+    /** Token from "Authorization: Bearer", "X-OmniArena-Token", or (legacy) the ?token= query parameter. */
+    private String extractToken(HttpExchange exchange) {
+        Headers h = exchange.getRequestHeaders();
+        String auth = h.getFirst("Authorization");
+        if (auth != null && auth.regionMatches(true, 0, "Bearer ", 0, 7)) return auth.substring(7).trim();
+        String custom = h.getFirst("X-OmniArena-Token");
+        if (custom != null && !custom.isBlank()) return custom.trim();
+        return queryParams(exchange.getRequestURI()).get("token");
+    }
+
+    private void secureHeaders(Headers headers) {
+        headers.set("Cache-Control", "no-store");
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("X-Frame-Options", "DENY");
+        headers.set("Referrer-Policy", "no-referrer"); // keep ?token= from leaking via Referer
+        headers.set("Cross-Origin-Resource-Policy", "same-origin"); // no CORS headers are ever sent: same-origin only
+        headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self'; connect-src 'self'; "
+                + "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; "
+                + "font-src 'self' https://unpkg.com https://fonts.gstatic.com; img-src 'self' data:; "
+                + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    }
+
     private void sendResource(HttpExchange exchange, String resourcePath, String contentType) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "GET");
+            err(exchange, 405, "Method not allowed; use GET.");
+            return;
+        }
         try (InputStream in = plugin.getResource(resourcePath)) {
             if (in == null) {
                 send(exchange, 404, "Missing resource: " + resourcePath, "text/plain; charset=utf-8");
@@ -363,7 +462,7 @@ public class WebDashboardServer {
             byte[] bytes = in.readAllBytes();
             Headers headers = exchange.getResponseHeaders();
             headers.set("Content-Type", contentType);
-            headers.set("Cache-Control", "no-store");
+            secureHeaders(headers);
             exchange.sendResponseHeaders(200, bytes.length);
             try (var os = exchange.getResponseBody()) {
                 os.write(bytes);
@@ -381,7 +480,7 @@ public class WebDashboardServer {
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             Headers headers = exchange.getResponseHeaders();
             headers.set("Content-Type", contentType);
-            headers.set("Cache-Control", "no-store");
+            secureHeaders(headers);
             exchange.sendResponseHeaders(code, bytes.length);
             try (var os = exchange.getResponseBody()) {
                 os.write(bytes);

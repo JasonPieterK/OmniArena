@@ -29,7 +29,7 @@ public class CreateArenaCommand extends SubCommand {
         }
         String name = args[0];
         if (!name.matches("[A-Za-z0-9_-]{1,32}")) {
-            MessageUtil.send(sender, "<red>Invalid arena name. Use 1-32 characters: letters, numbers, '_' or '-'.");
+            MessageUtil.send(sender, "<red>Invalid arena name <yellow>" + name + "</yellow>: arena names must be 1-32 characters using only letters, numbers, '_' or '-' (no spaces). <gray>Example: <white>/oa create duel_1</white>");
             return;
         }
         ArenaManager am = ArenaManager.getInstance();

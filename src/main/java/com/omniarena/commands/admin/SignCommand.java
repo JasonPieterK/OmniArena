@@ -55,7 +55,7 @@ public class SignCommand extends SubCommand {
                 if (sm.createSign(arenaOpt.get(), target)) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("sign-created").replace("{arena}", args[1]));
                 } else {
-                    MessageUtil.send(player, "<red>Target block is not a sign.");
+                    MessageUtil.send(player, "<red>The block you are looking at is not a sign (it is " + target.getType().name().toLowerCase() + "). <gray>Place a sign first, look directly at it (within 5 blocks) and run <white>/oa sign create " + args[1] + "</white> again.");
                 }
             }
             case "remove" -> {

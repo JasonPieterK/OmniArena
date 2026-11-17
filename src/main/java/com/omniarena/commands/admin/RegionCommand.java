@@ -77,14 +77,14 @@ public class RegionCommand extends SubCommand {
             case "set" -> {
                 ArenaManager am = ArenaManager.getInstance();
                 if (!am.hasFullSelection(uid)) {
-                    MessageUtil.send(player, "<red>You must select two points first using the selection wand.");
+                    MessageUtil.send(player, "<red>You have not selected both corners yet. <gray>Get the wand with <white>/oa wand</white>, left-click corner 1, right-click corner 2, then run <white>/oa region set " + arena.getName() + "</white> again.");
                     MessageUtil.send(player, "<gray>Use <yellow>/oa wand</yellow> to get the wand tool.");
                     return;
                 }
                 Location p1 = am.getPoint1(uid).get();
                 Location p2 = am.getPoint2(uid).get();
                 if (p1.getWorld() == null || p2.getWorld() == null || !p1.getWorld().equals(p2.getWorld())) {
-                    MessageUtil.send(player, "<red>Your selected points are in different worlds!");
+                    MessageUtil.send(player, "<red>Your two corners are in different worlds (" + p1.getWorld() + " vs " + p2.getWorld() + "); a region must be in a single world. <gray>Re-select both corners with <white>/oa wand</white> in the same world.");
                     return;
                 }
                 arena.setRegion(new com.omniarena.arena.ArenaRegion(p1, p2));

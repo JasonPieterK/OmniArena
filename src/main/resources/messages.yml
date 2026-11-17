@@ -113,7 +113,7 @@ kit-renamed: "<green>Kit <yellow>{old}</yellow> renamed to <yellow>{new}</yellow
 kit-set-public: "<green>Kit <yellow>{kit}</yellow> is now public."
 kit-set-private: "<yellow>Kit <yellow>{kit}</yellow> is now private."
 kit-cooldown: "<red>This kit is on cooldown for <yellow>{seconds}</yellow>s. <gray>Try again after the timer ends."
-kit-banned-item: "<red>Kit contains banned item(s): <yellow>{items}</yellow>. <gray>They were removed; edit <white>kits.banned-items</white> in config.yml to allow them."
+kit-banned-item: "<red>Kit contains banned item(s): <yellow>{items}</yellow>. <gray>They were removed; edit <white>kits.power-cap.banned-items</white> in config.yml to allow them."
 kit-no-permission: "<red>You don't have permission to use kit <yellow>{kit}</yellow>. <gray>Ask an admin for the permission node set with <white>/oa kit admin permission {kit} <node></white>."
 kit-lobby-only: "<red>You can only equip kits in the arena lobby. <gray>Join an arena with <white>/oa join <arena></white> and equip while waiting."
 kit-admin-set-public: "<green>Admin kit <yellow>{kit}</yellow> set public."

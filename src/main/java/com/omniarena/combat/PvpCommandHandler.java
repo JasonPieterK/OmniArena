@@ -50,7 +50,9 @@ public class PvpCommandHandler {
             return;
         }
         if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
-        boolean now = cm().togglePvp(p);
+        Boolean res = cm().selfTogglePvp(p);
+        if (res == null) return;
+        boolean now = res;
         MessageUtil.send(p, cfg().getMessage(now ? "pvp-enabled-self" : "pvp-disabled-self"));
     }
 

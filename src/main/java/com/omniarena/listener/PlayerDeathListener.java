@@ -104,6 +104,11 @@ public class PlayerDeathListener implements Listener {
                 plugin.getVisual().getSoundManager().playRevenge(killer);
             }
 
+            // Kill reward (suppressed for repeated kills on the same victim, see pvp.killabuse)
+            if (!plugin.getCombatManager().registerKillAndCheckAbuse(killer.getUniqueId(), victim.getUniqueId())) {
+                mm.getRewardHandler().onKill(killer, victim, match);
+            }
+
             // Killstreak
             KillstreakModule.getInstance().handleKill(killer, match);
 

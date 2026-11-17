@@ -45,22 +45,22 @@ public class ForceStartCommand extends SubCommand {
                 .orElse(null);
 
         if (match == null) {
-            MessageUtil.send(sender, "<red>No active match in arena <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>No match exists in arena <yellow>" + arenaName + "</yellow> yet, so there is nothing to force-start. <gray>A match is created when the first player joins: <white>/oa join " + arenaName + "</white>.");
             return;
         }
 
         if (match.getState() == MatchState.RUNNING) {
-            MessageUtil.send(sender, "<red>Match is already running in <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>The match in <yellow>" + arenaName + "</yellow> is already running. <gray>Stop it with <white>/oa match stop " + arenaName + "</white> if you want to restart.");
             return;
         }
 
         if (match.getState() == MatchState.ENDING) {
-            MessageUtil.send(sender, "<red>Match is ending in <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>The match in <yellow>" + arenaName + "</yellow> is ending right now. <gray>Wait for the arena to reset, then run <white>/oa force start " + arenaName + "</white> again.");
             return;
         }
 
         if (match.getPlayerCount() < 1) {
-            MessageUtil.send(sender, "<red>No players in <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arenaName + "</yellow> has no players, so a match can't start. <gray>At least 1 player must join first (<white>/oa join " + arenaName + "</white>).");
             return;
         }
 

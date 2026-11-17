@@ -138,6 +138,32 @@ public class CombatManager {
         pvpToggle.put(player.getUniqueId(), enabled);
     }
 
+    private final java.util.Map<UUID, Long> lastToggle = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Seconds left before this player may self-toggle PvP again (pvp.toggle.cooldown); 0 = ready. */
+    public int toggleCooldownLeft(Player player) {
+        int cd = cfg().getConfig().getInt("pvp.toggle.cooldown", 5);
+        Long last = lastToggle.get(player.getUniqueId());
+        if (cd <= 0 || last == null) return 0;
+        long left = last + cd * 1000L - System.currentTimeMillis();
+        return left <= 0 ? 0 : (int) Math.ceil(left / 1000.0);
+    }
+
+    /** Self-service toggle honouring pvp.toggle.enabled / cooldown; null result = refused (message sent). */
+    public Boolean selfTogglePvp(Player player) {
+        if (!cfg().getConfig().getBoolean("pvp.toggle.enabled", true)) {
+            MessageUtil.send(player, "<red>PvP toggling is disabled on this server.");
+            return null;
+        }
+        int left = toggleCooldownLeft(player);
+        if (left > 0) {
+            MessageUtil.send(player, "<red>Wait " + left + "s before toggling PvP again.");
+            return null;
+        }
+        lastToggle.put(player.getUniqueId(), System.currentTimeMillis());
+        return togglePvp(player);
+    }
+
     public boolean togglePvp(Player player) {
         boolean now = !isPvpEnabled(player);
         setPvp(player, now);

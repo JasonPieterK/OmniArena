@@ -67,9 +67,9 @@ public class LifecycleCommand extends SubCommand {
                     + plugin.getKitManager().getAllAdminKits().size() + " kit(s)");
         } catch (Exception e) {
             plugin.setStopped(true);
-            MessageUtil.send(sender, "<red>✗ Failed to start: " + e.getMessage());
-            plugin.getLogger().severe("Start failed: " + e.getMessage());
-            e.printStackTrace();
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to start. <gray>See the console for the full error, fix the cause (often a broken config.yml/arena file), then run <white>/oa start</white> again.");
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Start failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "). Fix the cause shown in the trace (commonly invalid YAML in plugins/OmniArena/*.yml) and run /oa start.", e);
         }
     }
 
@@ -121,9 +121,9 @@ public class LifecycleCommand extends SubCommand {
             MessageUtil.send(sender, "<green>✓ OmniArena stopped successfully");
             MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), canceled all tasks, data saved");
         } catch (Exception e) {
-            MessageUtil.send(sender, "<red>✗ Failed to stop: " + e.getMessage());
-            plugin.getLogger().severe("Stop failed: " + e.getMessage());
-            e.printStackTrace();
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to stop cleanly. <gray>See the console for the full error; data may not be saved: run <white>/oa stop</white> again or restart the server.");
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Stop failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "). Some data may not have been saved; retry /oa stop or restart the server.", e);
         }
     }
 

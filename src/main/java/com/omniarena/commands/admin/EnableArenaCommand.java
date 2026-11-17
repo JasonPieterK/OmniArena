@@ -36,11 +36,11 @@ public class EnableArenaCommand extends SubCommand {
             return;
         }
         if (a.getBattleSpawns().isEmpty()) {
-            MessageUtil.send(sender, "<red>Cannot enable: no battle spawns set. Use <yellow>/oa spawn set " + a.getName() + " player</yellow>.");
+            MessageUtil.send(sender, "<red>Cannot enable arena <yellow>" + a.getName() + "</yellow>: it has no BATTLE spawns, so players would have nowhere to fight. <gray>Stand where players should spawn and run <white>/oa spawn set " + a.getName() + " BATTLE</white>, then retry <white>/oa enable " + a.getName() + "</white>.");
             return;
         }
         if (!a.getRegion().isDefined()) {
-            MessageUtil.send(sender, "<yellow>Warning: arena has no region set.");
+            MessageUtil.send(sender, "<yellow>Warning: arena <white>" + a.getName() + "</white> has no region, so block protection and regen won't work. <gray>Fix: <white>/oa wand</white> then <white>/oa region set " + a.getName() + "</white>.");
         }
         ArenaManager.getInstance().enable(a);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-enabled").replace("{arena}", args[0]));

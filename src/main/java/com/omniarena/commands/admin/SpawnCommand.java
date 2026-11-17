@@ -41,7 +41,7 @@ public class SpawnCommand extends SubCommand {
         if (args.length >= 3 && !action.equals("list")) {
             try { SpawnType.valueOf(args[2].toUpperCase()); }
             catch (IllegalArgumentException e) {
-                MessageUtil.send(sender, "<red>Unknown spawn type <yellow>" + args[2] + "</yellow>. Use BATTLE, LOBBY or SPECTATOR.");
+                MessageUtil.send(sender, "<red>Unknown spawn type <yellow>" + args[2] + "</yellow>. <gray>Valid types: <white>BATTLE, LOBBY, SPECTATOR</white>. Example: <white>/oa spawn " + action + " " + arena.getName() + " BATTLE</white>");
                 return;
             }
         }
@@ -81,7 +81,7 @@ public class SpawnCommand extends SubCommand {
                         int idx = Integer.parseInt(args[3]) - 1;
                         List<Location> locs = arena.getSpawns(type);
                         if (idx < 0 || idx >= locs.size()) {
-                            MessageUtil.send(sender, "<red>No " + type.name() + " spawn #" + args[3] + ".");
+                            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no " + type.name() + " spawn #" + args[3] + " (it has " + locs.size() + "). <gray>List them with <white>/oa spawn list " + arena.getName() + "</white>.");
                             return;
                         }
                         locs.remove(idx);

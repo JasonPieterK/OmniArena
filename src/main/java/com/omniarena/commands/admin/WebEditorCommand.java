@@ -22,7 +22,7 @@ public class WebEditorCommand extends SubCommand {
     public void execute(CommandSender sender, String[] args) {
         WebDashboardServer web = plugin.getWebDashboardServer();
         if (web == null) {
-            MessageUtil.send(sender, "<red>Web dashboard is disabled.");
+            MessageUtil.send(sender, "<red>The web dashboard is disabled or failed to start. <gray>Set <white>web.enabled: true</white> in config.yml, run <white>/oa reload</white> (or restart), and check the console for port/bind errors.");
             return;
         }
 
@@ -30,7 +30,7 @@ public class WebEditorCommand extends SubCommand {
         if (url == null) {
             int active = web.activeSessionCount();
             int max = web.getSessions().getMaxSessions();
-            MessageUtil.send(sender, "<red>Session limit reached (<yellow>" + active + "/" + max + "</yellow> active).");
+            MessageUtil.send(sender, "<red>Session limit reached (<yellow>" + active + "/" + max + "</yellow> active), so no new editor link can be created. <gray>Raise the limit in <white>web.max-sessions</white> in config.yml, or wait for sessions to expire.");
             MessageUtil.send(sender, "<gray>Kill existing sessions first: <yellow>/oa override killweb");
             return;
         }

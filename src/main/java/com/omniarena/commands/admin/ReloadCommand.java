@@ -44,8 +44,10 @@ public class ReloadCommand extends SubCommand {
                     SignManager.getInstance().updateAllSigns(arena));
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-reloaded"));
         } catch (Exception e) {
-            plugin.getLogger().severe("Reload failed: " + e.getMessage());
-            MessageUtil.send(sender, "<red>Reload failed: " + e.getMessage());
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Reload failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "). Most likely a YAML syntax error in plugins/OmniArena/config.yml or messages.yml: check indentation/quotes "
+                    + "(validate at yamllint.com) or delete the file to regenerate defaults, then run /oa reload again.", e);
+            MessageUtil.send(sender, "<red>Reload failed. <gray>Most likely a syntax error in <white>config.yml</white> or <white>messages.yml</white> (bad indentation/quotes). See the console for the exact line; fix it or delete the file to regenerate defaults, then run <white>/oa reload</white>.");
         }
     }
 

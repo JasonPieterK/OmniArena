@@ -41,7 +41,7 @@ public class ModuleCommand extends SubCommand {
             return;
         }
         if (!KNOWN_MODULES.contains(module)) {
-            MessageUtil.send(sender, "<red>Unknown module <yellow>" + args[2] + "</yellow>. Valid: " + String.join(", ", KNOWN_MODULES));
+            MessageUtil.send(sender, "<red>Unknown module <yellow>" + args[2] + "</yellow>. <gray>Valid modules: <white>" + String.join(", ", KNOWN_MODULES) + "</white>. Example: <white>/oa module " + action + " " + arena.getName() + " " + KNOWN_MODULES.iterator().next() + "</white>");
             return;
         }
 
