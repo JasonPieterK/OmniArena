@@ -237,7 +237,14 @@ Ranked flag and ELO (`MatchManager.endMatch`):
   food, saturation, XP, effects, flight, speeds, invisibility and (if `arena.inventory-restore`)
   inventory/armor for players *and* spectators. Always leave through `leaveArena`/`leaveSpectator`
   so state is restored. A stale mapping (match gone) still restores state.
-- `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`.
+- `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`, and refuses arenas reserved by
+  an in-progress tournament (`isArenaReserved`) for anyone not in the current pending match.
+- `Arena.lives` (arena file key `lives`, 0 = off): `PlayerDeathListener` decrements
+  `Match.getLivesMap()`, respawns while > 0, eliminates at 0; `BoardManager` shows lives. No command
+  or dashboard setting writes it yet.
+- `EntityDamageListener` isolates arenas: damage between a player in a match and an outsider/other
+  match/spectator is cancelled. `PlayerDeathListener.onRespawn` forces respawns inside the arena.
+- `PlayerDropItemListener` cancels manual drops when the arena rule `item-drop` is off.
 - Player *i* spawns at `arena.getBattleSpawn(i)` (index modulo size). Respawns use a random spawn.
 - `cleanupMatch` uses `activeMatches.remove(arenaName, match)`: the delayed `resetMatch` of an old
   match must never tear down a newer one on the same arena (fixed in 79f37fe).
@@ -448,8 +455,9 @@ bundled `messages.yml`.
 8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin
    owns `/kit`.
 9. `CommandManager.shouldUsePlayerCommand` routes `kit` for admins to the *player* command unless the
-   first argument is one of `setpublic|setprivate|icon|description|cooldown|permission|rename` (check
-   the set when adding actions; the dispatcher's set is the authority); `AdminKitCommand`'s `create`,
+   first argument is one of `setpublic|setprivate|icon|description|cooldown|permission` (check the set
+   when adding actions; the dispatcher's set is the authority: `AdminKitCommand` also implements
+   `rename`, but the dispatcher does not route it, so `/oa kit rename` always hits the player command); `AdminKitCommand`'s `create`,
    `delete`, `equip`, `list` are therefore unreachable. Player-initiated equips go through
    `KitManager.tryEquip` (lobby-only inside arenas, permission, persisted cooldown): do not call
    `equipKit` directly for player actions.

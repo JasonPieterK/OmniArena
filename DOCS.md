@@ -88,6 +88,13 @@ on, mid-match join off, spectators allowed, friendly fire off, block break/place
 hunger drain off, modules `killstreak` + `combo`. (The global `arena.default-*` keys in `config.yml`
 are not read; see section 18.)
 
+### Lives
+
+The arena file accepts `lives: <n>` (default 0). With `lives > 0` every player has that many lives
+in any game type: each death costs one and shows the remaining count, the player respawns while
+lives remain and is eliminated (spectator) at 0, overriding the game type's respawn behaviour.
+There is no `/oa config` key or dashboard field for it yet; edit `arenas/<name>.yml` and reload.
+
 ### Spawns
 
 Battle spawns are numbered in the order they were set. At match start **player *i* takes battle
@@ -223,6 +230,14 @@ console; prefix `console:` is accepted explicitly, and `player:` runs the comman
 No leading slash. Example: `match.end-commands: ["oa regen {arena}"]` rebuilds the arena after
 every match.
 
+### Isolation and respawns
+
+Arena fighters cannot damage players outside their match (including melee and projectiles), and
+outsiders, spectators and other matches cannot damage them. A dead player in an arena respawns
+inside it: lobby spawn outside the fighting phase, a battle spawn in a respawning mode while
+fighting, the spectator spawn once eliminated. Tournament-reserved arenas (see section 13) refuse
+joins from anyone who is not in the current pending tournament match.
+
 ### Item drops
 
 Manual item drops (the drop key) are cancelled in arenas whose `item-drop` rule is off
@@ -340,7 +355,9 @@ Files in `admin-kits/<name>.yml`. On every load OmniArena installs any missing d
 Admin metadata commands (permission `omniarena.admin.kit`): `/oa kit setpublic <name>`,
 `setprivate <name>`, `icon <name> <MATERIAL>` (must be an item), `description <name> <text>`,
 `cooldown <name> <seconds>` (enforced per player and persisted in `kit-cooldowns.yml`),
-`permission <name> <node>` (`none` or `-` clears it), `rename <old> <new>`. Unknown kit names are
+`permission <name> <node>` (`none` or `-` clears it). `AdminKitCommand` also implements
+`rename <old> <new>`, but `CommandManager.shouldUsePlayerCommand` does not list `rename`, so for an
+admin `/oa kit rename` currently reaches the *player* rename (your own kits). Unknown kit names are
 reported. Note that `/oa kit create`, `delete`, `equip` and `list` are routed to the *player* kit
 command even for admins; the admin versions are unreachable through `/oa`. Create preset kits by placing a YAML file in `admin-kits/` and
 restarting or running `/oa start`.
@@ -484,7 +501,9 @@ displays ratings; the web Players tab shows them.
   and, if the queue key names an admin kit, `queueKit` is set. If joining fails both players are
   re-queued with their original wait time. If a ranked match collapses before it starts, the
   remaining player is put back into the queue by `MatchManager`.
-- A manual `/oa join` or a tournament launch removes the player from any queue.
+- A manual `/oa join` or a tournament launch removes the player from any queue. Queue matchmaking
+skips arenas that are reserved by an in-progress tournament, arenas with `max-players` below 2,
+and does nothing while lockdown is on.
 - Outside that re-queue path, `joinQueue(Player, kitName)` has no caller in this build, see
   section 21.
 
@@ -541,7 +560,8 @@ Single elimination on one arena (one live match at a time). Command `/oa tournam
 
 ### Bracket
 
-Seed order is join order. For a non power-of-two field the top seeds receive byes in round 1
+While a tournament is IN_PROGRESS its arena is **reserved**: `MatchManager.joinArena` refuses anyone
+who is not in the current round's pending match. Seed order is join order. For a non power-of-two field the top seeds receive byes in round 1
 (for 6 players: 2 byes, 2 real matches). Each launch picks the first pending match, removes both
 players from any queue, joins them to the arena via the normal join path, and waits for the match
 to end before launching the next (`match.end-delay + 2` seconds later). A 5-second safety tick
@@ -777,7 +797,7 @@ All under `plugins/OmniArena/`:
 - `arenas/<name>.yml`: `name`, `enabled`, `game-mode`, `min-players`, `max-players`,
   `match-duration`, `countdown`, `chat-mode`, `announcements`, `mid-match-join`, `spectator-allowed`,
   `spawn-protection`, `goal.type|value`, `respawn.type|delay`, `rules.*`, `team.enabled|count`,
-  `modules.enabled`, `region.world|min-x..max-z`, `spawns.battle|lobby|spectator` (each a list
+  `modules.enabled`, `lives`, `region.world|min-x..max-z`, `spawns.battle|lobby|spectator` (each a list
   of `world:x:y:z:yaw:pitch`), `signs` (same format), `end-commands`, `visual.*`. The bundled
   `example.yml` also shows `team.colors` and `classes`, which the loader does not read.
 - `snapshots/<arena-lowercase>.yml`: **format v2**:
@@ -854,7 +874,7 @@ skip the rest.
   global `visual.*`, `rewards.*`, `database.*` are unimplemented or inert, as described in the
   sections above.
 - Admin preset kits cannot be created, deleted or equipped through `/oa kit` (player version
-  wins); manage them as files (metadata and `rename` do work through `/oa kit`).
+  wins); manage them as files (the metadata actions work through `/oa kit`; `/oa kit rename` for admins is routed to the player command).
 - `omniarena.bet` is required by `/oa bet` but not declared in `plugin.yml`, so non-OP players are
   denied unless a permissions plugin grants it.
 - The Docs tab serves a separate bundled copy of this documentation.

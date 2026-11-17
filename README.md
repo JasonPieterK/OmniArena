@@ -44,6 +44,8 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
 - Match lifecycle: lobby wait, countdown, numbered spawn assignment (player *i* gets spawn *i*),
   match timer, end conditions (kill target or last alive; team arenas score by team), timeout
   resolution (strict kill leader wins, otherwise a draw), end commands, delayed reset.
+- Optional per-arena `lives` (arena file key): respawn until lives run out, then eliminated.
+- Arena fighters are isolated from outsiders (no damage in or out of the match).
 - Full player-state save and restore around a match: location, game mode, health, food, XP, potion
   effects, flight, speeds, invisibility, and (if `arena.inventory-restore`) inventory and armor.
 - Spectating (`/oa spectate`), mid-match join (per arena), inventory save and restore, spawn
@@ -70,7 +72,7 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
 - Admin (preset) kits loaded from `admin-kits/*.yml`; ten defaults are installed on first run
   (warrior, archer, tank, assassin, mage, healer, pyro, ninja, juggernaut, gunner). Preset kits can
   be made public and given an icon, description, cooldown (enforced per player, persisted in
-  `kit-cooldowns.yml`), and permission node, and can be renamed.
+  `kit-cooldowns.yml`), and permission node.
 
 **Server-wide combat (PvPManager-style)**
 - Combat tagging, combat-log punishment (KILL / COMMAND / NOTHING), per-player and global PvP
@@ -269,7 +271,7 @@ While the plugin is stopped (`/oa stop`) every command except `/oa start` replie
 | `/oa debug <arena>` | `omniarena.admin.arena` | Match debug state |
 | `/oa regen ...` | `omniarena.admin.arena` | Snapshot, restore, style, batch, toggles |
 | `/oa sign <create\|remove\|list>` | `omniarena.admin.sign` | Join signs |
-| `/oa kit <setpublic\|setprivate\|icon\|description\|cooldown\|permission\|rename> ...` | `omniarena.admin.kit` | Preset kit metadata (`permission <kit> none` clears) |
+| `/oa kit <setpublic\|setprivate\|icon\|description\|cooldown\|permission> ...` | `omniarena.admin.kit` | Preset kit metadata (`permission <kit> none` clears) |
 | `/oa match <start\|stop\|reset> <arena>` | `omniarena.admin.match` | Start, end (no winner), or reset (remove everyone from) the arena's match |
 | `/oa force start <arena>`, `/oa forcewin <arena> <player\|team>` | `omniarena.admin.match` | Force start / force a winner |
 | `/oa override <action>` | `omniarena.admin.override` | Force end/win/start, evacuate, freeze, lockdown, purge, god, broadcast, snapshotall, resetstats, killweb |
@@ -536,6 +538,6 @@ These are accurate as of the current code and are tracked so users are not surpr
 - **Arena whitelist/blacklist** are consulted but no command fills them and they are not saved.
 - **Admin kit creation by command:** `/oa kit create|delete|equip|list` resolve to the player kit
   commands even for admins. Admin preset kits are created by placing YAML files in `admin-kits/`
-  and managed with the metadata subcommands (including `rename`).
+  and managed with the metadata subcommands.
 - `omniarena.bet` is required but not declared in `plugin.yml` (see Permission nodes).
 - The matrix builds (Spigot, Bukkit, Purpur, 26.3/26.1/1.21.x jars) are being set up.
