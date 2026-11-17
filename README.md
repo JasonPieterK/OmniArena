@@ -42,8 +42,10 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
   Gladiator). Each defines its loadout, win condition, respawn behaviour, and special rules
   (no natural regen, ring-out).
 - Match lifecycle: lobby wait, countdown, numbered spawn assignment (player *i* gets spawn *i*),
-  match timer, end conditions (kill target or last alive), draw/timeout handling, end commands,
-  delayed reset.
+  match timer, end conditions (kill target or last alive; team arenas score by team), timeout
+  resolution (strict kill leader wins, otherwise a draw), end commands, delayed reset.
+- Full player-state save and restore around a match: location, game mode, health, food, XP, potion
+  effects, flight, speeds, invisibility, and (if `arena.inventory-restore`) inventory and armor.
 - Spectating (`/oa spectate`), mid-match join (per arena), inventory save and restore, spawn
   protection, respawn types (instant, delayed, wave setting stored), first blood, revenge,
   killstreaks and combo modules, power-up module.
@@ -62,10 +64,13 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
 
 **Kits**
 - Player kits (`/kit`): save, equip, rename, delete, preview, and share with another player (60 s
-  accept window). Slot limits by config and `omniarena.kit.slots.5` / `.10`.
+  accept window). Slot limits by config and `omniarena.kit.slots.5` / `.10`. Kit names: letters,
+  digits, `_`, `-`, `.`, up to 32 characters. Inside an arena kits can only be equipped while the
+  match is waiting or starting (lobby).
 - Admin (preset) kits loaded from `admin-kits/*.yml`; ten defaults are installed on first run
   (warrior, archer, tank, assassin, mage, healer, pyro, ninja, juggernaut, gunner). Preset kits can
-  be made public and given an icon, description, cooldown field, and permission node.
+  be made public and given an icon, description, cooldown (enforced per player, persisted in
+  `kit-cooldowns.yml`), and permission node, and can be renamed.
 
 **Server-wide combat (PvPManager-style)**
 - Combat tagging, combat-log punishment (KILL / COMMAND / NOTHING), per-player and global PvP
@@ -78,9 +83,11 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
 - ELO ratings (K = 32, default 1000, floor 100) persisted to `elo.yml`; updated for ranked matches
   (wins, losses, draws, forfeits).
 - Rating-based queue matchmaker (1 s tick, expanding rating window). See
-  [Known limitations](#known-limitations) regarding player entry points.
-- Single-elimination tournaments with byes, walkover on offline players, automatic draw
-  resolution, Vault prizes for 1st/2nd/3rd, and persistence of in-progress brackets across restarts.
+  [Known limitations](#known-limitations): no command or sign currently enters the queue.
+- Single-elimination tournaments with byes, walkover after a grace period for offline players
+  (`tournament.walkover-grace-seconds`), automatic draw resolution, Vault prizes for 1st/2nd/3rd, a
+  5-second safety tick that relaunches stalled matches, and persistence of in-progress brackets
+  across restarts.
 - Match betting through Vault: pooled payouts, betting window, refunds for aborted or unbacked
   matches.
 - Party system (`/party`): create, invite (60 s expiry), accept, decline, leave, kick, transfer
@@ -176,6 +183,7 @@ Web dashboard defaults: it starts on `127.0.0.1:8123` (local only). Read
 
 ```text
 /oa wand                       get the selection wand (default: wooden hoe, tools.wand-material)
+                               (/oa region wand gives the same item)
 (left-click one corner, right-click the opposite corner)
 /oa create Arena1              new arena (letters, digits, _ and -; 1-32 chars)
 /oa region set Arena1          save the selection; also takes the regen snapshot
@@ -187,7 +195,8 @@ Web dashboard defaults: it starts on `127.0.0.1:8123` (local only). Read
 /oa sign create Arena1         look at a placed sign within 5 blocks
 ```
 
-A new arena starts enabled (state WAITING). Players join with `/oa join Arena1` (or `/join`), by
+A new arena starts enabled (state WAITING). `/oa enable` refuses an arena that has no battle
+spawns, and `/oa disable` removes everyone from the arena. Players join with `/oa join Arena1` (or `/join`), by
 right-clicking a join sign, or via tournaments. Matches start when the arena's minimum players
 (default 2) are present and the countdown finishes.
 
@@ -234,11 +243,11 @@ While the plugin is stopped (`/oa stop`) every command except `/oa start` replie
 | `/oa list` | `omniarena.use` | List arenas with state and players |
 | `/oa info <arena>` | `omniarena.use` | Arena details |
 | `/oa stats [player]`, `/oa stats global [kills\|wins\|kd]` | `omniarena.use` | Lifetime stats and leaderboards |
-| `/oa ready` | `omniarena.use` | Prints a "ready" message only (no readiness logic) |
+| `/oa ready` | `omniarena.use` | Status message only: matches start automatically when the minimum players are in |
 | `/oa help [guide]` | `omniarena.use` | Help and guides |
 | `/kit` and `/oa kit` | `omniarena.kit.use` | Kit menu and subcommands |
 | `/party <action>` | `omniarena.use` | Party management |
-| `/oa bet place <arena> <player> <amount>`, `cancel`, `info [arena]` | `omniarena.bet` (see note) | Betting |
+| `/oa bet place <arena> <player> <amount>`, `cancel`, `info [arena]` | `omniarena.bet` (see note) | Betting; OPs always pass |
 | `/oa tournament <action>` | `omniarena.tournament.create` / `.admin` | Tournaments |
 | `/oa pvp [player]`, `pvpstatus`, `newbie [disable]` | `omniarena.pvp` | Combat toggles and status |
 
@@ -260,9 +269,10 @@ While the plugin is stopped (`/oa stop`) every command except `/oa start` replie
 | `/oa debug <arena>` | `omniarena.admin.arena` | Match debug state |
 | `/oa regen ...` | `omniarena.admin.arena` | Snapshot, restore, style, batch, toggles |
 | `/oa sign <create\|remove\|list>` | `omniarena.admin.sign` | Join signs |
-| `/oa kit <setpublic\|setprivate\|icon\|description\|cooldown\|permission> ...` | `omniarena.admin.kit` | Preset kit metadata |
-| `/oa match <start\|stop> <arena>` | `omniarena.admin.match` | Start or stop a running match (`reset` is listed in tab-complete but does nothing) |
-| `/oa override <action>` | `omniarena.admin.override` (see note) | Force end/win/start, evacuate, freeze, lockdown, purge, god, broadcast, snapshotall, resetstats, killweb |
+| `/oa kit <setpublic\|setprivate\|icon\|description\|cooldown\|permission\|rename> ...` | `omniarena.admin.kit` | Preset kit metadata (`permission <kit> none` clears) |
+| `/oa match <start\|stop\|reset> <arena>` | `omniarena.admin.match` | Start, end (no winner), or reset (remove everyone from) the arena's match |
+| `/oa force start <arena>`, `/oa forcewin <arena> <player\|team>` | `omniarena.admin.match` | Force start / force a winner |
+| `/oa override <action>` | `omniarena.admin.override` | Force end/win/start, evacuate, freeze, lockdown, purge, god, broadcast, snapshotall, resetstats, killweb |
 | `/oa website` | `omniarena.admin` | Create a dashboard session link |
 | `/oa settings [set <key> <value>]` | `omniarena.admin.reload` | Settings GUI / scripting |
 | `/oa reload` | `omniarena.admin.reload` | Reload config and messages |
@@ -287,15 +297,15 @@ specific node.
 | `omniarena.tournament.admin` | op | Manage any tournament, delete, setprize |
 | `omniarena.admin` | op | Everything below |
 | `omniarena.admin.arena` / `.kit` / `.match` / `.sign` / `.stats` / `.reload` | op | Admin areas |
-| `omniarena.join.bypass` | op | Declared in `plugin.yml`; the join path does not currently check it |
+| `omniarena.join.bypass` | op | Bypass the arena whitelist and the full-arena check on `/oa join` |
+| `omniarena.admin.override` | op | `/oa override` (child of `omniarena.admin`) |
 | `omniarena.kit.slots.5` / `.10` | false | Larger personal kit limit |
 
-Note: two nodes are checked in code but are not declared in `plugin.yml`: `omniarena.bet`
-(declared as the required node of `/oa bet`) and `omniarena.admin.override` (required by
-`/oa override`). Operators and holders of `omniarena.admin` always pass the override check. Grant
-`omniarena.bet` explicitly if your permissions plugin treats undeclared nodes as false, but note
-that `/oa bet` is not enforced centrally by the dispatcher beyond the command's own checks.
-Individual preset kits may require their own configured permission node.
+Note: `/oa bet` requires the node `omniarena.bet`, which is **not declared in `plugin.yml`**. The
+`/oa` dispatcher now checks each player subcommand's required node for non-OP players, so
+regular players cannot use `/oa bet` until your permissions plugin grants `omniarena.bet` (OPs and
+the console are unaffected). Individual preset kits may require their own configured permission
+node.
 
 ---
 
@@ -416,6 +426,7 @@ Sections that the code actually reads:
 | `integrations` | `tab.takeover` |
 | `web` | `enabled`, `bind-address`, `port`, `public-url`, `session-minutes`, `max-sessions` |
 | `betting` | `enabled`, `min-bet`, `max-bet`, `bet-window-seconds` |
+| `tournament` | `walkover-grace-seconds` (default 60) |
 
 Keys present in `config.yml` but **not currently read** by any code: `plugin.language`,
 `plugin.metrics`, `database.*`, `arena.default-*`, `arena.lobby-timeout`, `arena.spectator-allowed`,
@@ -450,6 +461,7 @@ the shaded MySQL/Hikari libraries are placeholders).
 | `player-kits/<uuid>.yml` | Personal kits |
 | `stats.yml` | Lifetime stats per UUID (kills, deaths, wins, losses, assists, draws, time-played) |
 | `elo.yml` | `ratings.<uuid>`: name, rating, wins, losses, draws, highestRating |
+| `kit-cooldowns.yml` | Per-player preset-kit cooldown expiries |
 | `tournaments.yml` | Active tournaments (registration and in-progress, including bracket rounds and winners). Finished and cancelled tournaments are removed |
 
 Writes: stats are saved asynchronously when the plugin is enabled and inline during shutdown. ELO
@@ -484,13 +496,13 @@ kits are saved synchronously.
 | Symptom | Likely cause and fix |
 |---------|----------------------|
 | `/oa ...` says OmniArena is stopped | Someone ran `/oa stop`. Run `/oa start` (the only command that works while stopped). |
-| Cannot join an arena | Arena disabled, lockdown active (`/oa override unlockdown`), arena not in WAITING/STARTING state, or you are banned/not whitelisted. |
+| Cannot join an arena | Arena disabled, lockdown active (`/oa override unlockdown`), arena not in WAITING/STARTING state (RUNNING only with mid-match join), arena full, you are in a queue, or you are not whitelisted (`omniarena.join.bypass` skips whitelist and full checks). |
 | Match never starts | Fewer players than `min-players` (default 2). Tournaments need the arena's min players <= 2. Check with `/oa info <arena>` and `/oa debug <arena>`. |
 | Players spawn on top of each other | Fewer battle spawns than players: add spawns (`/oa spawn set <arena> BATTLE`). Spawn *i* goes to player *i*; with fewer spawns than players the list wraps around (players share pads). |
 | `/oa region set` says select two points | Use the wand (needs `omniarena.admin.arena`; item from `tools.wand-material`). Both points must be in the same world. |
 | Arena does not rebuild after a match | Regen is manual. Take a snapshot (`/oa region set` does it, or `/oa regen snapshot <arena>`) and run `/oa regen <arena>`. |
 | "No snapshot" on regen | `snapshots/<arena>.yml` missing; re-run the snapshot. |
-| Betting says unavailable | Vault or an economy provider is missing at plugin start. Install both and restart. |
+| Betting says unavailable | Vault or an economy provider is missing at plugin start. Install both and restart. Non-OP players also need `omniarena.bet` (see Permission nodes). |
 | Dashboard link refused | `web.enabled: false`, port in use (see log `[Web] Failed to start dashboard`), or session limit reached (`/oa override killweb`). |
 | Dashboard "Invalid or expired session" | Token older than `web.session-minutes` or revoked: run `/oa website` again. |
 | Config change has no effect | The key is not read by the code (see list above), or it needs `/oa reload` / restart (`web.session-minutes`, `web.max-sessions`). |
@@ -508,20 +520,22 @@ individually guarded, so a failure in one save does not skip the others.
 These are accurate as of the current code and are tracked so users are not surprised:
 
 - **No player entry point to the queue or ELO views.** `QueueManager` (rating matchmaking, ranked
-  matches) and `EloManager` (ratings, leaderboard) are fully implemented and wired into the match
-  lifecycle, but no command, GUI or sign calls `QueueManager.joinQueue`, and no command displays
-  ELO. ELO therefore only changes for matches flagged ranked, which only the queue creates.
-  The web Players tab shows ELO, wins and losses from `elo.yml`.
+  matches) and `EloManager` (ratings, leaderboard) are implemented and wired into the match
+  lifecycle (a ranked match that collapses before starting even re-queues the remaining player),
+  but no command, GUI or sign calls `QueueManager.joinQueue` for a first join, and no command
+  displays ELO. ELO therefore only changes for matches flagged ranked, which only the queue
+  creates. The web Players tab shows ELO, wins and losses from `elo.yml`.
 - **Per-arena `goal.type` is ignored by the engine.** The win condition comes from the arena's
   game type; only `goal.value` (when > 0) overrides the game type's default kill target.
 - **Respawn type WAVE** behaves like a 1 second respawn; `respawn.delay` applies to DELAYED only.
-- **`/oa ready`** only prints a confirmation. **`/oa match reset`** is a no-op.
 - **Party system** stands alone (create/invite/manage); parties do not join matches or queues as
   a group.
 - **Rewards** (`rewards.*`) are not implemented; Vault is used only for betting and tournament
   prizes.
 - **Database mode** (`database.*`) is not implemented; everything is YAML.
+- **Arena whitelist/blacklist** are consulted but no command fills them and they are not saved.
 - **Admin kit creation by command:** `/oa kit create|delete|equip|list` resolve to the player kit
   commands even for admins. Admin preset kits are created by placing YAML files in `admin-kits/`
-  and managed with the metadata subcommands.
+  and managed with the metadata subcommands (including `rename`).
+- `omniarena.bet` is required but not declared in `plugin.yml` (see Permission nodes).
 - The matrix builds (Spigot, Bukkit, Purpur, 26.3/26.1/1.21.x jars) are being set up.
