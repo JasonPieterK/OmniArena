@@ -43,6 +43,12 @@ public class PartyManager {
         }
     }
 
+    /** A queued party is a single queue unit: any change to its makeup removes it from the queue. */
+    private void dequeueParty(Party party, String reason) {
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null && party != null) qm.removePartyFromQueue(new ArrayList<>(party.getMembers()), reason);
+    }
+
     /**
      * Create a new party
      */
@@ -69,6 +75,8 @@ public class PartyManager {
             MessageUtil.send(leader, "<red>You are not a party leader.");
             return false;
         }
+
+        dequeueParty(party, "the party was disbanded");
 
         // Notify all members
         for (UUID member : party.getMembers()) {
@@ -156,6 +164,8 @@ public class PartyManager {
             return false;
         }
 
+        dequeueParty(party, player.getName() + " joined the party");
+
         // Add to party
         party.addMember(player.getUniqueId(), player.getName());
         playerToParty.put(player.getUniqueId(), leader.getUniqueId());
@@ -212,6 +222,8 @@ public class PartyManager {
             return disbandParty(player);
         }
 
+        dequeueParty(party, player.getName() + " left the party");
+
         // Remove from party
         party.removeMember(player.getUniqueId());
         playerToParty.remove(player.getUniqueId());
@@ -242,6 +254,8 @@ public class PartyManager {
             MessageUtil.send(leader, "<red>That player is not in your party.");
             return false;
         }
+
+        dequeueParty(party, target.getName() + " was kicked from the party");
 
         party.removeMember(target.getUniqueId());
         playerToParty.remove(target.getUniqueId());

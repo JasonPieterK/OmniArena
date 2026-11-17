@@ -312,13 +312,22 @@ public class MatchManager {
                 && (match.getState() == MatchState.WAITING || match.getState() == MatchState.STARTING)
                 && match.getPlayerCount() < effectiveMin(match)) {
             String queue = match.getQueueName();
+            List<Player> stranded = new ArrayList<>();
             for (UUID uuid : new ArrayList<>(match.getPlayers())) {
                 Player other = Bukkit.getPlayer(uuid);
                 if (other == null) continue;
                 leaveArena(other);
-                if (queue != null && com.omniarena.queue.QueueManager.getInstance() != null) {
+                stranded.add(other);
+            }
+            var qm = com.omniarena.queue.QueueManager.getInstance();
+            var pm = com.omniarena.party.PartyManager.getInstance();
+            if (queue != null && qm != null) {
+                for (Player other : stranded) {
+                    // Parties re-queue as a unit through their leader; other members just wait for it
+                    var party = pm != null ? pm.getParty(other) : null;
+                    if (party != null && party.getSize() > 1 && !party.isLeader(other.getUniqueId())) continue;
                     MessageUtil.send(other, "<yellow>Your opponent left. Returning you to the queue.");
-                    com.omniarena.queue.QueueManager.getInstance().joinQueue(other, queue);
+                    qm.joinQueue(other, queue);
                 }
             }
         }
