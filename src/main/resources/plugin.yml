@@ -124,6 +124,7 @@ permissions:
       omniarena.admin.kit: true
       omniarena.admin.match: true
       omniarena.admin.sign: true
+      omniarena.admin.hologram: true
       omniarena.admin.stats: true
       omniarena.admin.reload: true
       omniarena.admin.override: true
@@ -142,6 +143,10 @@ permissions:
 
   omniarena.admin.sign:
     description: Create/remove arena signs
+    default: op
+
+  omniarena.admin.hologram:
+    description: Create/remove/move leaderboard holograms
     default: op
 
   omniarena.admin.stats:

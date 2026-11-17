@@ -136,6 +136,9 @@ signs:
   glow-effect: true  # place glowstone behind arena signs
   update-interval: 20  # ticks between sign refreshes
 
+holograms:
+  refresh-seconds: 30  # how often leaderboard holograms update their text in place
+
 visual:
   titles: true
   sounds: true

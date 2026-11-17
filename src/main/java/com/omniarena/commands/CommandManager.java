@@ -45,6 +45,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "forcewin",      new ForceWinCommand(plugin));
         reg(adminCommands, "regen",         new RegenCommand(plugin));
         reg(adminCommands, "sign",          new SignCommand(plugin));
+        reg(adminCommands, "hologram",      new HologramCommand(plugin));
         reg(adminCommands, "kit",           new AdminKitCommand(plugin));
         reg(adminCommands, "adminkit",      new AdminKitCommand(plugin));
         reg(adminCommands, "tp",            new TeleportArenaCommand(plugin));
