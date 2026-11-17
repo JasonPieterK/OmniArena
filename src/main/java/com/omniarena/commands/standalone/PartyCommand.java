@@ -1,6 +1,7 @@
 package com.omniarena.commands.standalone;
 
 import com.omniarena.OmniArena;
+import com.omniarena.config.ConfigManager;
 import com.omniarena.party.PartyManager;
 import com.omniarena.util.MessageUtil;
 import org.bukkit.command.Command;
@@ -30,7 +31,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("This command is for players only.");
+            com.omniarena.util.MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("player-only"));
             return true;
         }
 
@@ -50,12 +51,12 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "invite" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party invite <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party invite <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.invitePlayer(player, target);
@@ -71,24 +72,24 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "kick" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party kick <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party kick <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.kickPlayer(player, target);
             }
             case "leader" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party leader <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party leader <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.setLeader(player, target);
@@ -96,7 +97,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             case "info" -> {
                 com.omniarena.party.PartyManager.Party party = partyManager.getParty(player);
                 if (party == null) {
-                    MessageUtil.send(player, "<red>You are not in a party.");
+                    MessageUtil.send(player, "<red>You are not in a party. <gray>Create one with <white>/party create</white> or accept an invite with <white>/party accept</white>.");
                 } else {
                     MessageUtil.send(player, "<yellow>Party Info:");
                     MessageUtil.send(player, "<gray>Leader: <yellow>" + party.getLeaderName());

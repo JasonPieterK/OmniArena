@@ -28,7 +28,7 @@ public class ReadyCommand extends SubCommand {
             return;
         }
         if (MatchManager.getInstance().isSpectating(player)) {
-            MessageUtil.send(player, "<red>Spectators cannot ready up.");
+            MessageUtil.send(player, "<red>Spectators cannot ready up because they are not playing. <gray>Leave spectating with <white>/oa leave</white> and join the arena with <white>/oa join <arena></white> to play.");
             return;
         }
         // Matches start automatically via the arena countdown once min-players is reached.

@@ -3,39 +3,26 @@
 
 plugin:
   debug: false
-  language: en
-  metrics: true  # bStats telemetry (disable: false)
 
 tools:
   wand-material: WOODEN_HOE  # item used as the region selection wand
 
-database:
-  enabled: false
-  type: YAML  # YAML or MYSQL
-  mysql:
-    host: localhost
-    port: 3306
-    database: omniarena
-    username: root
-    password: changeme
-    pool-size: 10
-    connection-timeout: 30000
-
 arena:
+  # default-* and the options below seed NEW arenas (per-arena files override them)
   default-min-players: 2
   default-max-players: 16
   default-countdown: 10
   default-match-duration: 600  # seconds
   default-game-mode: DEATHMATCH
-  lobby-timeout: 120  # seconds waiting for players before abort
+  lobby-timeout: 120  # seconds below min players before the lobby is closed (0 = never)
   spectator-allowed: true
   mid-match-join: false
   respawn-delay: 3  # seconds
   spawn-protection: 3  # seconds of invulnerability on spawn
   inventory-restore: true  # restore player gear on leave
+  persist-player-state: true  # save pre-arena player state to disk so crashes can't lose items
   persist-player-state: true  # also write each player's pre-arena state to plugins/OmniArena/player-states/<uuid>.yml (async) so a crash cannot lose inventories; restored + deleted on next join
-  teleport-back-on-leave: true
-  region-protection: true  # prevent block damage outside match
+  region-protection: true  # block break/place inside arena regions while no match is running (admins bypass)
 
 match:
   end-commands: []  # Commands run on match end. Use {winner}, {loser}, {arena}, {mode}
@@ -99,7 +86,6 @@ pvp:
     enabled: true
     max-kills: 3              # kills on the same victim before it stops counting
     time-window: 300         # seconds the kill window spans
-    cooldown: 600
   respawn-protection:
     enabled: true
     duration: 5              # seconds of invulnerability after respawn
@@ -118,11 +104,13 @@ pvp:
   disabled-worlds: []        # worlds where PvP is fully off
 
 rewards:
-  enabled: false
+  enabled: false  # money needs Vault (integrations.vault)
   kill-money: 10.0
   win-money: 50.0
   kill-xp: 5
   win-xp: 20
+  win-commands: []   # console commands run for each winner; {player}, {arena}
+  kill-commands: []  # console commands run per kill; {player}, {victim}, {arena}
 
 kits:
   player-kits-enabled: true
@@ -135,6 +123,9 @@ kits:
       - COMMAND_BLOCK
       - BARRIER
       - SPAWNER
+      - CHAIN_COMMAND_BLOCK
+      - REPEATING_COMMAND_BLOCK
+      - STRUCTURE_BLOCK
   sharing-enabled: true
 
 signs:
@@ -149,10 +140,8 @@ visual:
   boss-bar: true
   action-bar: true
   holograms: true
-  damage-indicators: true
   killstreak-titles: true
   kill-announcements: true
-  team-colors: true
   victory-fireworks: true
   countdown-sounds: true
   spectator-invisibility: true
@@ -182,8 +171,6 @@ integrations:
   placeholderapi: true
   worldguard: true
   luckperms: true
-  discordsrv: false
-  discordsrv-channel: "arena-results"
   tab:
     # TAB (https://modrinth.com/plugin/tab-was-taken) compatibility.
     # When takeover is true, OmniArena stops drawing its own sidebar + bossbar
@@ -192,19 +179,6 @@ integrations:
     #   %omniarena_arena_kills%, %omniarena_alive%, %omniarena_players%,
     #   %omniarena_time_left%, %omniarena_team%, %omniarena_team_color% (+ lifetime stats)
     takeover: false
-
-anticheat:
-  whitelist-arenas: true  # notify anticheat plugins during matches
-  notify-plugins:
-    - NoCheatPlus
-    - Matrix
-    - Grim
-
-performance:
-  async-stats-save: true
-  async-region-check: true
-  region-check-interval: 5  # ticks
-  hologram-update-interval: 40  # ticks
 
 web:
   enabled: true

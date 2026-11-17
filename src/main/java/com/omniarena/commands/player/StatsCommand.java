@@ -38,7 +38,7 @@ public class StatsCommand extends SubCommand {
                     return;
                 }
                 if (args.length < 2) {
-                    MessageUtil.send(sender, "<red>Usage: /oa stats reset <player>");
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa stats reset <player>"));
                     return;
                 }
                 OfflinePlayer resetTarget = Bukkit.getPlayerExact(args[1]);

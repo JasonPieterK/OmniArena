@@ -11,6 +11,14 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.Tag;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Chest;
+import org.bukkit.block.Container;
+import org.bukkit.block.Sign;
+import org.bukkit.block.sign.Side;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -25,6 +33,7 @@ import org.bukkit.util.Vector;
 import java.io.File;
 import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Block-based regen animations: each type places temporary "preview" blocks
@@ -44,8 +53,30 @@ public class BlockRestoreModule {
     private static final int ANIM_BATCH_SIZE = 400;
     // Ultra-fast batch sizes for visual animations with descent effects
     private static final int ULTRA_FAST_ANIM_BATCH_SIZE = 1200;
+    // Block comparisons per tick while looking for blocks that differ from the snapshot
+    private static final int SCAN_PER_TICK = 40000;
+    // Vertical runs are split into pieces this long so animations keep block-level granularity
+    private static final int MAX_PIECE_LEN = 8;
 
     private static final Random RNG = new Random();
+
+    // Blocks whose tile-entity contents are snapshotted/restored (container items, sign text)
+    private static final Set<Material> CONTAINER_MATS = EnumSet.noneOf(Material.class);
+    static {
+        for (Material m : Material.values()) {
+            if (m.isLegacy() || !m.isBlock()) continue;
+            String n = m.name();
+            if (n.endsWith("SHULKER_BOX") || n.equals("CHEST") || n.equals("TRAPPED_CHEST") || n.equals("BARREL")
+                    || n.equals("HOPPER") || n.equals("DISPENSER") || n.equals("DROPPER") || n.equals("FURNACE")
+                    || n.equals("BLAST_FURNACE") || n.equals("SMOKER") || n.equals("BREWING_STAND")) {
+                CONTAINER_MATS.add(m);
+            }
+        }
+    }
+
+    private static boolean isTileMaterial(Material m) {
+        return CONTAINER_MATS.contains(m) || Tag.ALL_SIGNS.isTagged(m);
+    }
 
     // Cap on concurrent decorative falling-block entities, so a big arena
     // regen never floods the server with thousands of entities at once.
@@ -61,7 +92,11 @@ public class BlockRestoreModule {
     // Active regens per arena (lowercase name) -> finalizer that cancels and completes instantly.
     private final Map<String, Runnable> activeRegens = new java.util.concurrent.ConcurrentHashMap<>();
     // Callbacks of restore() calls made while the same arena was already restoring.
-    private final Map<String, List<Runnable>> queuedCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, List<Waiter>> queuedCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
+    // Arenas currently being snapshotted (lowercase name)
+    private final Set<String> snapshotting = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // Human-readable reason of the last failed restore/snapshot per arena
+    private final Map<String, String> lastErrors = new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<BukkitTask> snapshotTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Set<FallingBlock> descenderEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile boolean shuttingDown = false;
@@ -78,76 +113,149 @@ public class BlockRestoreModule {
         return snapshotFile(arenaName).exists();
     }
 
+    /** True while a restore for this arena is running (including chunk preloading). */
+    public boolean isRegenerating(String arenaName) {
+        return activeRegens.containsKey(arenaName.toLowerCase());
+    }
+
+    /** Reason of the last failed restore/snapshot of this arena, or null. Includes a fix instruction. */
+    public String getLastError(String arenaName) {
+        return lastErrors.get(arenaName.toLowerCase());
+    }
+
     public void createSnapshot(Arena arena, Runnable onComplete) {
+        createSnapshot(arena, onComplete, null);
+    }
+
+    /** Snapshots the arena region over several ticks. onFail receives a human-readable reason. */
+    public void createSnapshot(Arena arena, Runnable onComplete, Consumer<String> onFail) {
+        final String arenaName = arena.getName();
+        final String key = arenaName.toLowerCase();
         ArenaRegion region = arena.getRegion();
-        if (!region.isDefined()) { if (onComplete != null) onComplete.run(); return; }
+        if (!region.isDefined()) { snapFail(key, onFail, "Arena " + arenaName + " has no region set."); return; }
         World world = Bukkit.getWorld(region.getWorldName());
         if (world == null) {
-            plugin.getLogger().warning("Cannot snapshot arena " + arena.getName() + ": world not loaded.");
-            if (onComplete != null) onComplete.run();
+            snapFail(key, onFail, "World '" + region.getWorldName() + "' of arena " + arenaName + " is not loaded.");
+            return;
+        }
+        if (activeRegens.containsKey(key)) {
+            snapFail(key, onFail, "Arena " + arenaName + " is being regenerated right now; wait for it to finish.");
+            return;
+        }
+        if (!snapshotting.add(key)) {
+            snapFail(key, onFail, "A snapshot of arena " + arenaName + " is already running.");
             return;
         }
         shuttingDown = false;
         final int minX = region.getMinX(), maxX = region.getMaxX();
-        final int minY = region.getMinY(), maxY = region.getMaxY();
+        // Clamp to the world's build height (e.g. -64..319) so out-of-range Y never produces bogus runs
+        final int minY = Math.max(region.getMinY(), world.getMinHeight());
+        final int maxY = Math.min(region.getMaxY(), world.getMaxHeight() - 1);
         final int minZ = region.getMinZ(), maxZ = region.getMaxZ();
+        if (minY > maxY || minX > maxX || minZ > maxZ) {
+            snapshotting.remove(key);
+            snapFail(key, onFail, "Region of arena " + arenaName + " is empty or outside the world height limits.");
+            return;
+        }
         final int height = maxY - minY + 1;
         final int columnsPerTick = Math.max(1, SNAPSHOT_BLOCKS_PER_TICK / Math.max(1, height));
-        final String arenaName = arena.getName();
         final String worldName = region.getWorldName();
 
         // Palette + vertical run-length encoding: identical consecutive blocks in a column share one run.
         final Map<String, Integer> paletteIndex = new HashMap<>();
         final List<String> palette = new ArrayList<>();
+        final List<Boolean> tileFlags = new ArrayList<>();
         final Map<BlockData, Integer> bdCache = new HashMap<>();
         final List<int[]> runs = new ArrayList<>(); // x, z, y0, len, paletteIdx
+        final List<String> tiles = new ArrayList<>(); // "x,y,z|C|b64" / "x,y,z|S|b64|b64"
         final int[] cursor = {minX, minZ};
         final BukkitTask[] holder = new BukkitTask[1];
 
         Runnable step = () -> {
-            int cols = 0;
-            while (cols < columnsPerTick && cursor[0] <= maxX) {
-                int x = cursor[0], z = cursor[1];
-                int runStart = minY, runIdx = -1;
-                for (int y = minY; y <= maxY; y++) {
-                    Block b = world.getBlockAt(x, y, z);
-                    BlockData bd = b.getBlockData();
-                    Integer idx = bdCache.get(bd);
-                    if (idx == null) {
-                        String key = b.getType().name() + "|" + bd.getAsString();
-                        idx = paletteIndex.get(key);
-                        if (idx == null) { idx = palette.size(); palette.add(key); paletteIndex.put(key, idx); }
-                        bdCache.put(bd, idx);
-                    }
-                    if (idx != runIdx) {
-                        if (runIdx >= 0) runs.add(new int[]{x, z, runStart, y - runStart, runIdx});
-                        runStart = y; runIdx = idx;
-                    }
+            try {
+                if (shuttingDown || Bukkit.getWorld(worldName) != world) {
+                    abortSnapshot(holder[0], key);
+                    snapFail(key, onFail, "World '" + worldName + "' was unloaded or the plugin stopped during the snapshot.");
+                    return;
                 }
-                if (runIdx >= 0) runs.add(new int[]{x, z, runStart, maxY - runStart + 1, runIdx});
-                cols++;
-                if (++cursor[1] > maxZ) { cursor[1] = minZ; cursor[0]++; }
+                int cols = 0;
+                while (cols < columnsPerTick && cursor[0] <= maxX) {
+                    int x = cursor[0], z = cursor[1];
+                    int runStart = minY, runIdx = -1;
+                    for (int y = minY; y <= maxY; y++) {
+                        Block b = world.getBlockAt(x, y, z);
+                        BlockData bd = b.getBlockData();
+                        Integer idx = bdCache.get(bd);
+                        if (idx == null) {
+                            String pk = b.getType().name() + "|" + bd.getAsString();
+                            idx = paletteIndex.get(pk);
+                            if (idx == null) {
+                                idx = palette.size(); palette.add(pk); paletteIndex.put(pk, idx);
+                                tileFlags.add(isTileMaterial(b.getType()));
+                            }
+                            bdCache.put(bd, idx);
+                        }
+                        if (tileFlags.get(idx)) {
+                            String t = captureTile(b);
+                            if (t != null) tiles.add(t);
+                        }
+                        if (idx != runIdx) {
+                            if (runIdx >= 0) runs.add(new int[]{x, z, runStart, y - runStart, runIdx});
+                            runStart = y; runIdx = idx;
+                        }
+                    }
+                    if (runIdx >= 0) runs.add(new int[]{x, z, runStart, maxY - runStart + 1, runIdx});
+                    cols++;
+                    if (++cursor[1] > maxZ) { cursor[1] = minZ; cursor[0]++; }
+                }
+                if (cursor[0] <= maxX) return;
+                if (holder[0] != null) { holder[0].cancel(); snapshotTasks.remove(holder[0]); }
+                cursor[0] = Integer.MAX_VALUE;
+                // Serialise + write the file off the main thread
+                AsyncUtil.runAsyncThenSync(() -> {
+                    try {
+                        saveSnapshot(arenaName, worldName, palette, runs, tiles);
+                        return runs.size();
+                    } catch (Exception ex) {
+                        plugin.getLogger().severe("Snapshot write failed for " + arenaName + ": " + ex);
+                        return -1;
+                    }
+                }, count -> {
+                    snapshotting.remove(key);
+                    if (count < 0) {
+                        snapFail(key, onFail, "Could not write the snapshot file (check disk space/permissions of plugins/OmniArena/snapshots).");
+                        return;
+                    }
+                    lastErrors.remove(key);
+                    plugin.getLogger().info("Snapshot saved for arena " + arenaName + " (" + count + " runs, " + tiles.size() + " tile entities).");
+                    if (onComplete != null) onComplete.run();
+                });
+            } catch (Throwable ex) {
+                abortSnapshot(holder[0], key);
+                plugin.getLogger().severe("Snapshot of " + arenaName + " failed: " + ex);
+                snapFail(key, onFail, "Snapshot failed with an internal error: " + ex.getClass().getSimpleName());
             }
-            if (cursor[0] <= maxX) return;
-            if (holder[0] != null) { holder[0].cancel(); snapshotTasks.remove(holder[0]); }
-            cursor[0] = Integer.MAX_VALUE;
-            // Serialise + write the file off the main thread
-            AsyncUtil.runAsyncThenSync(() -> {
-                saveSnapshot(arenaName, worldName, palette, runs);
-                return runs.size();
-            }, count -> {
-                plugin.getLogger().info("Snapshot saved for arena " + arenaName + " (" + count + " runs).");
-                if (onComplete != null) onComplete.run();
-            });
         };
 
         BukkitTask task = AsyncUtil.runSyncRepeating(step, 0L, 1L);
         if (task == null) { // plugin not enabled: nothing to slice against
+            snapshotting.remove(key);
             plugin.getLogger().warning("Cannot snapshot arena " + arenaName + ": plugin disabled.");
             return;
         }
         holder[0] = task;
         snapshotTasks.add(task);
+    }
+
+    private void abortSnapshot(BukkitTask task, String key) {
+        if (task != null) { try { task.cancel(); } catch (Exception ignored) {} snapshotTasks.remove(task); }
+        snapshotting.remove(key);
+    }
+
+    private void snapFail(String key, Consumer<String> onFail, String msg) {
+        plugin.getLogger().warning(msg);
+        lastErrors.put(key, msg);
+        if (onFail != null) onFail.accept(msg);
     }
 
     /**
@@ -159,6 +267,8 @@ public class BlockRestoreModule {
         shuttingDown = true;
         for (BukkitTask t : new ArrayList<>(snapshotTasks)) { try { t.cancel(); } catch (Exception ignored) {} }
         snapshotTasks.clear();
+        snapshotting.clear();
+        // Each finalizer places what is left and then runs the completion callbacks (so arenas leave RESETTING)
         for (Map.Entry<String, Runnable> en : new ArrayList<>(activeRegens.entrySet())) {
             try { en.getValue().run(); }
             catch (Exception ex) { plugin.getLogger().warning("Regen finalize failed for " + en.getKey() + ": " + ex.getMessage()); }
@@ -179,203 +289,508 @@ public class BlockRestoreModule {
 
     public void restore(Arena arena, BiConsumer<Integer, Integer> onProgress,
                         Runnable onComplete, Runnable onFail) {
-        File file = snapshotFile(arena.getName());
-        if (!file.exists()) { if (onFail != null) onFail.run(); return; }
-        final String key = arena.getName().toLowerCase();
+        final String name = arena.getName();
+        final String key = name.toLowerCase();
+        File file = snapshotFile(name);
+        if (!file.exists()) {
+            restoreFail(key, onFail, "No snapshot file for arena " + name + ". Fix: stand in the arena setup and run /oa regen snapshot " + name + ".");
+            return;
+        }
+        if (!arena.getRegion().isDefined()) {
+            restoreFail(key, onFail, "Arena " + name + " has no region. Fix: set it with /oa region, then run /oa regen snapshot " + name + ".");
+            return;
+        }
+        if (snapshotting.contains(key)) {
+            restoreFail(key, onFail, "A snapshot of arena " + name + " is still being written; try again in a moment.");
+            return;
+        }
         shuttingDown = false;
         // Guard: a second restore for the same arena just runs its completion when the first finishes
         if (activeRegens.putIfAbsent(key, () -> {}) != null) {
-            if (onComplete != null) queuedCallbacks.computeIfAbsent(key, k -> new ArrayList<>()).add(onComplete);
+            queuedCallbacks.computeIfAbsent(key, k -> new ArrayList<>()).add(new Waiter(onComplete, onFail));
             return;
         }
-        final Runnable origComplete = onComplete, origFail = onFail;
-        onComplete = () -> {
+        lastErrors.remove(key);
+        final java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean(false);
+        final Runnable fComplete = () -> {
+            if (!finished.compareAndSet(false, true)) return;
             activeRegens.remove(key);
-            if (origComplete != null) origComplete.run();
-            List<Runnable> q = queuedCallbacks.remove(key);
-            if (q != null) q.forEach(Runnable::run);
+            List<Waiter> q = queuedCallbacks.remove(key);
+            safeRun(onComplete);
+            if (q != null) q.forEach(w -> safeRun(w.ok()));
         };
-        onFail = () -> {
+        final Runnable fFail = () -> {
+            if (!finished.compareAndSet(false, true)) return;
             activeRegens.remove(key);
-            queuedCallbacks.remove(key);
-            if (origFail != null) origFail.run();
+            List<Waiter> q = queuedCallbacks.remove(key);
+            safeRun(onFail);
+            if (q != null) q.forEach(w -> safeRun(w.fail()));
         };
-        final Runnable fComplete = onComplete, fFail = onFail;
+        final ArenaRegion region = arena.getRegion();
+        final String regionWorld = region.getWorldName();
+        final RegenAnimationType t = getAnimationType();
+        final double cx = (region.getMinX() + region.getMaxX()) / 2.0;
+        final double cy = (region.getMinY() + region.getMaxY()) / 2.0;
+        final double cz = (region.getMinZ() + region.getMaxZ()) / 2.0;
+        final int[] bounds = {region.getMinX(), region.getMinY(), region.getMinZ(),
+                region.getMaxX(), region.getMaxY(), region.getMaxZ()};
         AsyncUtil.runAsyncThenSync(
             () -> {
-                FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-                List<BlockEntry> loaded = loadEntries(cfg);
-                // Sort off the main thread: ordering a large region is O(n log n)
-                RegenAnimationType t = getAnimationType();
-                return new LoadResult(cfg.getString("world"), orderEntries(loaded, arena.getRegion(), t), t);
+                try {
+                    FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+                    Plan plan = loadPlan(cfg, t, cx, cy, cz);
+                    return new LoadResult(plan, null);
+                } catch (Throwable ex) {
+                    return new LoadResult(null, ex.toString());
+                }
             },
             result -> {
-                World world = result.worldName() != null ? Bukkit.getWorld(result.worldName()) : null;
-                if (shuttingDown) { fFail.run(); return; }
-                if (world == null || result.entries().isEmpty()) {
-                    plugin.getLogger().warning("Cannot restore arena " + arena.getName());
+                if (shuttingDown) { restoreFail(key, null, "Regen of " + name + " cancelled (plugin stopping)."); fFail.run(); return; }
+                String fix = " Fix: run /oa regen snapshot " + name + " to recreate it.";
+                if (result.plan() == null || result.plan().order.length == 0) {
+                    restoreFail(key, null, "Snapshot file of arena " + name + " is corrupt or empty"
+                            + (result.error() != null ? " (" + result.error() + ")" : "") + "." + fix);
                     fFail.run();
                     return;
                 }
-                RegenAnimationType type = result.type();
-                List<BlockEntry> ordered = result.entries();
-                startPlacing(key, world, ordered.iterator(), ordered.size(), type, onProgress, fComplete);
+                Plan plan = result.plan();
+                World world = plan.worldName != null ? Bukkit.getWorld(plan.worldName) : null;
+                if (world == null) {
+                    restoreFail(key, null, "World '" + plan.worldName + "' of the snapshot is not loaded. Load the world, or re-snapshot if the arena moved." );
+                    fFail.run();
+                    return;
+                }
+                if (regionWorld != null && !regionWorld.equals(plan.worldName)) {
+                    restoreFail(key, null, "Snapshot of arena " + name + " was taken in world '" + plan.worldName
+                            + "' but the arena region is now in '" + regionWorld + "'." + fix);
+                    fFail.run();
+                    return;
+                }
+                preloadChunks(world, plan, () -> {
+                    if (shuttingDown) { releaseTickets(world, plan); fFail.run(); return; }
+                    startPlacing(key, world, plan, bounds, result.plan().type, onProgress, fComplete, fFail);
+                });
             }
         );
     }
 
+    private void restoreFail(String key, Runnable onFail, String msg) {
+        plugin.getLogger().warning(msg);
+        lastErrors.put(key, msg);
+        safeRun(onFail);
+    }
+
+    private void safeRun(Runnable r) {
+        if (r == null) return;
+        try { r.run(); } catch (Exception ex) { plugin.getLogger().warning("Regen callback failed: " + ex); }
+    }
+
+    /** Loads every chunk the snapshot touches (async) and pins them with plugin tickets for the restore. */
+    private void preloadChunks(World world, Plan plan, Runnable then) {
+        List<java.util.concurrent.CompletableFuture<?>> futures = new ArrayList<>();
+        for (long ck : plan.chunks) {
+            int cx = (int) (ck >> 32), cz = (int) ck;
+            try { futures.add(world.getChunkAtAsync(cx, cz, true)); } catch (Throwable ignored) {}
+        }
+        Runnable go = () -> {
+            for (long ck : plan.chunks) {
+                try { world.addPluginChunkTicket((int) (ck >> 32), (int) ck, plugin); plan.ticketed = true; }
+                catch (Throwable ignored) {}
+            }
+            then.run();
+        };
+        if (futures.isEmpty()) { go.run(); return; }
+        java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .whenComplete((v, ex) -> {
+                    if (AsyncUtil.runSync(go) == null) { /* plugin disabled: nothing more to do */ }
+                });
+    }
+
+    private void releaseTickets(World world, Plan plan) {
+        if (!plan.ticketed) return;
+        plan.ticketed = false;
+        for (long ck : plan.chunks) {
+            try { world.removePluginChunkTicket((int) (ck >> 32), (int) ck, plugin); } catch (Throwable ignored) {}
+        }
+    }
+
     // ── Placement engine ───────────────────────────────────────────────────────
 
-    private void startPlacing(String key, World world, Iterator<BlockEntry> iterator, int total,
-                              RegenAnimationType type,
-                              BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
-
-        // Non-animated types: fast direct placement, no preview
-        if (type == RegenAnimationType.INSTANT_RESTORE) {
-            fastPlace(key, world, iterator, total, onProgress, onComplete);
-            return;
-        }
+    private void startPlacing(String key, World world, Plan plan, int[] bounds, RegenAnimationType type,
+                              BiConsumer<Integer, Integer> onProgress, Runnable onComplete, Runnable onFail) {
+        final boolean instant = type == RegenAnimationType.INSTANT_RESTORE;
+        final int total = (int) Math.min(Integer.MAX_VALUE, plan.totalBlocks);
 
         int configBatch = Math.max(1, ConfigManager.getInstance().getConfig()
                 .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
         // Visual types use higher batch for faster, smoother animations
-        int batchSize = Math.min(configBatch,
+        final int batchSize = instant ? configBatch : Math.min(configBatch,
                 (type == RegenAnimationType.ARMORED_DESCENT || type == RegenAnimationType.RAIN_OF_LIGHT || type == RegenAnimationType.METEOR_STRIKE ||
                  type == RegenAnimationType.BINARY_FILL || type == RegenAnimationType.QUANTUM_MESH)
                 ? ULTRA_FAST_ANIM_BATCH_SIZE : ANIM_BATCH_SIZE);
 
-        boolean sfx = ConfigManager.getInstance().getConfig().getBoolean("regen.animation.sound", true);
+        final boolean sfx = !instant && ConfigManager.getInstance().getConfig().getBoolean("regen.animation.sound", true);
 
-        BukkitTask[] taskHolder = new BukkitTask[1];
-        int[] restored = {0};
+        final BukkitTask[] taskHolder = new BukkitTask[1];
+        final java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean(false);
 
         // Queue: each AnimBatch holds the preview block locations + the real entries
-        Deque<AnimBatch> queue = new ArrayDeque<>();
-        Map<String, BlockData> dataCache = new HashMap<>();
+        final Deque<AnimBatch> queue = new ArrayDeque<>();
 
-        activeRegens.put(key, () -> {
+        // Stray entities (arrows, dropped items, primed TNT, falling blocks...) are cleared before and after
+        clearTransientEntities(world, bounds);
+
+        final Runnable finish = () -> {
+            if (!done.compareAndSet(false, true)) return;
             if (taskHolder[0] != null) taskHolder[0].cancel();
-            for (AnimBatch ab : queue) {
-                for (PreviewBlock pb : ab.preview()) {
-                    Block b = world.getBlockAt(pb.loc());
-                    if (b.getType() == pb.mat()) b.setType(Material.AIR, false);
-                }
-                for (BlockEntry e : ab.entries()) placeEntry(world, e, dataCache);
-            }
+            releaseTickets(world, plan);
+            clearTransientEntities(world, bounds);
+            if (onProgress != null) { try { onProgress.accept(total, total); } catch (Exception ignored) {} }
+            onComplete.run();
+        };
+
+        final Runnable cleanupPreviews = () -> {
+            for (AnimBatch ab : queue) removePreviews(world, ab.preview());
+        };
+
+        // Finalizer used by cancelAll()/plugin disable: places everything that is left right now
+        activeRegens.put(key, () -> {
+            if (done.get()) return;
+            if (taskHolder[0] != null) taskHolder[0].cancel();
+            cleanupPreviews.run();
+            for (AnimBatch ab : queue) for (BlockEntry e : ab.entries()) placeEntry(world, plan, e);
             queue.clear();
-            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
+            while (plan.hasMore()) {
+                for (BlockEntry e : plan.nextBatch(world, Integer.MAX_VALUE, Integer.MAX_VALUE)) placeEntry(world, plan, e);
+            }
+            finish.run();
         });
 
         taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
+            if (done.get()) return;
+            try {
+                if (instant) {
+                    for (BlockEntry e : plan.nextBatch(world, batchSize, SCAN_PER_TICK)) placeEntry(world, plan, e);
+                    if (onProgress != null) onProgress.accept((int) Math.min(total, plan.scanned), total);
+                    if (!plan.hasMore()) finish.run();
+                    return;
+                }
 
-            // ── Step 1: Finalize previous batch ──────────────────────────────
-            if (!queue.isEmpty()) {
-                AnimBatch prev = queue.poll();
+                // ── Step 1: Finalize previous batch ──────────────────────────
+                if (!queue.isEmpty()) {
+                    AnimBatch prev = queue.poll();
+                    // Remove preview blocks (always remove to prevent permanent blocks)
+                    removePreviews(world, prev.preview());
+                    // Place real blocks
+                    for (BlockEntry e : prev.entries()) placeEntry(world, plan, e);
+                    if (onProgress != null) onProgress.accept((int) Math.min(total, prev.scannedMark()), total);
+                    if (sfx && !prev.entries().isEmpty()) playWaveSound(world, prev.entries().get(0), type);
+                }
 
-                // Remove preview blocks (always remove to prevent permanent blocks)
-                for (PreviewBlock pb : prev.preview()) {
-                    Block b = world.getBlockAt(pb.loc());
-                    // Only remove previews we actually placed (never touch real restored blocks)
-                    if (b.getType() == pb.mat()) {
-                        b.setType(Material.AIR, false);
+                // ── Step 2: Build and show next batch preview ─────────────────
+                if (plan.hasMore()) {
+                    List<BlockEntry> batch = plan.nextBatch(world, batchSize, SCAN_PER_TICK);
+                    if (batch.isEmpty()) {
+                        // Only unchanged blocks were scanned this tick; report progress and carry on
+                        if (queue.isEmpty() && onProgress != null) onProgress.accept((int) Math.min(total, plan.scanned), total);
+                    } else {
+                        List<PreviewBlock> preview = buildPreview(world, batch, type);
+                        final int wMin = world.getMinHeight(), wMax = world.getMaxHeight();
+                        // Place preview blocks; keep only those really placed so cleanup is exact
+                        preview.removeIf(pb -> {
+                            int py = pb.loc().getBlockY();
+                            if (py < wMin || py >= wMax) return true;
+                            if (!world.isChunkLoaded(pb.loc().getBlockX() >> 4, pb.loc().getBlockZ() >> 4)) return true;
+                            Block b = world.getBlockAt(pb.loc());
+                            // Only place preview if the block is currently air (don't overwrite real blocks)
+                            if (b.getType() != Material.AIR) return true;
+                            b.setType(pb.mat(), false);
+                            return false;
+                        });
+                        // Descent types: real falling-block entities that streak down and vanish on impact
+                        spawnDescenders(world, batch, type);
+                        queue.add(new AnimBatch(batch, preview, plan.scanned));
                     }
                 }
 
-                // Place real blocks
-                for (BlockEntry e : prev.entries()) {
-                    placeEntry(world, e, dataCache);
-                    restored[0]++;
+                // ── Done when queue empty AND no more entries ─────────────────
+                if (queue.isEmpty() && !plan.hasMore()) finish.run();
+            } catch (Throwable ex) {
+                plugin.getLogger().severe("Regen of " + key + " failed mid-way: " + ex);
+                ex.printStackTrace();
+                if (done.compareAndSet(false, true)) {
+                    if (taskHolder[0] != null) taskHolder[0].cancel();
+                    cleanupPreviews.run();
+                    queue.clear();
+                    releaseTickets(world, plan);
+                    lastErrors.put(key, "Regen failed with an internal error (" + ex.getClass().getSimpleName()
+                            + "). Check the console, then re-run /oa regen " + key + ".");
+                    onFail.run();
                 }
-                if (onProgress != null) onProgress.accept(restored[0], total);
-                if (sfx) playWaveSound(world, prev.entries().get(0), type);
             }
-
-            // ── Step 2: Build and show next batch preview ─────────────────────
-            if (iterator.hasNext()) {
-                List<BlockEntry> batch = new ArrayList<>(batchSize);
-                for (int i = 0; i < batchSize && iterator.hasNext(); i++)
-                    batch.add(iterator.next());
-
-                List<PreviewBlock> preview = buildPreview(world, batch, type);
-
-                // Place preview blocks; keep only those really placed so cleanup is exact
-                preview.removeIf(pb -> {
-                    Block b = world.getBlockAt(pb.loc());
-                    // Only place preview if the block is currently air (don't overwrite already-restored blocks)
-                    if (b.getType() != Material.AIR) return true;
-                    b.setType(pb.mat(), false);
-                    return false;
-                });
-
-                // Descent types: spawn real falling-block entities that streak
-                // down from the sky and vanish on impact (meteors, suit pieces…).
-                spawnDescenders(world, batch, type);
-
-                queue.add(new AnimBatch(batch, preview));
-            }
-
-            // ── Done when queue empty AND no more entries ─────────────────────
-            if (queue.isEmpty() && !iterator.hasNext()) {
-                taskHolder[0].cancel();
-                if (onComplete != null) onComplete.run();
-            }
-
         }, 1L, 1L);
         if (taskHolder[0] == null) { // plugin disabled: finish synchronously so nothing is left half-restored
-            activeRegens.remove(key);
-            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
-            if (onComplete != null) onComplete.run();
+            Runnable fin = activeRegens.get(key);
+            if (fin != null) fin.run();
         }
     }
 
-    /** Fast path for INSTANT: no preview, but still spread across ticks so big arenas never freeze the server. */
-    private void fastPlace(String key, World world, Iterator<BlockEntry> iterator, int total,
-                           BiConsumer<Integer, Integer> onProgress, Runnable onComplete) {
-        int batchSize = Math.max(1, ConfigManager.getInstance().getConfig()
-                .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
-        BukkitTask[] taskHolder = new BukkitTask[1];
-        int[] restored = {0};
-        Map<String, BlockData> dataCache = new HashMap<>();
-
-        activeRegens.put(key, () -> {
-            if (taskHolder[0] != null) taskHolder[0].cancel();
-            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
-        });
-        taskHolder[0] = AsyncUtil.runSyncRepeating(() -> {
-            for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
-                placeEntry(world, iterator.next(), dataCache);
-                restored[0]++;
-            }
-            if (onProgress != null) onProgress.accept(restored[0], total);
-            if (!iterator.hasNext()) {
-                taskHolder[0].cancel();
-                if (onComplete != null) onComplete.run();
-            }
-        }, 1L, 1L);
-        if (taskHolder[0] == null) {
-            activeRegens.remove(key);
-            while (iterator.hasNext()) placeEntry(world, iterator.next(), dataCache);
-            if (onComplete != null) onComplete.run();
+    private void removePreviews(World world, List<PreviewBlock> previews) {
+        for (PreviewBlock pb : previews) {
+            Block b = world.getBlockAt(pb.loc());
+            // Only remove previews we actually placed (never touch real restored blocks)
+            if (b.getType() == pb.mat()) b.setType(Material.AIR, false);
         }
     }
 
-    /** Places one snapshot block with a single block-data application (parsed data is cached). */
-    private void placeEntry(World world, BlockEntry e, Map<String, BlockData> cache) {
+    private void clearTransientEntities(World world, int[] bb) {
+        try {
+            org.bukkit.util.BoundingBox box = new org.bukkit.util.BoundingBox(
+                    bb[0], bb[1], bb[2], bb[3] + 1.0, bb[4] + 1.0, bb[5] + 1.0);
+            for (org.bukkit.entity.Entity en : world.getNearbyEntities(box)) {
+                if (en instanceof org.bukkit.entity.Item || en instanceof org.bukkit.entity.Projectile
+                        || en instanceof org.bukkit.entity.ExperienceOrb || en instanceof org.bukkit.entity.TNTPrimed
+                        || en instanceof FallingBlock || en instanceof org.bukkit.entity.AreaEffectCloud) {
+                    descenderEntities.remove(en);
+                    en.remove();
+                }
+            }
+        } catch (Exception ex) {
+            plugin.getLogger().warning("Regen entity cleanup failed: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Places one snapshot block without neighbour physics (so attachables never pop off while their
+     * support is still missing, and liquids/sand do not start flowing/falling). Tile data is applied after.
+     */
+    private void placeEntry(World world, Plan plan, BlockEntry e) {
         Block b = world.getBlockAt(e.x, e.y, e.z);
-        if (e.material == Material.AIR || e.blockData == null) {
-            b.setType(e.material, false);
-            return;
-        }
-        BlockData data = cache.get(e.blockData);
-        if (data == null) {
-            try {
-                data = Bukkit.createBlockData(e.blockData);
-            } catch (IllegalArgumentException ex) {
-                data = e.material.createBlockData();
+        BlockData data = plan.parsed(e.idx);
+        if (data == null) return;
+        if (!b.getBlockData().equals(data)) b.setBlockData(data, false);
+        if (plan.tileCap[e.idx]) applyTile(b, plan.tiles.get(e.x + "," + e.y + "," + e.z));
+    }
+
+    // ── Tile entities (container contents, sign text) ─────────────────────────
+
+    private static String b64(byte[] d) { return Base64.getEncoder().encodeToString(d); }
+    private static String b64(String s) { return b64(s.getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+    private static String unb64s(String s) {
+        return new String(Base64.getDecoder().decode(s), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @SuppressWarnings("deprecation")
+    private String captureTile(Block b) {
+        try {
+            BlockState st = b.getState(false);
+            String pos = b.getX() + "," + b.getY() + "," + b.getZ();
+            if (st instanceof Sign sign) {
+                String[] f = new String[4], k = new String[4];
+                for (int i = 0; i < 4; i++) { f[i] = sign.getSide(Side.FRONT).getLine(i); k[i] = sign.getSide(Side.BACK).getLine(i); }
+                return pos + "|S|" + b64(String.join("\n", f)) + "|" + b64(String.join("\n", k));
             }
-            cache.put(e.blockData, data);
+            if (st instanceof Container c) {
+                Inventory inv = c instanceof Chest ch ? ch.getBlockInventory() : c.getInventory();
+                ItemStack[] items = inv.getContents();
+                boolean any = false;
+                for (ItemStack is : items) if (is != null && !is.getType().isAir()) { any = true; break; }
+                if (!any) return null;
+                return pos + "|C|" + b64(ItemStack.serializeItemsAsBytes(items));
+            }
+        } catch (Exception ex) {
+            plugin.getLogger().warning("Tile snapshot failed at " + b.getLocation() + ": " + ex.getMessage());
         }
-        b.setBlockData(data, false);
+        return null;
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applyTile(Block b, String tile) {
+        try {
+            BlockState st = b.getState();
+            String[] p = tile == null ? new String[0] : tile.split("\\|");
+            if (st instanceof Sign sign) {
+                for (int s = 0; s < 2; s++) {
+                    String[] l = p.length > s + 1 && p[0].equals("S") ? unb64s(p[s + 1]).split("\n", -1) : new String[0];
+                    for (int i = 0; i < 4; i++)
+                        sign.getSide(s == 0 ? Side.FRONT : Side.BACK).setLine(i, i < l.length ? l[i] : "");
+                }
+                sign.update(true, false);
+            } else if (st instanceof Container c) {
+                Inventory inv = c instanceof Chest ch ? ch.getBlockInventory() : c.getInventory();
+                inv.clear(); // players may have stored/removed items: always reset to the snapshot
+                if (p.length > 1 && p[0].equals("C")) {
+                    ItemStack[] items = ItemStack.deserializeItemsFromBytes(Base64.getDecoder().decode(p[1]));
+                    for (int i = 0; i < items.length && i < inv.getSize(); i++) inv.setItem(i, items[i]);
+                }
+            }
+        } catch (Exception ex) {
+            plugin.getLogger().warning("Tile restore failed at " + b.getLocation() + ": " + ex.getMessage());
+        }
+    }
+
+    // ── Streaming restore plan ────────────────────────────────────────────────
+
+    /**
+     * Compact snapshot representation: palette + vertical run "pieces" (max {@link #MAX_PIECE_LEN} tall)
+     * in animation order. Blocks are expanded lazily per batch, never all at once, and blocks that
+     * already match the snapshot are skipped.
+     */
+    private static final class Plan {
+        String worldName;
+        RegenAnimationType type;
+        Material[] mats;
+        String[] datas;
+        BlockData[] parsed;
+        boolean[] tileCap;
+        int[] pieces;          // x, z, y0, len, paletteIdx per piece
+        int[] order;           // piece indices in animation order
+        Set<Long> chunks = new HashSet<>();
+        Map<String, String> tiles = new HashMap<>();
+        long totalBlocks;
+        boolean ticketed;
+        // cursor
+        int pos = 0, sub = 0;
+        long scanned = 0;
+
+        boolean hasMore() { return pos < order.length; }
+
+        BlockData parsed(int idx) {
+            BlockData d = parsed[idx];
+            if (d == null) {
+                try {
+                    d = datas[idx] != null ? Bukkit.createBlockData(datas[idx]) : mats[idx].createBlockData();
+                } catch (IllegalArgumentException ex) {
+                    d = mats[idx].createBlockData();
+                }
+                parsed[idx] = d;
+            }
+            return d;
+        }
+
+        boolean needsChange(Block b, int idx) {
+            if (tileCap[idx]) return true;
+            Material m = mats[idx];
+            if (b.getType() != m) return true;
+            if (datas[idx] == null) return false;
+            return !b.getBlockData().equals(parsed(idx));
+        }
+
+        /** Next blocks that differ from the world, at most {@code want}, scanning at most {@code scanCap} blocks. */
+        List<BlockEntry> nextBatch(World w, int want, int scanCap) {
+            List<BlockEntry> out = new ArrayList<>();
+            int scannedNow = 0;
+            int minH = w.getMinHeight(), maxH = w.getMaxHeight();
+            while (out.size() < want && scannedNow < scanCap && pos < order.length) {
+                int pi = order[pos] * 5;
+                int x = pieces[pi], z = pieces[pi + 1], y0 = pieces[pi + 2], len = pieces[pi + 3], idx = pieces[pi + 4];
+                while (sub < len && out.size() < want && scannedNow < scanCap) {
+                    int y = y0 + sub;
+                    sub++; scannedNow++; scanned++;
+                    if (y < minH || y >= maxH) continue;
+                    Block b = w.getBlockAt(x, y, z);
+                    if (needsChange(b, idx)) out.add(new BlockEntry(x, y, z, mats[idx], idx));
+                }
+                if (sub >= len) { pos++; sub = 0; }
+            }
+            return out;
+        }
+    }
+
+    private static final class IntBuf {
+        int[] a = new int[1024];
+        int n = 0;
+        void add(int v) { if (n == a.length) a = Arrays.copyOf(a, n * 2); a[n++] = v; }
+        int[] toArray() { return Arrays.copyOf(a, n); }
+    }
+
+    private Plan loadPlan(FileConfiguration cfg, RegenAnimationType type, double cx, double cy, double cz) {
+        Plan plan = new Plan();
+        plan.type = type;
+        plan.worldName = cfg.getString("world");
+        IntBuf buf = new IntBuf();
+        List<Material> matList = new ArrayList<>();
+        List<String> dataList = new ArrayList<>();
+
+        if (cfg.isList("palette") && cfg.isList("runs")) {
+            // Format 2: palette + vertical runs
+            List<String> palette = cfg.getStringList("palette");
+            int skipped = 0;
+            for (String pk : palette) {
+                String[] pp = pk.split("\\|", 2);
+                Material m;
+                try { m = Material.valueOf(pp[0]); } catch (Exception ex) { m = null; }
+                matList.add(m);
+                dataList.add(pp.length > 1 ? pp[1] : null);
+            }
+            for (String line : cfg.getStringList("runs")) {
+                String[] p = line.split(",");
+                if (p.length != 5) continue;
+                try {
+                    int x = Integer.parseInt(p[0].trim()), z = Integer.parseInt(p[1].trim());
+                    int y0 = Integer.parseInt(p[2].trim()), len = Integer.parseInt(p[3].trim());
+                    int idx = Integer.parseInt(p[4].trim());
+                    if (idx < 0 || idx >= matList.size() || len <= 0 || len > 4096) continue;
+                    if (matList.get(idx) == null) { skipped += len; continue; } // unknown material: leave world as is
+                    for (int o = 0; o < len; o += MAX_PIECE_LEN) {
+                        buf.add(x); buf.add(z); buf.add(y0 + o); buf.add(Math.min(MAX_PIECE_LEN, len - o)); buf.add(idx);
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+            if (skipped > 0) plugin.getLogger().warning("Snapshot contains " + skipped + " blocks of materials unknown to this server version; they are left untouched.");
+        } else {
+            // Legacy format 1: one line per block "x,y,z|MATERIAL|blockdata"
+            Map<String, Integer> index = new HashMap<>();
+            for (String line : cfg.getStringList("blocks")) {
+                String[] parts = line.split("\\|", 3);
+                if (parts.length < 2) continue;
+                String[] c = parts[0].split(",");
+                if (c.length != 3) continue;
+                try {
+                    int x = Integer.parseInt(c[0].trim()), y = Integer.parseInt(c[1].trim()), z = Integer.parseInt(c[2].trim());
+                    Material m = Material.valueOf(parts[1]);
+                    String bd = parts.length > 2 ? parts[2] : null;
+                    String pk = parts[1] + "|" + bd;
+                    Integer idx = index.get(pk);
+                    if (idx == null) { idx = matList.size(); matList.add(m); dataList.add(bd); index.put(pk, idx); }
+                    buf.add(x); buf.add(z); buf.add(y); buf.add(1); buf.add(idx);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        int n = buf.n / 5;
+        plan.pieces = buf.toArray();
+        plan.mats = matList.toArray(new Material[0]);
+        plan.datas = dataList.toArray(new String[0]);
+        plan.parsed = new BlockData[plan.mats.length];
+        plan.tileCap = new boolean[plan.mats.length];
+        for (int i = 0; i < plan.mats.length; i++) plan.tileCap[i] = plan.mats[i] != null && isTileMaterial(plan.mats[i]);
+
+        for (String t : cfg.getStringList("tiles")) {
+            int bar = t.indexOf('|');
+            if (bar > 0) plan.tiles.put(t.substring(0, bar), t.substring(bar + 1));
+        }
+
+        double[] k1 = new double[n], k2 = new double[n];
+        for (int i = 0; i < n; i++) {
+            int x = plan.pieces[i * 5], z = plan.pieces[i * 5 + 1], y0 = plan.pieces[i * 5 + 2], len = plan.pieces[i * 5 + 3];
+            plan.totalBlocks += len;
+            plan.chunks.add(((long) (x >> 4) << 32) | ((z >> 4) & 0xffffffffL));
+            computeKeys(type, x, y0 + (len - 1) / 2.0, z, cx, cy, cz, k1, k2, i);
+        }
+        Integer[] ord = new Integer[n];
+        for (int i = 0; i < n; i++) ord[i] = i;
+        if (type != RegenAnimationType.INSTANT_RESTORE) {
+            Arrays.sort(ord, (a, b) -> {
+                int c = Double.compare(k1[a], k1[b]);
+                if (c != 0) return c;
+                c = Double.compare(k2[a], k2[b]);
+                return c != 0 ? c : Integer.compare(a, b);
+            });
+        }
+        plan.order = new int[n];
+        for (int i = 0; i < n; i++) plan.order[i] = ord[i];
+        return plan;
     }
 
     // ── Preview builders ───────────────────────────────────────────────────────
@@ -634,101 +1049,39 @@ public class BlockRestoreModule {
 
     // ── Ordering ───────────────────────────────────────────────────────────────
 
-    private List<BlockEntry> orderEntries(List<BlockEntry> entries, ArenaRegion region, RegenAnimationType type) {
-        List<BlockEntry> ordered = new ArrayList<>(entries);
-        double cx = (region.getMinX() + region.getMaxX()) / 2.0;
-        double cy = (region.getMinY() + region.getMaxY()) / 2.0;
-        double cz = (region.getMinZ() + region.getMaxZ()) / 2.0;
-
+    /** Two-level sort key (k1 then k2) of a piece at (x, y, z) for the given animation. */
+    private void computeKeys(RegenAnimationType type, int x, double y, int z,
+                             double cx, double cy, double cz, double[] k1, double[] k2, int i) {
+        double dx = x - cx, dy = y - cy, dz = z - cz;
+        double distSq = dx * dx + dy * dy + dz * dz;
+        double dist = Math.sqrt(distSq);
+        double hyp = Math.hypot(dx, dz);
+        double angle = Math.atan2(dz, dx);
+        double angle2pi = angle < 0 ? angle + 6.28318 : angle;
+        double a = 0, b = 0;
         switch (type) {
-            case SPIRAL_ASCENT -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> {
-                        double angle = Math.atan2(e.z - cz, e.x - cx);
-                        double dist = Math.sqrt(distSq(e, cx, cy, cz));
-                        return dist * 6.28 + (angle < 0 ? angle + 6.28 : angle);
-                    })
-                    .thenComparingInt(e -> e.y));
-
-            case COLLAPSE_INWARD -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz))
-                    .reversed()
-                    .thenComparingInt(e -> e.y));
-
-            case RADIATE_OUTWARD -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz))
-                    .thenComparingInt(e -> e.y));
-
-            case GRAVITY_DESCENT -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.y).reversed()
-                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
-
-            case UPWARD_SURGE -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.y)
-                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
-
-            case RAIN_OF_LIGHT -> ordered.sort(Comparator
-                    .<BlockEntry, Double>comparing(e -> Math.hypot(e.x - cx, e.z - cz))
-                    .thenComparingInt(e -> -e.y));
-
-            case ARMORED_DESCENT -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.y)
-                    .thenComparingDouble(e -> Math.hypot(e.x - cx, e.z - cz)));
-
-            case CHAOTIC_ERUPTION -> Collections.shuffle(ordered, new Random(System.currentTimeMillis()));
-
-            case INSTANT_RESTORE -> { /* as-stored */ }
-
-            case BEACON_WAVE -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> {
-                        double a = Math.atan2(e.z - cz, e.x - cx);
-                        return a < 0 ? a + 6.28318 : a;
-                    })
-                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
-
-            case VOID_SHOCKWAVE -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> (int) Math.sqrt(distSq(e, cx, cy, cz)))
-                    .thenComparingInt(e -> e.y));
-
-            case ICE_CRYSTAL_GROWTH -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> Math.hypot(e.x - cx, e.z - cz))
-                    .thenComparingInt(e -> e.y));
-
-            case DARK_VORTEX -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> {
-                        double dist = Math.sqrt(distSq(e, cx, cy, cz));
-                        double angle = Math.atan2(e.z - cz, e.x - cx);
-                        if (angle < 0) angle += 6.28318;
-                        return -dist * 6.28318 + angle;
-                    })
-                    .thenComparingInt(e -> -e.y));
-
-            case METEOR_STRIKE -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> (e.x > cx ? 1 : 0) * 2 + (e.z > cz ? 1 : 0))
-                    .thenComparingInt(e -> -e.y)
-                    .thenComparingDouble(e -> Math.hypot(e.x - cx, e.z - cz)));
-
-            case PRISM_CASCADE -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.x + e.z)
-                    .thenComparingInt(e -> e.y));
-
-            // New animations use sensible orderings
-            case BINARY_FILL -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> (e.x + e.z) % 2)
-                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
-
-            case PHOENIX_REBIRTH -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.y)
-                    .thenComparingDouble(e -> distSq(e, cx, cy, cz)));
-
-            case QUANTUM_MESH -> Collections.shuffle(ordered, new Random(System.currentTimeMillis()));
-
-            case DIAMOND_FUSION -> ordered.sort(Comparator
-                    .comparingDouble((BlockEntry e) -> distSq(e, cx, cy, cz)));
-
-            case TSUNAMI_SURGE -> ordered.sort(Comparator
-                    .comparingInt((BlockEntry e) -> e.y));
+            case SPIRAL_ASCENT -> { a = dist * 6.28 + (angle < 0 ? angle + 6.28 : angle); b = y; }
+            case COLLAPSE_INWARD -> { a = -distSq; b = y; }
+            case RADIATE_OUTWARD -> { a = distSq; b = y; }
+            case GRAVITY_DESCENT -> { a = -y; b = distSq; }
+            case UPWARD_SURGE -> { a = y; b = distSq; }
+            case RAIN_OF_LIGHT -> { a = hyp; b = -y; }
+            case ARMORED_DESCENT -> { a = y; b = hyp; }
+            case CHAOTIC_ERUPTION, QUANTUM_MESH -> { a = RNG.nextDouble(); }
+            case INSTANT_RESTORE -> { a = i; }
+            case BEACON_WAVE -> { a = angle2pi; b = distSq; }
+            case VOID_SHOCKWAVE -> { a = (int) dist; b = y; }
+            case ICE_CRYSTAL_GROWTH -> { a = hyp; b = y; }
+            case DARK_VORTEX -> { a = -dist * 6.28318 + angle2pi; b = -y; }
+            case METEOR_STRIKE -> { a = ((x > cx ? 1 : 0) * 2 + (z > cz ? 1 : 0)) * 100000.0 - y; b = hyp; }
+            case PRISM_CASCADE -> { a = x + z; b = y; }
+            case BINARY_FILL -> { a = Math.floorMod(x + z, 2); b = distSq; }
+            case PHOENIX_REBIRTH -> { a = y; b = distSq; }
+            case DIAMOND_FUSION -> { a = distSq; }
+            case TSUNAMI_SURGE -> { a = y; }
         }
-        return ordered;
+        k1[i] = a;
+        k2[i] = b;
     }
 
     // ── Sound per wave ─────────────────────────────────────────────────────────
@@ -807,7 +1160,9 @@ public class BlockRestoreModule {
         return new File(snapshotsDir, arenaName.toLowerCase() + ".yml");
     }
 
-    private void saveSnapshot(String arenaName, String worldName, List<String> palette, List<int[]> runs) {
+    /** Serialises and writes atomically (temp file + move) so a crash never leaves a half-written snapshot. */
+    private void saveSnapshot(String arenaName, String worldName, List<String> palette, List<int[]> runs,
+                              List<String> tiles) throws java.io.IOException {
         FileConfiguration cfg = new YamlConfiguration();
         cfg.set("world", worldName);
         cfg.set("format", 2);
@@ -816,57 +1171,24 @@ public class BlockRestoreModule {
         for (int[] r : runs) // x,z,y0,len,paletteIdx
             serialized.add(r[0] + "," + r[1] + "," + r[2] + "," + r[3] + "," + r[4]);
         cfg.set("runs", serialized);
-        YamlUtil.save(cfg, snapshotFile(arenaName), plugin.getLogger());
-    }
-
-    private List<BlockEntry> loadEntries(FileConfiguration cfg) {
-        List<BlockEntry> entries = new ArrayList<>();
-        // Format 2: palette + vertical runs
-        if (cfg.isList("palette") && cfg.isList("runs")) {
-            List<String> palette = cfg.getStringList("palette");
-            Material[] mats = new Material[palette.size()];
-            String[] datas = new String[palette.size()];
-            for (int i = 0; i < mats.length; i++) {
-                String[] pp = palette.get(i).split("\\|", 2);
-                try { mats[i] = Material.valueOf(pp[0]); } catch (Exception ex) { mats[i] = Material.AIR; }
-                datas[i] = pp.length > 1 ? pp[1] : null;
-            }
-            for (String line : cfg.getStringList("runs")) {
-                String[] p = line.split(",");
-                if (p.length != 5) continue;
-                try {
-                    int x = Integer.parseInt(p[0]), z = Integer.parseInt(p[1]);
-                    int y0 = Integer.parseInt(p[2]), len = Integer.parseInt(p[3]);
-                    int idx = Integer.parseInt(p[4]);
-                    if (idx < 0 || idx >= mats.length) continue;
-                    for (int y = y0; y < y0 + len; y++)
-                        entries.add(new BlockEntry(x, y, z, mats[idx], datas[idx]));
-                } catch (Exception ignored) {}
-            }
-            return entries;
+        if (!tiles.isEmpty()) cfg.set("tiles", tiles);
+        String yaml = cfg.saveToString();
+        File target = snapshotFile(arenaName);
+        java.nio.file.Path tmp = new File(snapshotsDir, target.getName() + ".tmp").toPath();
+        java.nio.file.Files.writeString(tmp, yaml, java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            java.nio.file.Files.move(tmp, target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+            java.nio.file.Files.move(tmp, target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
-        // Legacy format 1: one line per block "x,y,z|MATERIAL|blockdata"
-        for (String line : cfg.getStringList("blocks")) {
-            String[] parts = line.split("\\|", 3);
-            if (parts.length < 2) continue;
-            String[] coords = parts[0].split(",");
-            if (coords.length != 3) continue;
-            try {
-                int x = Integer.parseInt(coords[0]);
-                int y = Integer.parseInt(coords[1]);
-                int z = Integer.parseInt(coords[2]);
-                Material mat = Material.valueOf(parts[1]);
-                String bd = parts.length > 2 ? parts[2] : null;
-                entries.add(new BlockEntry(x, y, z, mat, bd));
-            } catch (Exception ignored) {}
-        }
-        return entries;
     }
 
     // ── Records ────────────────────────────────────────────────────────────────
 
-    private record BlockEntry(int x, int y, int z, Material material, String blockData) {}
-    private record LoadResult(String worldName, List<BlockEntry> entries, RegenAnimationType type) {}
+    private record BlockEntry(int x, int y, int z, Material material, int idx) {}
+    private record LoadResult(Plan plan, String error) {}
+    private record Waiter(Runnable ok, Runnable fail) {}
     private record PreviewBlock(Location loc, Material mat) {}
-    private record AnimBatch(List<BlockEntry> entries, List<PreviewBlock> preview) {}
+    private record AnimBatch(List<BlockEntry> entries, List<PreviewBlock> preview, long scannedMark) {}
 }

@@ -460,6 +460,14 @@ public class WebDashboardServer {
                 return;
             }
             byte[] bytes = in.readAllBytes();
+            if ("web/index.html".equals(resourcePath)) {
+                // web.title customises the browser tab title
+                String title = plugin.getConfig().getString("web.title", "OmniArena Control");
+                String safe = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+                bytes = new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("<title>OmniArena Control</title>", "<title>" + safe + "</title>")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            }
             Headers headers = exchange.getResponseHeaders();
             headers.set("Content-Type", contentType);
             secureHeaders(headers);

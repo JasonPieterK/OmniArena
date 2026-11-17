@@ -37,7 +37,7 @@ public class HelpCommand extends SubCommand {
                 showGuide(sender, key);
                 return;
             }
-            MessageUtil.send(sender, "<red>Unknown guide. Use <yellow>/oa help</yellow> to see guide names.");
+            MessageUtil.send(sender, "<red>Unknown guide <yellow>" + args[0] + "</yellow>. <gray>Available guides: <white>" + String.join(", ", guides.keySet()) + "</white>. Example: <white>/oa help makingarena</white>");
             return;
         }
 
