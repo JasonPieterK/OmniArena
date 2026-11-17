@@ -94,7 +94,9 @@ public class ConfigManager {
         config.set(key, value);
         try {
             config.save(configFile);
-            config = YamlConfiguration.loadConfiguration(configFile);
+            // Reload through the plugin so plugin.getConfig() and our reference stay the same object
+            plugin.reloadConfig();
+            config = plugin.getConfig();
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to save config: " + e.getMessage());
         }

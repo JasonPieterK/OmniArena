@@ -62,6 +62,17 @@ public class BettingManager {
 
     public void onMatchCleanup(String arenaName) {
         matchStartTimes.remove(arenaName);
+        // Any bets still pending here were never settled (match aborted) - refund them
+        List<Bet> leftover = matchBets.remove(arenaName);
+        if (leftover != null && economy != null) {
+            for (Bet bet : leftover) {
+                if (!activeBets.remove(bet.getPlayerUuid(), bet)) continue;
+                economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
+                Player p = Bukkit.getPlayer(bet.getPlayerUuid());
+                if (p != null) MessageUtil.send(p, "<yellow>Match aborted - bet refunded: <green>" +
+                        economy.format(bet.getAmount()));
+            }
+        }
     }
 
     private boolean isBettingWindowOpen(String arenaName) {
@@ -85,6 +96,10 @@ public class BettingManager {
             MessageUtil.send(player, "<red>Betting is disabled on this server.");
             return false;
         }
+
+        // Normalise to the canonical arena name so payout/refund lookups match
+        arenaName = plugin.getArenaManager().get(arenaName)
+                .map(com.omniarena.arena.Arena::getName).orElse(arenaName);
 
         if (!isBettingWindowOpen(arenaName)) {
             MessageUtil.send(player, "<red>Betting window closed for this match.");
@@ -124,7 +139,10 @@ public class BettingManager {
         }
 
         // Deduct money
-        economy.withdrawPlayer(player, amount);
+        if (!economy.withdrawPlayer(player, amount).transactionSuccess()) {
+            MessageUtil.send(player, "<red>Could not withdraw the bet amount.");
+            return false;
+        }
 
         // Create bet
         Bet bet = new Bet(player.getUniqueId(), player.getName(), arenaName, predictedWinner, amount);
@@ -149,11 +167,17 @@ public class BettingManager {
             return false;
         }
 
+        // Bets are locked once the betting window closes (prevents free-rolling)
+        if (!isBettingWindowOpen(bet.getArenaName())) {
+            MessageUtil.send(player, "<red>Betting window closed - you can no longer cancel your bet.");
+            return false;
+        }
+
+        // Remove bet first (only refund if it was actually still active -> no double refund)
+        if (!activeBets.remove(player.getUniqueId(), bet)) return false;
+
         // Refund money
         economy.depositPlayer(player, bet.getAmount());
-
-        // Remove bet
-        activeBets.remove(player.getUniqueId());
         List<Bet> bets = matchBets.get(bet.getArenaName());
         if (bets != null) {
             bets.remove(bet);
@@ -200,27 +224,28 @@ public class BettingManager {
             }
         }
 
-        // Payout winners
-        for (Bet bet : bets) {
-            Player player = Bukkit.getPlayer(bet.getPlayerUuid());
-            if (player == null || !player.isOnline()) {
-                // Offline player - refund their bet
-                economy.depositPlayer(Bukkit.getOfflinePlayer(bet.getPlayerUuid()), bet.getAmount());
-            } else if (bet.getPredictedWinner().equals(winnerId)) {
-                // Winner - calculate payout based on pool share
-                double share = bet.getAmount() / winnerPool;
-                double winnings = totalPool * share;
-                double profit = winnings - bet.getAmount();
+        // Nobody backed the winner (draw / no winner): refund everyone, never destroy money
+        boolean refundAll = winnerId == null || winnerPool <= 0;
 
-                economy.depositPlayer(player, winnings);
-                MessageUtil.send(player, "<green>You won your bet! <yellow>" + economy.format(winnings) +
-                        "</yellow> (profit: <yellow>" + economy.format(profit) + "</yellow>)");
-            } else {
-                // Loser - already deducted, no refund
+        for (Bet bet : bets) {
+            org.bukkit.OfflinePlayer off = Bukkit.getOfflinePlayer(bet.getPlayerUuid());
+            Player player = Bukkit.getPlayer(bet.getPlayerUuid());
+
+            if (refundAll) {
+                economy.depositPlayer(off, bet.getAmount());
+                if (player != null) MessageUtil.send(player, "<yellow>No winning bets - your bet of <green>" +
+                        economy.format(bet.getAmount()) + "</green> was refunded.");
+            } else if (bet.getPredictedWinner().equals(winnerId)) {
+                // Winner - payout based on pool share (paid even if offline)
+                double winnings = totalPool * (bet.getAmount() / winnerPool);
+                economy.depositPlayer(off, winnings);
+                if (player != null) MessageUtil.send(player, "<green>You won your bet! <yellow>" + economy.format(winnings) +
+                        "</yellow> (profit: <yellow>" + economy.format(winnings - bet.getAmount()) + "</yellow>)");
+            } else if (player != null) {
                 MessageUtil.send(player, "<red>You lost your bet of <yellow>" + economy.format(bet.getAmount()) + "</yellow>.");
             }
 
-            activeBets.remove(bet.getPlayerUuid());
+            activeBets.remove(bet.getPlayerUuid(), bet);
         }
 
         plugin.getLogger().info("Processed " + bets.size() + " bets for arena " + arenaName + 

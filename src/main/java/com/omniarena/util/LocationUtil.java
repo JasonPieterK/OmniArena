@@ -50,11 +50,15 @@ public final class LocationUtil {
         if (parts.length < 4) return null;
         World world = Bukkit.getWorld(parts[0]);
         if (world == null) return null;
-        double x = Double.parseDouble(parts[1]);
-        double y = Double.parseDouble(parts[2]);
-        double z = Double.parseDouble(parts[3]);
-        float yaw   = parts.length > 4 ? Float.parseFloat(parts[4]) : 0;
-        float pitch = parts.length > 5 ? Float.parseFloat(parts[5]) : 0;
-        return new Location(world, x, y, z, yaw, pitch);
+        try {
+            double x = Double.parseDouble(parts[1]);
+            double y = Double.parseDouble(parts[2]);
+            double z = Double.parseDouble(parts[3]);
+            float yaw   = parts.length > 4 ? Float.parseFloat(parts[4]) : 0;
+            float pitch = parts.length > 5 ? Float.parseFloat(parts[5]) : 0;
+            return new Location(world, x, y, z, yaw, pitch);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

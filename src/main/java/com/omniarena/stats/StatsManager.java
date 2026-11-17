@@ -61,7 +61,16 @@ public class StatsManager {
     }
 
     public void saveAll() {
-        AsyncUtil.runAsync(() -> {
+        // During onDisable the plugin is already disabled, so the scheduler is unusable: save inline.
+        if (!plugin.isEnabled()) {
+            writeStats();
+            return;
+        }
+        AsyncUtil.runAsync(this::writeStats);
+    }
+
+    private synchronized void writeStats() {
+        {
             FileConfiguration cfg = new YamlConfiguration();
             for (Map.Entry<UUID, PlayerStats> entry : statsCache.entrySet()) {
                 String path = "stats." + entry.getKey();
@@ -76,7 +85,7 @@ public class StatsManager {
                 cfg.set(path + ".time-played", s.getTimePlayed());
             }
             YamlUtil.save(cfg, statsFile, plugin.getLogger());
-        });
+        }
     }
 
     public PlayerStats getStats(UUID uuid) {

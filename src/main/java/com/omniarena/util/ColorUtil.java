@@ -8,6 +8,9 @@ public final class ColorUtil {
 
     private static final MiniMessage MM = MiniMessage.miniMessage();
 
+    private static final String[] CODES = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "k", "l", "m", "n", "o", "r"};
+    private static final String[] TAGS = {"<black>", "<dark_blue>", "<dark_green>", "<dark_aqua>", "<dark_red>", "<dark_purple>", "<gold>", "<gray>", "<dark_gray>", "<blue>", "<green>", "<aqua>", "<red>", "<light_purple>", "<yellow>", "<white>", "<obfuscated>", "<bold>", "<strikethrough>", "<underlined>", "<italic>", "<reset>"};
+
     private ColorUtil() {}
 
     public static Component parse(String miniMessage) {
@@ -24,11 +27,9 @@ public final class ColorUtil {
             return text;
         }
         String result = text;
-        String[] codes = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "k", "l", "m", "n", "o", "r"};
-        String[] tags = {"<black>", "<dark_blue>", "<dark_green>", "<dark_aqua>", "<dark_red>", "<dark_purple>", "<gold>", "<gray>", "<dark_gray>", "<blue>", "<green>", "<aqua>", "<red>", "<light_purple>", "<yellow>", "<white>", "<obfuscated>", "<bold>", "<strikethrough>", "<underlined>", "<italic>", "<reset>"};
-        for (int i = 0; i < codes.length; i++) {
-            result = result.replace("&" + codes[i], tags[i]);
-            result = result.replace("&" + codes[i].toUpperCase(), tags[i]);
+        for (int i = 0; i < CODES.length; i++) {
+            result = result.replace("&" + CODES[i], TAGS[i]);
+            result = result.replace("&" + CODES[i].toUpperCase(java.util.Locale.ROOT), TAGS[i]);
         }
         return result;
     }
