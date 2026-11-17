@@ -1530,3 +1530,28 @@ public void deposit(org.bukkit.OfflinePlayer player, double amount) {
 This uses Vault's `Economy.depositPlayer(OfflinePlayer, double)` which works offline. Add this step before Task 10 commit or inline into Task 8 commit.
 
 **Type consistency:** `TournamentMatch.involves()` used in `TournamentBracket.getActiveMatchForArena()` — consistent. `TournamentBracket.recordWinner(TournamentMatch, UUID)` — consistent across Task 7/8. `VaultIntegration.deposit(OfflinePlayer, double)` used in `TournamentManager.finishTournament()` — needs the fix above.
+
+---
+
+## Status / Implementation notes
+
+This plan has been implemented; the checkboxes above were not maintained. Deviations from the plan
+as written (see also the notes in `../specs/2026-06-27-tournament-betting-design.md`):
+
+- **In-progress tournament persistence is implemented** (bracket rounds and winners are saved in
+  `tournaments.yml` and resumed on startup), unlike the original "not persisted" design.
+- **Draw rule:** draws/timeouts are resolved so brackets never stall (player still in the arena,
+  else higher health, else random).
+- **Prize rule:** 3rd-place prize is split evenly among the semifinal losers (no third-place match);
+  all shares are rounded down to cents.
+- `TournamentManager` gained a periodic safety task, a walkover grace period
+  (`tournament.walkover-grace-seconds`), arena reservation during a tournament, and removal of
+  offline participants at start.
+- `TournamentCommand` is in `commands/player/` and exposed as `/oa tournament ...`; `plugin.yml`
+  adds the permissions `omniarena.tournament.create` / `omniarena.tournament.admin` but no standalone
+  command.
+- `BetCommand` requires `omniarena.bet` (not declared in `plugin.yml`). `BettingManager` enforces one
+  active bet per player, cents rounding, and refunds on stop/disable; bets are not saved to disk.
+- `VaultIntegration.depositOffline(OfflinePlayer, double)` is the offline deposit method (the plan
+  called it a `deposit(OfflinePlayer, double)` overload).
+- Tests: `TournamentBracketTest` also covers full runs for 2-9 and 16 players.

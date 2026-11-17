@@ -6,6 +6,10 @@ import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.permission.PermissionChecker;
 import com.omniarena.util.MessageUtil;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.CommandSender;
 
 import java.util.LinkedHashMap;
@@ -37,23 +41,45 @@ public class HelpCommand extends SubCommand {
             return;
         }
 
-        boolean isAdmin = PermissionChecker.hasAdmin(sender, PermissionChecker.ADMIN_ALL);
         MessageUtil.send(sender, "<gold>=== OmniArena Help ===");
         MessageUtil.send(sender, "<gray>Use <yellow>/oa <command> help</yellow> for command-specific help.");
-        MessageUtil.send(sender, "<gray>Use <yellow>/oa help <guide></yellow> for step-by-step guides.");
+        MessageUtil.send(sender, "<gray>Use <yellow>/oa help <guide></yellow> for step-by-step guides. <dark_gray>(click a command to put it in chat)");
         MessageUtil.send(sender, "");
         MessageUtil.send(sender, "<green>Player commands:");
-        playerCommands.forEach((name, cmd) -> MessageUtil.send(sender,
-                "<yellow>/oa " + name + "</yellow> <dark_gray>- <gray>" + cmd.getDescription()));
-        if (isAdmin) {
+        playerCommands.forEach((name, cmd) -> {
+            if (canSee(sender, cmd, false)) MessageUtil.send(sender, entry(name, cmd));
+        });
+        List<Map.Entry<String, SubCommand>> admin = adminCommands.entrySet().stream()
+                .filter(e -> canSee(sender, e.getValue(), true)).toList();
+        if (!admin.isEmpty()) {
             MessageUtil.send(sender, "");
             MessageUtil.send(sender, "<red>Admin commands:");
-            adminCommands.forEach((name, cmd) -> MessageUtil.send(sender,
-                    "<yellow>/oa " + name + "</yellow> <dark_gray>- <gray>" + cmd.getDescription()));
+            admin.forEach(e -> MessageUtil.send(sender, entry(e.getKey(), e.getValue())));
         }
         MessageUtil.send(sender, "");
         MessageUtil.send(sender, "<aqua>Guides:");
         MessageUtil.send(sender, "<gray>" + String.join(", ", guides.keySet()));
+    }
+
+    private boolean canSee(CommandSender sender, SubCommand cmd, boolean admin) {
+        String perm = cmd.getRequiredPermission();
+        if (admin) return PermissionChecker.hasAdmin(sender, perm);
+        return perm == null || !(sender instanceof org.bukkit.entity.Player p) || p.isOp() || p.hasPermission(perm);
+    }
+
+    /** One clickable help line: click suggests the command, hover shows usage + description. */
+    private Component entry(String name, SubCommand cmd) {
+        String base = "/oa " + name;
+        Component hover = Component.text(cmd.getUsage(), NamedTextColor.YELLOW)
+                .append(Component.newline())
+                .append(Component.text(cmd.getDescription(), NamedTextColor.GRAY))
+                .append(Component.newline())
+                .append(Component.text("Click to suggest", NamedTextColor.DARK_GRAY));
+        return Component.text(base, NamedTextColor.YELLOW)
+                .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(cmd.getDescription(), NamedTextColor.GRAY))
+                .clickEvent(ClickEvent.suggestCommand(base + " "))
+                .hoverEvent(HoverEvent.showText(hover));
     }
 
     private void showGuide(CommandSender sender, String key) {

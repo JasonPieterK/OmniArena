@@ -48,6 +48,8 @@ tournaments, match betting, and an embedded web dashboard, all driven by one `/o
 - Arena fighters are isolated from outsiders (no damage in or out of the match).
 - Full player-state save and restore around a match: location, game mode, health, food, XP, potion
   effects, flight, speeds, invisibility, and (if `arena.inventory-restore`) inventory and armor.
+  The pre-arena state is also written to `player-states/<uuid>.yml`, so players are restored on their
+  next join if the server crashed mid-match.
 - Spectating (`/oa spectate`), mid-match join (per arena), inventory save and restore, spawn
   protection, respawn types (instant, delayed, wave setting stored), first blood, revenge,
   killstreaks and combo modules, power-up module.
@@ -463,6 +465,7 @@ the shaded MySQL/Hikari libraries are placeholders).
 | `player-kits/<uuid>.yml` | Personal kits |
 | `stats.yml` | Lifetime stats per UUID (kills, deaths, wins, losses, assists, draws, time-played) |
 | `elo.yml` | `ratings.<uuid>`: name, rating, wins, losses, draws, highestRating |
+| `player-states/<uuid>.yml` | Crash-safe copy of a player's pre-arena state (location, game mode, health, food, XP, effects, inventory); written while they are in an arena, deleted when they leave, and applied on their next join if the server died mid-match |
 | `kit-cooldowns.yml` | Per-player preset-kit cooldown expiries |
 | `tournaments.yml` | Active tournaments (registration and in-progress, including bracket rounds and winners). Finished and cancelled tournaments are removed |
 

@@ -100,6 +100,10 @@ permissions:
     description: Access to /kit player commands
     default: true
 
+  omniarena.bet:
+    description: Place and manage bets on arena matches
+    default: true
+
   omniarena.admin:
     description: Full OmniArena admin access
     default: op

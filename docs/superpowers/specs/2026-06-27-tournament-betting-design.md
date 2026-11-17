@@ -183,3 +183,51 @@ src/main/java/com/omniarena/commands/admin/
 - `CommandManager.java` — register BetCommand, TournamentCommand
 - `config.yml` — add betting section defaults
 - `plugin.yml` — add permissions + tournament command
+
+---
+
+## Status / Implementation notes
+
+Implemented. The shipped behaviour differs from this design in the following ways (the code is
+authoritative; see `DOCS.md` sections 12 and 13).
+
+**Tournaments**
+- **In-progress persistence is implemented.** The "In-progress bracket state is NOT persisted"
+  decision above was reversed. `tournaments.yml` now stores participants, prizes, state and, for
+  `IN_PROGRESS` tournaments, every bracket round (`bracket.rounds` as `{p1, p2?, winner?}` maps)
+  and `bracket.currentRound`. On startup brackets are restored and resumed; an unusable bracket
+  falls back to `REGISTRATION`. Finished and cancelled tournaments are removed, not stored. A
+  `CANCELLED` state exists (set on delete). Active tournaments are saved on `/oa stop` and
+  `onDisable`, cleared from memory on stop, and reloaded by `/oa start`.
+- **Draw/timeout rule.** A tournament match that ends without a winner never stalls the bracket:
+  the player still in the arena advances; if both are present the player with higher current
+  health advances; otherwise a coin flip decides. (Kill-based game types additionally resolve a
+  strict timeout leader to a normal win before this rule applies.)
+- **Prize rule.** 1st = champion, 2nd = loser of the final, 3rd = `prizeThird` split evenly among the
+  losers of the round before the final (there is no third-place match; shares are rounded down to
+  cents). Prizes of 0 are skipped and, without Vault, a warning is logged and nothing is paid.
+  Payment uses `VaultIntegration.depositOffline`.
+- **Walkover grace and safety tick.** An offline participant gets
+  `tournament.walkover-grace-seconds` (default 60) before the opponent advances by walkover. A
+  100-tick task relaunches matches that had to wait or vanished without a result. A player who
+  leaves the arena during a running tournament match loses.
+- **Start rules.** `start` drops participants who are offline and needs at least 2 online players.
+  Auto-start when the tournament is full is unchanged. While a tournament is in progress its arena
+  is reserved for the current pending match.
+- **Command wiring.** `TournamentCommand` lives in `commands/player/` (not `commands/admin/`) and is
+  registered as the `/oa tournament` player subcommand; `delete` also accepts `cancel` and `status`
+  also accepts `info`. There is no `plugin.yml` command entry for a
+  standalone `/tournament`. No entry fees exist, so `delete` has nothing to refund. Tournament
+  matches are not ranked (no ELO change).
+
+**Betting**
+- Active bets are not persisted to `betting.yml`; instead every bet is refunded on `/oa stop` and on
+  plugin disable, and pending bets are refunded when a match is cleaned up without being settled.
+- A player may hold only one active bet in total (not one per arena). Cancelling is only possible
+  while the betting window is open. `/oa bet info [arena]` shows the pool and bet count, not odds.
+- Settlement: if there is no winner or nobody backed the winner, all bets are refunded; otherwise
+  the whole pool is shared pro rata by stake (rounded down to cents). Bets cannot be placed on a
+  match that is ENDING/RESETTING or not live.
+- `betting.allow-spectator-bet` is present in `config.yml` but is not read.
+- `/oa bet` requires the permission node `omniarena.bet`, which is not declared in `plugin.yml`
+  (non-OP players need it granted).

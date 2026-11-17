@@ -117,7 +117,8 @@ mvn -q -Dtest=TournamentBracketTest test
 
 **Storage** (YAML under `plugins/OmniArena/`): `config.yml`, `messages.yml`, `arenas/<name>.yml`,
 `snapshots/<arena>.yml`, `sign-glowstone.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
-`kit-cooldowns.yml`, `stats.yml`, `elo.yml`, `tournaments.yml`. Do not rename persisted keys without
+`kit-cooldowns.yml`, `player-states/<uuid>.yml` (crash-safe pre-arena player state), `stats.yml`,
+`elo.yml`, `tournaments.yml`. Do not rename persisted keys without
 a migration or fallback read.
 
 ## Conventions

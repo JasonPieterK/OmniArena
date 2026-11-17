@@ -132,7 +132,8 @@ delayed `resetMatch` -> `cleanupMatch`.
 (so results land in the saves below); `BlockRestoreModule.cancelAll()`; `queue.stop()`,
 `party.stop()`; `tournament.stop()` (save + clear); `betting.refundAll()`; `stats.saveAll()`;
 `arena.saveAll()`; `elo.shutdown(); elo.saveAll()`; `visual.shutdown()`; `module.shutdown()`;
-`web.stop()`; `integration.shutdown()`.
+`web.stop()`; `integration.shutdown()`; also `KitGUI.closeAll()`, `SettingsGUI.closeAll()` and
+`matchManager.shutdownStateStore()` run in `onDisable`.
 
 ### `/oa stop`, `/oa start`, `/oa restart` (`LifecycleCommand`)
 
@@ -235,8 +236,11 @@ Ranked flag and ELO (`MatchManager.endMatch`):
   ties and `LAST_ALIVE` modes yield `Outcome.TIMEOUT` (a draw).
 - Player state: `MatchManager.saveState/restoreState` store and restore location, game mode, health,
   food, saturation, XP, effects, flight, speeds, invisibility and (if `arena.inventory-restore`)
-  inventory/armor for players *and* spectators. Always leave through `leaveArena`/`leaveSpectator`
-  so state is restored. A stale mapping (match gone) still restores state.
+  inventory/armor for players *and* spectators. `PlayerStateStore` mirrors it to
+  `player-states/<uuid>.yml` (snapshot on main thread, atomic write on a single writer thread) so
+  `PlayerJoinListener` can restore a player after a crash; `MatchManager.shutdownStateStore()` flushes it
+  in `onDisable`. Always leave through `leaveArena`/`leaveSpectator` so state is restored (and the file
+  deleted). A stale mapping (match gone) still restores state.
 - `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`, and refuses arenas reserved by
   an in-progress tournament (`isArenaReserved`) for anyone not in the current pending match.
 - `Arena.lives` (arena file key `lives`, 0 = off): `PlayerDeathListener` decrements
@@ -343,7 +347,8 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
   blacklist are not persisted. `team.colors` and `classes` in the example file are not read.
 - Snapshots: format v2 palette/runs (section 7).
 - `sign-glowstone.yml`: `locations: ["world,x,y,z"]`; only positions listed are ever cleared.
-- `stats.yml`, `elo.yml`, `tournaments.yml`, `admin-kits/`, `player-kits/<uuid>.yml`.
+- `stats.yml`, `elo.yml`, `tournaments.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
+  `kit-cooldowns.yml`, `player-states/<uuid>.yml`.
 - `YamlUtil.save` swallows `IOException` and logs. Prefer it for new files.
 - Never change a persisted key name without a migration or a fallback read of the old key.
 

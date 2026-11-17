@@ -251,6 +251,10 @@ public class MatchManager {
                 .replace("{arena}", arena.getName()));
 
         if (!tabTakeover()) plugin.getVisual().getScoreboardManager().createBoard(player, match);
+        if (!tabTakeover()) {
+            plugin.getVisual().getBossBarManager().addPlayer(player, match);
+            plugin.getVisual().getBossBarManager().updateTimer(match);
+        }
 
         if (match.getState() == MatchState.RUNNING && arena.isMidMatchJoin()) {
             spawnPlayer(player, match);
@@ -340,6 +344,10 @@ public class MatchManager {
 
         player.setGameMode(GameMode.SPECTATOR);
         player.setInvisible(true);
+        if (!tabTakeover()) {
+            plugin.getVisual().getScoreboardManager().createBoard(player, match);
+            plugin.getVisual().getBossBarManager().addPlayer(player, match);
+        }
         player.setFireTicks(0);
 
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-joined")
@@ -415,6 +423,11 @@ public class MatchManager {
                 plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
             }
             secondsLeft[0]--;
+            match.setCountdownSeconds(Math.max(0, secondsLeft[0]));
+            if (!tabTakeover()) {
+                plugin.getVisual().getBossBarManager().updateTimer(match);
+                plugin.getVisual().getScoreboardManager().updateAll(match);
+            }
         }, 20L, 20L);
         match.setCountdownTask(task);
     }

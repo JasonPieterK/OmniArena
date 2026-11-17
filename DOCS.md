@@ -817,6 +817,11 @@ All under `plugins/OmniArena/`:
 - `stats.yml`: `stats.<uuid>.{name,kills,deaths,wins,losses,assists,draws,time-played}`.
 - `elo.yml`: `ratings.<uuid>.{name,rating,wins,losses,draws,highestRating}`.
 - `tournaments.yml`: `tournaments.<name>.{name,arena,maxPlayers,creator,state,participants,prizes.first|second|third,bracket.rounds,bracket.currentRound}`.
+- `player-states/<uuid>.yml`: crash-safe copy of a player's pre-arena state (location, game mode,
+  health, food, XP, effects, flight, speeds, inventory when enabled). Written asynchronously on a
+  single writer thread (atomic temp file + move) when a player joins an arena or spectates; deleted
+  when their state is restored; if it still exists when the player next joins the server (crash or
+  kill during a match) `PlayerJoinListener` restores it and tells the player.
 - `config.yml`, `messages.yml`.
 
 Save behaviour: arenas, kits and tournaments are written synchronously. Stats are written on an
@@ -840,8 +845,8 @@ and tab completers; listeners; sign update task; startup banner.
 Set `stopped`; cancel sign task; leave all online players of active matches (so results are
 included in saves); `BlockRestoreModule.cancelAll`; stop queue and party; save tournaments;
 refund all bets; save stats, arenas, ELO (flush ELO executor); shut down visuals and modules; stop
-the web server; release integrations. Each step is individually guarded so one failure does not
-skip the rest.
+the web server; release integrations; also closes open kit/settings GUIs and flushes the player-state
+writer. Each step is individually guarded so one failure does not skip the rest.
 
 ### `/oa stop`, `/oa start`, `/oa restart` (`omniarena.admin`)
 

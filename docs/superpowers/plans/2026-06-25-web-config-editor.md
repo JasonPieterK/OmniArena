@@ -160,3 +160,30 @@ git add src/main/resources/web/docs.md src/main/java/com/omniarena/web/DocsCatal
 git commit -m "feat: add detailed docs tab"
 ```
 
+
+---
+
+## Status / Implementation notes
+
+Implemented, with these differences from the plan as written:
+
+- Endpoints: `/`, `/styles.css`, `/app.js` (public shell) and token-protected `/api/state`,
+  `/api/apply`, `/api/create-arena`, `/api/delete-arena`, `/api/docs`, `/api/live-matches`,
+  `/api/players`. The UI has six tabs: Dashboard, Live Matches, Arenas, Players, Config, Docs.
+- The session link is created with `/oa website` (admin permission `omniarena.admin`); there is no
+  `/oa editor` command. `/oa override killweb` revokes sessions.
+- Sessions: 24 random bytes, fixed lifetime `web.session-minutes` (not sliding), cap
+  `web.max-sessions` (0 = unlimited), both read once at plugin enable.
+- The server binds `web.bind-address` (default `127.0.0.1`), speaks plain HTTP and expects the token
+  in the query string; use a reverse proxy with HTTPS for remote access and set `web.public-url`.
+- `/api/apply` validates all values first and applies nothing if any is invalid; all Bukkit access is
+  hopped to the main thread; request bodies are limited to 1 MiB.
+- The settings schema (`ConfigSchemaService`) flattens `config.yml` and `messages.yml`, adds a list
+  of extra entries and is trimmed or padded to exactly 250 settings; some entries have no consumer
+  in the code. The same schema backs the in-game `/oa settings` chest GUI and
+  `/oa settings set <key> <value>`.
+- The Docs tab serves `src/main/resources/web/docs.md`, which is maintained separately from the
+  repository-level `DOCS.md`.
+- Icons are loaded from unpkg (Phosphor 2.1.1) without a Subresource Integrity attribute; the hash
+  command is in the README.
+- Tests: only `ConfigSchemaServiceTest` exists; no `WebDashboardServerTest` was written.

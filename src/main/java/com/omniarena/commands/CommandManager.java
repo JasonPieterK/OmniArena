@@ -107,9 +107,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 }
             }
             @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) {
-                if (args.length == 1) return java.util.List.of("help","cleanup","reload","worlds");
-                if (args.length == 2 && args[0].equalsIgnoreCase("worlds"))
-                    return org.bukkit.Bukkit.getWorlds().stream().map(org.bukkit.World::getName).toList();
+                if (args.length == 1) return TabUtil.filter(java.util.List.of("help", "cleanup", "reload", "worlds"), args[0]);
+                if (args.length == 2 && args[0].equalsIgnoreCase("worlds")) return TabUtil.worlds(args[1]);
                 return java.util.List.of();
             }
         });
@@ -126,10 +125,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(playerCommands, "kit", new SubCommand(PermissionChecker.PLAYER_KIT, "/oa kit [action] [args]", "Player kit management") {
             @Override public void execute(CommandSender sender, String[] args) { kitExec.handle(sender, args); }
             @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) {
-                if (!(sender instanceof org.bukkit.entity.Player p)) return java.util.List.of();
-                if (args.length == 1) return java.util.List.of("help","create","list","delete","equip","share","accept","rename","preview").stream().filter(s->s.startsWith(args[0])).toList();
-                if (args.length == 2) return com.omniarena.kit.KitManager.getInstance().getPlayerKits(p.getUniqueId()).stream().map(com.omniarena.kit.PlayerKit::getName).filter(n->n.startsWith(args[1])).toList();
-                return java.util.List.of();
+                return kitExec.tabComplete(sender, args);
             }
         });
         // /oa party mirrors /party exactly
@@ -144,19 +140,41 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         // ── PvP / combat commands (PvPManager-style; /pmr is now /oa) ──
         com.omniarena.combat.PvpCommandHandler pvp = new com.omniarena.combat.PvpCommandHandler();
+        java.util.Set<String> pvpAdminOnly = java.util.Set.of("pvptag", "untag", "pvpglobal", "pvplist", "pvpoverride");
         for (String name : new String[]{"pvp","pvpstatus","pvptag","untag","pvpglobal","newbie","pvpinfo","pvplist","pvpoverride"}) {
-            reg(playerCommands, name, new SubCommand("omniarena.pvp", "/oa " + name, "PvP/combat command") {
+            String perm = pvpAdminOnly.contains(name) ? "omniarena.pvp.admin" : "omniarena.pvp";
+            reg(playerCommands, name, new SubCommand(perm, "/oa " + name + pvpUsageSuffix(name), "PvP/combat command: " + pvpDescription(name)) {
                 @Override public void execute(CommandSender sender, String[] args) { pvp.dispatch(name, sender, args); }
                 @Override public java.util.List<String> tabComplete(CommandSender sender, String[] args) {
-                    if (args.length == 1 && name.equals("pvpglobal")) return java.util.List.of("on","off");
-                    if (args.length == 1 && name.equals("newbie")) return java.util.List.of("add","remove","checktime","disable");
-                    if (args.length == 1)
-                        return org.bukkit.Bukkit.getOnlinePlayers().stream().map(org.bukkit.entity.Player::getName)
-                                .filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase())).toList();
-                    return java.util.List.of();
+                    return pvp.tabComplete(name, sender, args);
                 }
             });
         }
+    }
+
+    private static String pvpUsageSuffix(String name) {
+        return switch (name) {
+            case "pvp", "pvpstatus", "pvpinfo", "untag" -> " [player]";
+            case "pvptag" -> " [player] [seconds]";
+            case "pvpglobal" -> " <on|off>";
+            case "newbie" -> " <add|remove|checktime|disable> [player] [seconds]";
+            default -> "";
+        };
+    }
+
+    private static String pvpDescription(String name) {
+        return switch (name) {
+            case "pvp" -> "toggle your PvP status";
+            case "pvpstatus" -> "check PvP status";
+            case "pvptag" -> "combat-tag a player";
+            case "untag" -> "remove a combat tag";
+            case "pvpglobal" -> "toggle global PvP";
+            case "newbie" -> "newbie protection";
+            case "pvpinfo" -> "detailed PvP info";
+            case "pvplist" -> "list online PvP states";
+            case "pvpoverride" -> "toggle attack override";
+            default -> "";
+        };
     }
 
     private void reg(Map<String, SubCommand> map, String name, SubCommand cmd) {
@@ -252,32 +270,57 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         return false;
     }
 
+    /** True when the sender may use this subcommand (admin node or player node). */
+    private boolean canUse(CommandSender sender, SubCommand cmd, boolean admin) {
+        String perm = cmd.getRequiredPermission();
+        if (admin) return PermissionChecker.hasAdmin(sender, perm);
+        if (perm == null || !(sender instanceof org.bukkit.entity.Player p)) return true;
+        return p.isOp() || p.hasPermission(perm);
+    }
+
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String[] args) {
+        if (args.length == 0) return List.of();
+        String typed = args[args.length - 1];
         if (args.length == 1) {
-            List<String> completions = new ArrayList<>(playerCommands.keySet());
-            if (PermissionChecker.hasAdmin(sender, PermissionChecker.ADMIN_ALL)) {
-                completions.addAll(adminCommands.keySet());
-            }
-            return completions.stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .sorted()
-                    .toList();
+            if (plugin.isStopped()) return TabUtil.filter(List.of("start"), typed);
+            java.util.Set<String> names = new java.util.LinkedHashSet<>();
+            playerCommands.forEach((n, c) -> { if (canUse(sender, c, false)) names.add(n); });
+            adminCommands.forEach((n, c) -> { if (canUse(sender, c, true)) names.add(n); });
+            return TabUtil.filter(names, typed);
         }
+        if (plugin.isStopped()) return List.of();
 
         String sub = args[0].toLowerCase();
         String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
         SubCommand adminCmd = adminCommands.get(sub);
         SubCommand playerCmd = playerCommands.get(sub);
-        SubCommand cmd = adminCmd != null && !shouldUsePlayerCommand(sender, sub, subArgs, adminCmd) ? adminCmd : playerCmd;
-        if (cmd != null) {
-            List<String> res = new ArrayList<>(cmd.tabComplete(sender, subArgs));
-            if (subArgs.length == 1 && !sub.equals("kit") && "help".startsWith(subArgs[0].toLowerCase())) res.add("help");
-            return res;
-        }
+        boolean adminOk = adminCmd != null && PermissionChecker.hasAdmin(sender, adminCmd.getRequiredPermission());
+        boolean playerOk = playerCmd != null && canUse(sender, playerCmd, false);
+        if (!adminOk && !playerOk) return List.of();
 
-        return List.of();
+        java.util.Set<String> res = new java.util.LinkedHashSet<>();
+        if (adminOk && playerOk) {
+            // Overlapping name (kit): same routing as onCommand; the action list is the union.
+            if (subArgs.length == 1) {
+                res.addAll(playerCmd.tabComplete(sender, subArgs));
+                res.addAll(adminCmd.tabComplete(sender, subArgs));
+            } else if (shouldUsePlayerCommand(sender, sub, subArgs, adminCmd)) {
+                res.addAll(playerCmd.tabComplete(sender, subArgs));
+            } else {
+                res.addAll(adminCmd.tabComplete(sender, subArgs));
+            }
+        } else if (adminOk) {
+            res.addAll(adminCmd.tabComplete(sender, subArgs));
+        } else {
+            res.addAll(playerCmd.tabComplete(sender, subArgs));
+        }
+        // "/oa <sub> help" is handled centrally for everything except regen/kit (which have their own help).
+        boolean placeholderOnly = res.size() == 1 && res.iterator().next().startsWith("<");
+        if (subArgs.length == 1 && !sub.equals("kit") && !sub.equals("regen") && !placeholderOnly) res.add("help");
+        // Re-filter by the typed prefix (placeholder hints like "<name>" are kept when nothing is typed).
+        return TabUtil.filter(res, typed);
     }
 
     private void showHelp(CommandSender sender) {
