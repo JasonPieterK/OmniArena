@@ -44,6 +44,7 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.party.PartyManager partyManager;
     private com.omniarena.betting.BettingManager bettingManager;
     private volatile boolean stopped = false;
+    private org.bukkit.scheduler.BukkitTask signUpdateTask;
 
     public static OmniArena getInstance() { return instance; }
     public boolean isStopped() { return stopped; }
@@ -125,8 +126,9 @@ public final class OmniArena extends JavaPlugin {
         var leaveCmd = new com.omniarena.commands.standalone.StandaloneLeaveCommand(this);
         Objects.requireNonNull(getCommand("leave")).setExecutor(leaveCmd);
         Objects.requireNonNull(getCommand("leave")).setTabCompleter(leaveCmd);
-        Objects.requireNonNull(getCommand("party")).setExecutor(new com.omniarena.commands.standalone.PartyCommand(this));
-        Objects.requireNonNull(getCommand("party")).setTabCompleter(new com.omniarena.commands.standalone.PartyCommand(this));
+        var partyCmd = new com.omniarena.commands.standalone.PartyCommand(this);
+        Objects.requireNonNull(getCommand("party")).setExecutor(partyCmd);
+        Objects.requireNonNull(getCommand("party")).setTabCompleter(partyCmd);
 
         // Register player command forwarders
         var forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "spectate");
@@ -196,13 +198,23 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new InventoryClickListener(this),  this);
 
         // ── Sign update task ──────────────────────────────────────
-        int signInterval = configManager.getConfig().getInt("signs.update-interval", 20);
-        AsyncUtil.runSyncRepeating(() ->
-            arenaManager.getAll().forEach(arena ->
-                signManager.updateAllSigns(arena)), signInterval, signInterval);
+        startSignUpdateTask();
 
         long elapsed = System.currentTimeMillis() - start;
         logStartupBanner(elapsed);
+    }
+
+    /** (Re)starts the periodic sign refresh; safe to call repeatedly (e.g. after /oa start). */
+    public void startSignUpdateTask() {
+        if (signUpdateTask != null) {
+            signUpdateTask.cancel();
+            signUpdateTask = null;
+        }
+        int signInterval = Math.max(1, configManager.getConfig().getInt("signs.update-interval", 20));
+        signUpdateTask = AsyncUtil.runSyncRepeating(() -> {
+            if (stopped || arenaManager == null || signManager == null) return;
+            arenaManager.getAll().forEach(arena -> signManager.updateAllSigns(arena));
+        }, signInterval, signInterval);
     }
 
     private void logStartupBanner(long elapsed) {
@@ -244,25 +256,39 @@ public final class OmniArena extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Save all data
-        if (statsManager != null) statsManager.saveAll();
-        if (arenaManager != null) arenaManager.saveAll();
-        if (bettingManager != null) bettingManager.refundAll();
+        stopped = true;
+        if (signUpdateTask != null) { signUpdateTask.cancel(); signUpdateTask = null; }
 
-        // End all active matches cleanly
-        if (matchManager != null) {
-            matchManager.getActiveMatches().forEach(match -> {
-                new java.util.ArrayList<>(match.getPlayers()).forEach(uuid -> {
-                    org.bukkit.entity.Player player = getServer().getPlayer(uuid);
-                    if (player != null) matchManager.leaveArena(player);
-                });
-            });
+        // End all active matches cleanly first so their results are included in the saves below
+        try {
+            if (matchManager != null) {
+                new java.util.ArrayList<>(matchManager.getActiveMatches()).forEach(match ->
+                    new java.util.ArrayList<>(match.getPlayers()).forEach(uuid -> {
+                        org.bukkit.entity.Player player = getServer().getPlayer(uuid);
+                        if (player != null) {
+                            try { matchManager.leaveArena(player); }
+                            catch (Exception e) { getLogger().warning("Failed to remove " + player.getName() + " on disable: " + e.getMessage()); }
+                        }
+                    }));
+            }
+        } catch (Exception e) {
+            getLogger().severe("Error ending matches on disable: " + e.getMessage());
         }
 
+        // Stop periodic systems
+        try { if (queueManager != null) queueManager.stop(); } catch (Exception e) { getLogger().warning("Queue stop failed: " + e.getMessage()); }
+        try { if (partyManager != null) partyManager.stop(); } catch (Exception e) { getLogger().warning("Party stop failed: " + e.getMessage()); }
+
+        // Save all data (each guarded so one failure does not skip the rest)
+        try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed: " + e.getMessage()); }
+        try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed: " + e.getMessage()); }
+        try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed: " + e.getMessage()); }
+        try { if (eloManager != null) eloManager.saveAll(); } catch (Exception e) { getLogger().severe("Elo save failed: " + e.getMessage()); }
+
         // Shutdown visual systems
-        if (visual != null) visual.shutdown();
-        if (moduleManager != null) moduleManager.shutdown();
-        if (webDashboardServer != null) webDashboardServer.stop();
+        try { if (visual != null) visual.shutdown(); } catch (Exception e) { getLogger().warning("Visual shutdown failed: " + e.getMessage()); }
+        try { if (moduleManager != null) moduleManager.shutdown(); } catch (Exception e) { getLogger().warning("Module shutdown failed: " + e.getMessage()); }
+        try { if (webDashboardServer != null) webDashboardServer.stop(); } catch (Exception e) { getLogger().warning("Web stop failed: " + e.getMessage()); }
 
         logShutdownBanner();
     }

@@ -73,6 +73,7 @@ public class BetCommand extends SubCommand {
         double amount;
         try {
             amount = Double.parseDouble(args[3]);
+            if (!Double.isFinite(amount)) throw new NumberFormatException();
         } catch (NumberFormatException e) {
             MessageUtil.send(player, "<red>Invalid amount: <yellow>" + args[3]);
             return;

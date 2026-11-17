@@ -131,6 +131,7 @@ public class SettingsCommand extends SubCommand {
         }
         String raw = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
         Object value = parseValue(entry, raw, sender);
+        if (value == null) return;
         ConfigManager.getInstance().setValue(entry.key(), value);
         MessageUtil.send(sender, "<green>Set <yellow>" + entry.key() + "</yellow> to <white>" + stringifyCurrent(value) + "</white>.");
         sender.sendMessage(settingLine(entry));
@@ -150,7 +151,7 @@ public class SettingsCommand extends SubCommand {
             };
         } catch (NumberFormatException e) {
             MessageUtil.send(sender, "<red>Expected number for <yellow>" + entry.key() + "</yellow>.");
-            return entry.defaultValue();
+            return null;
         }
     }
 

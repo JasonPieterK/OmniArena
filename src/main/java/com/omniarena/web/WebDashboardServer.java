@@ -38,6 +38,36 @@ public class WebDashboardServer {
     private final ConfigApplyService applyService = new ConfigApplyService();
     private final DocsCatalog docsCatalog;
     private HttpServer server;
+    private java.util.concurrent.ExecutorService executor;
+    private static final int MAX_BODY_BYTES = 1024 * 1024;
+    private static final java.util.regex.Pattern ARENA_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{1,32}");
+
+    @FunctionalInterface
+    private interface Handler { void handle(HttpExchange exchange) throws Exception; }
+
+    /** Wraps a handler so exceptions yield an error response instead of a dropped connection. */
+    private void ctx(String path, Handler handler) {
+        server.createContext(path, exchange -> {
+            try {
+                handler.handle(exchange);
+            } catch (Throwable t) {
+                plugin.getLogger().warning("[Web] Request failed for " + path + ": " + t);
+                try { send(exchange, 400, "{\"ok\":false}", "application/json; charset=utf-8"); } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    /** Runs Bukkit API work on the main thread and waits for the result. */
+    private <T> T onMain(java.util.concurrent.Callable<T> task) throws Exception {
+        if (Bukkit.isPrimaryThread()) return task.call();
+        return Bukkit.getScheduler().callSyncMethod(plugin, task).get(10, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private String readBody(HttpExchange exchange) throws IOException {
+        byte[] bytes = exchange.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
+        if (bytes.length > MAX_BODY_BYTES) throw new IOException("Request body too large");
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
 
     public WebDashboardServer(OmniArena plugin) {
         this.plugin = plugin;
@@ -58,20 +88,25 @@ public class WebDashboardServer {
             String bindAddress = plugin.getConfigManager().getConfig().getString("web.bind-address", "0.0.0.0");
             int port = plugin.getConfigManager().getConfig().getInt("web.port", 8123);
             server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
-            server.createContext("/", this::handleRoot);
-            server.createContext("/styles.css", exchange -> sendResource(exchange, "web/styles.css", "text/css; charset=utf-8"));
-            server.createContext("/app.js", exchange -> sendResource(exchange, "web/app.js", "application/javascript; charset=utf-8"));
+            ctx("/", this::handleRoot);
+            ctx("/styles.css", exchange -> sendResource(exchange, "web/styles.css", "text/css; charset=utf-8"));
+            ctx("/app.js", exchange -> sendResource(exchange, "web/app.js", "application/javascript; charset=utf-8"));
             // legacy paths kept for compatibility
-            server.createContext("/web/styles.css", exchange -> sendResource(exchange, "web/styles.css", "text/css; charset=utf-8"));
-            server.createContext("/web/app.js", exchange -> sendResource(exchange, "web/app.js", "application/javascript; charset=utf-8"));
-            server.createContext("/api/state", this::handleState);
-            server.createContext("/api/apply", this::handleApply);
-            server.createContext("/api/create-arena", this::handleCreateArena);
-            server.createContext("/api/delete-arena", this::handleDeleteArena);
-            server.createContext("/api/docs", this::handleDocs);
-            server.createContext("/api/live-matches", this::handleLiveMatches);
-            server.createContext("/api/players", this::handlePlayers);
-            server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+            ctx("/web/styles.css", exchange -> sendResource(exchange, "web/styles.css", "text/css; charset=utf-8"));
+            ctx("/web/app.js", exchange -> sendResource(exchange, "web/app.js", "application/javascript; charset=utf-8"));
+            ctx("/api/state", this::handleState);
+            ctx("/api/apply", this::handleApply);
+            ctx("/api/create-arena", this::handleCreateArena);
+            ctx("/api/delete-arena", this::handleDeleteArena);
+            ctx("/api/docs", this::handleDocs);
+            ctx("/api/live-matches", this::handleLiveMatches);
+            ctx("/api/players", this::handlePlayers);
+            executor = java.util.concurrent.Executors.newFixedThreadPool(4, r -> {
+                Thread t = new Thread(r, "OmniArena-Web");
+                t.setDaemon(true);
+                return t;
+            });
+            server.setExecutor(executor);
             server.start();
             plugin.getLogger().info("[Web] Dashboard running on " + bindAddress + ":" + port);
         } catch (IOException e) {
@@ -80,7 +115,14 @@ public class WebDashboardServer {
     }
 
     public void stop() {
-        if (server != null) server.stop(0);
+        if (server != null) {
+            server.stop(0);
+            server = null;
+        }
+        if (executor != null) {
+            executor.shutdownNow();
+            executor = null;
+        }
     }
 
     /** @return URL string, or null if session limit reached */
@@ -118,78 +160,90 @@ public class WebDashboardServer {
         sendResource(exchange, "web/index.html", "text/html; charset=utf-8");
     }
 
-    private void handleState(HttpExchange exchange) throws IOException {
+    private void handleState(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
-        ConfigSnapshot snapshot = schemaService.snapshot();
+        ConfigSnapshot snapshot = onMain(schemaService::snapshot);
         send(exchange, 200, gson.toJson(snapshot), "application/json; charset=utf-8");
     }
 
-    private void handleDocs(HttpExchange exchange) throws IOException {
+    private void handleDocs(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
         send(exchange, 200, docsCatalog.loadMarkdown(), "text/markdown; charset=utf-8");
     }
 
-    private void handleApply(HttpExchange exchange) throws IOException {
+    private void handleApply(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
             return;
         }
-        JsonObject payload = gson.fromJson(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), JsonObject.class);
-        applyService.apply(payload, schemaService);
+        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
+        onMain(() -> { applyService.apply(payload, schemaService); return null; });
         send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
     }
 
-    private void handleCreateArena(HttpExchange exchange) throws IOException {
+    private void handleCreateArena(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
             return;
         }
-        JsonObject payload = gson.fromJson(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
         String name = payload != null && payload.has("name") ? payload.get("name").getAsString().trim() : "";
-        if (name.isBlank() || plugin.getArenaManager().exists(name)) {
+        final String arenaName = name;
+        boolean created = ARENA_NAME.matcher(arenaName).matches() && onMain(() -> {
+            if (plugin.getArenaManager().exists(arenaName)) return false;
+            plugin.getArenaManager().create(arenaName);
+            return true;
+        });
+        if (!created) {
             send(exchange, 400, "{\"ok\":false}", "application/json; charset=utf-8");
             return;
         }
-        plugin.getArenaManager().create(name);
         send(exchange, 200, "{\"ok\":true}", "application/json; charset=utf-8");
     }
 
-    private void handleDeleteArena(HttpExchange exchange) throws IOException {
+    private void handleDeleteArena(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
             return;
         }
-        JsonObject payload = gson.fromJson(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), JsonObject.class);
+        JsonObject payload = gson.fromJson(readBody(exchange), JsonObject.class);
         String name = payload != null && payload.has("name") ? payload.get("name").getAsString().trim() : "";
-        boolean deleted = !name.isBlank() && plugin.getArenaManager().delete(name);
+        final String arenaName = name;
+        boolean deleted = ARENA_NAME.matcher(arenaName).matches() && onMain(() -> plugin.getArenaManager().delete(arenaName));
         send(exchange, deleted ? 200 : 404, deleted ? "{\"ok\":true}" : "{\"ok\":false}", "application/json; charset=utf-8");
     }
 
-    private void handleLiveMatches(HttpExchange exchange) throws IOException {
+    private void handleLiveMatches(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
-        List<LiveMatchData> matches = new ArrayList<>();
+        List<LiveMatchData> matches = onMain(() -> {
+        List<LiveMatchData> result = new ArrayList<>();
         var matchMgr = com.omniarena.match.MatchManager.getInstance();
         if (matchMgr != null) {
             for (Arena arena : plugin.getArenaManager().getAll()) {
                 var matchOpt = matchMgr.getMatch(arena);
                 if (matchOpt.isEmpty()) continue;
-                matches.add(buildLiveMatchData(arena, matchOpt.get()));
+                result.add(buildLiveMatchData(arena, matchOpt.get()));
             }
         }
+        return result;
+        });
         send(exchange, 200, gson.toJson(matches), "application/json; charset=utf-8");
     }
 
-    private void handlePlayers(HttpExchange exchange) throws IOException {
+    private void handlePlayers(HttpExchange exchange) throws Exception {
         if (!authorize(exchange)) return;
         String search = queryParams(exchange.getRequestURI()).get("search");
-        List<PlayerStatsView> players = new ArrayList<>();
+        List<PlayerStatsView> players = onMain(() -> {
+        List<PlayerStatsView> result = new ArrayList<>();
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (search != null && !search.isBlank() && !online.getName().toLowerCase().contains(search.toLowerCase())) continue;
-            players.add(buildPlayerStats(online));
+            result.add(buildPlayerStats(online));
         }
+        return result;
+        });
         players.sort((a, b) -> Integer.compare(b.elo(), a.elo()));
         send(exchange, 200, gson.toJson(players.stream().limit(100).collect(Collectors.toList())), "application/json; charset=utf-8");
     }

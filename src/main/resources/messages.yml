@@ -11,6 +11,7 @@ invalid-args: "<red>Invalid usage. <yellow>{usage}"
 player-not-found: "<red>Player <yellow>{player}</yellow> not found."
 arena-not-found: "<red>Arena <yellow>{arena}</yellow> not found."
 invalid-number: "<red><yellow>{input}</yellow> is not a valid number."
+arena-banned: "<red>You are banned from this arena."
 config-reloaded: "<green>Configuration reloaded successfully."
 plugin-version: "<gray>OmniArena <green>v{version} <gray>by OmniArena Team."
 

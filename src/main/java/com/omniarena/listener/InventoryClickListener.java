@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -35,11 +36,14 @@ public class InventoryClickListener implements Listener {
         KitMenuHolder holder = KitGUI.getKitMenuHolder(top);
         if (holder == null) return;
 
+        // Cancel every click while a menu is open (shift-click from the player inventory,
+        // number-key swaps, double-click collect, cursor placement) to prevent item theft/insertion.
+        event.setCancelled(true);
+
+        if (event.getClickedInventory() != top) return;
         if (event.getRawSlot() < 0 || event.getRawSlot() >= top.getSize()) return;
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
-
-        event.setCancelled(true);
 
         if (holder.getType() == KitMenuHolder.MenuType.ADMIN) {
             handleAdminKitClick(player, holder, event.getRawSlot());
@@ -47,6 +51,12 @@ public class InventoryClickListener implements Listener {
         }
 
         handlePlayerKitClick(player, holder, event.getRawSlot(), clicked);
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (KitGUI.getKitMenuHolder(event.getView().getTopInventory()) == null) return;
+        event.setCancelled(true);
     }
 
     private void handleAdminKitClick(Player player, KitMenuHolder holder, int slot) {

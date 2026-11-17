@@ -36,7 +36,7 @@ public class KillstreakModule {
             milestones.put(20, "GODLIKE");
         } else {
             for (String key : section.getKeys(false)) {
-                try { milestones.put(Integer.parseInt(key), section.getString(key)); }
+                try { String v = section.getString(key); if (v != null) milestones.put(Integer.parseInt(key), v); }
                 catch (NumberFormatException ignored) {}
             }
         }
@@ -83,12 +83,8 @@ public class KillstreakModule {
     }
 
     private String getTitle(int streak) {
-        String last = null;
-        for (java.util.Map.Entry<Integer, String> entry : milestones.entrySet()) {
-            if (streak >= entry.getKey()) last = entry.getValue();
-        }
         // Only show on exact milestone
-        return milestones.containsKey(streak) ? milestones.get(streak) : null;
+        return milestones.get(streak);
     }
 
     public void reload() { loadMilestones(); }

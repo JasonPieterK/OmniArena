@@ -37,6 +37,10 @@ public class LifecycleCommand extends SubCommand {
     }
 
     private void start(CommandSender sender) {
+        if (!plugin.isStopped()) {
+            MessageUtil.send(sender, "<yellow>OmniArena is already running.");
+            return;
+        }
         plugin.setStopped(false);
         MessageUtil.send(sender, "<yellow>Starting OmniArena systems...");
         try {
@@ -53,11 +57,13 @@ public class LifecycleCommand extends SubCommand {
 
             // Restart web dashboard
             plugin.getWebDashboardServer().start();
+            plugin.startSignUpdateTask();
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "
                     + plugin.getKitManager().getAllAdminKits().size() + " kit(s)");
         } catch (Exception e) {
+            plugin.setStopped(true);
             MessageUtil.send(sender, "<red>✗ Failed to start: " + e.getMessage());
             plugin.getLogger().severe("Start failed: " + e.getMessage());
             e.printStackTrace();
@@ -65,6 +71,10 @@ public class LifecycleCommand extends SubCommand {
     }
 
     private void stop(CommandSender sender) {
+        if (plugin.isStopped()) {
+            MessageUtil.send(sender, "<yellow>OmniArena is already stopped.");
+            return;
+        }
         plugin.setStopped(true);
         MessageUtil.send(sender, "<yellow>Stopping OmniArena systems...");
         try {
@@ -93,6 +103,9 @@ public class LifecycleCommand extends SubCommand {
             // Stop web and visuals
             plugin.getWebDashboardServer().stop();
             plugin.getVisual().shutdown();
+            plugin.getModuleManager().shutdown();
+            plugin.getQueueManager().stop();
+            plugin.getPartyManager().stop();
 
             MessageUtil.send(sender, "<green>✓ OmniArena stopped successfully");
             MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), canceled all tasks, data saved");
@@ -107,7 +120,7 @@ public class LifecycleCommand extends SubCommand {
         MessageUtil.send(sender, "<red>Restarting OmniArena...");
         Bukkit.getScheduler().runTask(plugin, () -> {
             stop(sender);
-            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> start(sender), 20L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> start(sender), 20L);
         });
     }
 

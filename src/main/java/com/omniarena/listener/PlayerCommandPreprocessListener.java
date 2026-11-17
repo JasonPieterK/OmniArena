@@ -28,6 +28,11 @@ public class PlayerCommandPreprocessListener implements Listener {
         if (!label.toLowerCase(Locale.ROOT).equals("kit")) return;
 
         event.setCancelled(true);
+        if (!event.getPlayer().hasPermission(com.omniarena.permission.PermissionChecker.PLAYER_KIT)) {
+            com.omniarena.util.MessageUtil.send(event.getPlayer(),
+                    com.omniarena.config.ConfigManager.getInstance().getMessage("no-permission"));
+            return;
+        }
         String[] args = raw.length() == label.length()
                 ? new String[0]
                 : raw.substring(label.length()).trim().split("\\s+");

@@ -24,5 +24,6 @@ public class ModuleManager {
 
     public void shutdown() {
         comboModule.cancelAll();
+        powerUpModule.cancelAll();
     }
 }

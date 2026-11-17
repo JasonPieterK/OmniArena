@@ -13,6 +13,7 @@ public class BoardManager {
     private final Map<UUID, FastBoard> boards = new HashMap<>();
 
     public void createBoard(Player player, Match match) {
+        removeBoard(player);
         FastBoard board = new FastBoard(player);
         board.updateTitle(ColorUtil.toLegacy(ColorUtil.parse(
                 "<gradient:#ff6b35:#f7c59f>OmniArena</gradient>")));
@@ -73,7 +74,7 @@ public class BoardManager {
         // Team
         MatchTeam team = match.getTeam(uuid);
         if (team != null) {
-            lines.add("§7Team: " + team.getColor().getMiniMessageTag() + team.getName());
+            lines.add("§7Team: " + ColorUtil.toLegacy(ColorUtil.parse(team.getColor().getMiniMessageTag())) + team.getName());
             lines.add("§7Team Kills: §f" + team.getKills());
         }
 
