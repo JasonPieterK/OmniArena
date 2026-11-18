@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.ArenaManager;
 import com.omniarena.commands.SubCommand;
@@ -27,6 +28,10 @@ public class CreateArenaCommand extends SubCommand {
             return;
         }
         String name = args[0];
+        if (!name.matches("[A-Za-z0-9_-]{1,32}")) {
+            MessageUtil.send(sender, "<red>Invalid arena name <yellow>" + name + "</yellow>: arena names must be 1-32 characters using only letters, numbers, '_' or '-' (no spaces). <gray>Example: <white>/oa create duel_1</white>");
+            return;
+        }
         ArenaManager am = ArenaManager.getInstance();
         if (am.exists(name)) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-already-exists")
@@ -40,6 +45,6 @@ public class CreateArenaCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        return args.length == 1 ? List.of("<name>") : List.of();
+        return args.length == 1 ? TabUtil.hint("<name>", args[0]) : List.of();
     }
 }

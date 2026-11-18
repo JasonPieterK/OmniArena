@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -54,7 +55,7 @@ public class SignCommand extends SubCommand {
                 if (sm.createSign(arenaOpt.get(), target)) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("sign-created").replace("{arena}", args[1]));
                 } else {
-                    MessageUtil.send(player, "<red>Target block is not a sign.");
+                    MessageUtil.send(player, "<red>The block you are looking at is not a sign (it is " + target.getType().name().toLowerCase() + "). <gray>Place a sign first, look directly at it (within 5 blocks) and run <white>/oa sign create " + args[1] + "</white> again.");
                 }
             }
             case "remove" -> {
@@ -93,9 +94,9 @@ public class SignCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("create", "remove", "list");
-        if (args.length == 2 && !args[0].equalsIgnoreCase("remove"))
-            return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("create", "remove", "list"), cur);
+        if (args.length == 2 && !args[0].equalsIgnoreCase("remove")) return TabUtil.arenas(cur);
         return List.of();
     }
 }

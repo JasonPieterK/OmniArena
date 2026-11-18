@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -40,25 +41,40 @@ public class ForceWinCommand extends SubCommand {
             return;
         }
 
+        Match m = matchOpt.get();
+        if (m.getState() != com.omniarena.match.MatchState.RUNNING) {
+            MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is not in the RUNNING state (now: " + m.getState().name() + "). <gray>Force-win only works on a running match; start it with <white>/oa force start " + arena.getName() + "</white>.");
+            return;
+        }
         String target = args[1];
-        Player player = Bukkit.getPlayer(target);
+        Player player = Bukkit.getPlayerExact(target);
 
         if (player != null) {
+            if (!m.hasPlayer(player.getUniqueId())) {
+                MessageUtil.send(sender, "<red>" + player.getName() + " is not playing in <yellow>" + arena.getName() + "</yellow>, so they can't be awarded the win. <gray>Pick a participant (tab-complete after <white>/oa forcewin " + arena.getName() + "</white>).");
+                return;
+            }
             MatchManager.getInstance().forceWin(matchOpt.get(), player.getUniqueId());
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("forcewin-player")
                     .replace("{player}", player.getName()).replace("{arena}", arena.getName()));
         } else {
-            // Try team
-            MatchManager.getInstance().forceWinTeam(matchOpt.get(), target);
+            String teamName = m.getTeams().stream().map(com.omniarena.match.MatchTeam::getName)
+                    .filter(n -> n.equalsIgnoreCase(target)).findFirst().orElse(null);
+            if (teamName == null) {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", target) + " <gray>It is also not a team name in this match; valid teams: <white>" + m.getTeams().stream().map(com.omniarena.match.MatchTeam::getName).collect(java.util.stream.Collectors.joining(", ")) + "</white>.");
+                return;
+            }
+            MatchManager.getInstance().forceWinTeam(m, teamName);
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("forcewin-team")
-                    .replace("{team}", target).replace("{arena}", arena.getName()));
+                    .replace("{team}", teamName).replace("{arena}", arena.getName()));
         }
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[0])).toList();
-        if (args.length == 2) return Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(n -> n.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.arenas(cur);
+        if (args.length == 2) return TabUtil.forceWinTargets(sender, args[0], cur);
         return List.of();
     }
 }

@@ -50,18 +50,27 @@ public class StatsManager {
                     stats.setTimePlayed(cfg.getLong(path + ".time-played"));
                     statsCache.put(uuid, stats);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to load stats for " + uuidStr + ": " + e.getMessage());
+                    plugin.getLogger().warning("Skipped corrupt stats entry for player " + uuidStr + " in plugins/OmniArena/stats.yml (" + e + "). Fix: correct or remove the 'players." + uuidStr + "' section; that player's stats start from 0.");
                 }
             }
+            invalidateTop();
             plugin.getLogger().info("Loaded stats for " + statsCache.size() + " player(s).");
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to load stats file: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load plugins/OmniArena/stats.yml (" + e.getMessage() + "). Stats will start empty and may overwrite the file. Fix: back up the file now, fix its YAML syntax (or delete it) and restart.", e);
         }
     }
 
     public void saveAll() {
-        AsyncUtil.runAsync(() -> {
+        // During onDisable the plugin is already disabled, so the scheduler is unusable: save inline.
+        if (!plugin.isEnabled()) {
+            writeStats();
+            return;
+        }
+        AsyncUtil.runAsync(this::writeStats);
+    }
+
+    private synchronized void writeStats() {
+        {
             FileConfiguration cfg = new YamlConfiguration();
             for (Map.Entry<UUID, PlayerStats> entry : statsCache.entrySet()) {
                 String path = "stats." + entry.getKey();
@@ -76,11 +85,29 @@ public class StatsManager {
                 cfg.set(path + ".time-played", s.getTimePlayed());
             }
             YamlUtil.save(cfg, statsFile, plugin.getLogger());
-        });
+        }
     }
 
+    /**
+     * Read-only lookup: returns the cached stats or a transient zeroed instance.
+     * Never creates or persists an entry for unknown UUIDs.
+     */
+    public PlayerStats peekStats(UUID uuid) {
+        PlayerStats cached = statsCache.get(uuid);
+        if (cached != null) return cached;
+        OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+        return new PlayerStats(uuid, op.getName() != null ? op.getName() : "Unknown");
+    }
+
+    /** Read-only lookup that reports whether any stats exist for the player. */
+    public java.util.Optional<PlayerStats> findStats(UUID uuid) {
+        return java.util.Optional.ofNullable(statsCache.get(uuid));
+    }
+
+    /** Get-or-create: for write paths (match results, join). Use {@link #peekStats} for reads. */
     public PlayerStats getStats(UUID uuid) {
         return statsCache.computeIfAbsent(uuid, id -> {
+            invalidateTop();
             OfflinePlayer op = Bukkit.getOfflinePlayer(id);
             return new PlayerStats(id, op.getName() != null ? op.getName() : "Unknown");
         });
@@ -97,41 +124,52 @@ public class StatsManager {
 
             if (result.isDraw()) {
                 stats.addDraw();
-            } else if (uuid.equals(result.getWinnerId())) {
+            } else if (uuid.equals(result.getWinnerId())
+                    || (result.getWinnerTeamName() != null && match.getTeam(uuid) != null
+                        && result.getWinnerTeamName().equals(match.getTeam(uuid).getName()))) {
                 stats.addWin();
             } else {
                 stats.addLoss();
             }
         }
 
-        AsyncUtil.runAsyncThenSync(() -> { saveAll(); return null; }, ignored -> {});
+        invalidateTop();
+        saveAll();
     }
 
     public void resetStats(UUID uuid) {
         statsCache.put(uuid, new PlayerStats(uuid,
                 Bukkit.getOfflinePlayer(uuid).getName() != null
                         ? Bukkit.getOfflinePlayer(uuid).getName() : "Unknown"));
+        invalidateTop();
         saveAll();
     }
 
+    // Leaderboard cache: invalidated whenever stats mutate (recordResult/reset/load/create).
+    private final Map<String, List<PlayerStats>> topCache = new ConcurrentHashMap<>();
+    private final Map<String, Integer> topCacheLimit = new ConcurrentHashMap<>();
+
+    private void invalidateTop() { topCache.clear(); topCacheLimit.clear(); }
+
+    private List<PlayerStats> top(String key, int limit, Comparator<PlayerStats> cmp) {
+        List<PlayerStats> cached = topCache.get(key);
+        Integer cl = topCacheLimit.get(key);
+        if (cached != null && cl != null && cl == limit) return cached;
+        List<PlayerStats> res = statsCache.values().stream().sorted(cmp).limit(limit).toList();
+        topCache.put(key, res);
+        topCacheLimit.put(key, limit);
+        return res;
+    }
+
     public List<PlayerStats> getTopKills(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingInt(PlayerStats::getKills).reversed())
-                .limit(limit)
-                .toList();
+        return top("kills", limit, Comparator.comparingInt(PlayerStats::getKills).reversed());
     }
 
     public List<PlayerStats> getTopWins(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingInt(PlayerStats::getWins).reversed())
-                .limit(limit)
-                .toList();
+        return top("wins", limit, Comparator.comparingInt(PlayerStats::getWins).reversed());
     }
 
     public List<PlayerStats> getTopKD(int limit) {
-        return statsCache.values().stream()
-                .sorted(Comparator.comparingDouble(PlayerStats::getKDRatio).reversed())
-                .limit(limit)
-                .toList();
+        return top("kd", limit, Comparator.comparingDouble(PlayerStats::getKDRatio).reversed());
     }
 }

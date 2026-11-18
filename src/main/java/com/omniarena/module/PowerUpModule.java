@@ -27,9 +27,12 @@ public class PowerUpModule {
     public void startSpawning(Match match, List<Location> spawnPoints) {
         if (!match.getArena().hasModule("power-up") || spawnPoints.isEmpty()) return;
 
+        BukkitTask previous = spawnTasks.remove(match.getArena().getName());
+        if (previous != null) previous.cancel();
+
         BukkitTask task = org.bukkit.Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!match.getArena().isRunning()) return;
-            Location loc = spawnPoints.get(new Random().nextInt(spawnPoints.size()));
+            Location loc = spawnPoints.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(spawnPoints.size()));
             spawnPowerUp(loc, match);
         }, 200L, 400L); // every 20s after first 10s
 
@@ -41,12 +44,19 @@ public class PowerUpModule {
         if (task != null) task.cancel();
     }
 
+    public void cancelAll() {
+        spawnTasks.values().forEach(BukkitTask::cancel);
+        spawnTasks.clear();
+        activeEffects.clear();
+    }
+
     private void spawnPowerUp(Location loc, Match match) {
+        if (loc == null || loc.getWorld() == null) return;
         PowerUpType type = PowerUpType.random();
         ItemStack item = new ItemStack(type.material());
         org.bukkit.inventory.meta.ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(com.omniarena.util.ColorUtil.parse(type.displayName()));
+            com.omniarena.platform.Platform.get().setDisplayName(meta, com.omniarena.util.ColorUtil.parse(type.displayName()));
             item.setItemMeta(meta);
         }
 
@@ -69,7 +79,7 @@ public class PowerUpModule {
         if (!match.getArena().hasModule("power-up")) return;
         String name = item.getItemMeta() != null && item.getItemMeta().hasDisplayName()
                 ? net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                .plainText().serialize(item.getItemMeta().displayName()) : "";
+                .plainText().serialize(com.omniarena.platform.Platform.get().getDisplayName(item.getItemMeta())) : "";
 
         for (PowerUpType type : PowerUpType.values()) {
             if (name.contains(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().stripTags(type.displayName()))) {
@@ -83,6 +93,8 @@ public class PowerUpModule {
 
     private void applyEffect(Player player, PowerUpType type) {
         player.addPotionEffect(new PotionEffect(type.effect(), type.durationTicks(), type.level()));
+        long now = System.currentTimeMillis();
+        activeEffects.values().removeIf(expiry -> expiry < now);
         activeEffects.put(player.getUniqueId(), System.currentTimeMillis() + (type.durationTicks() * 50L));
     }
 
@@ -115,7 +127,7 @@ public class PowerUpModule {
 
         public static PowerUpType random() {
             PowerUpType[] values = values();
-            return values[new Random().nextInt(values.length)];
+            return values[java.util.concurrent.ThreadLocalRandom.current().nextInt(values.length)];
         }
     }
 }

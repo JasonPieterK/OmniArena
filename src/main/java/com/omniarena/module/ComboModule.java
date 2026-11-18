@@ -23,9 +23,12 @@ public class ComboModule {
     }
 
     public void handleKill(Player killer, Match match) {
-        if (!match.getArena().hasModule("combo")) return;
-
         UUID uid = killer.getUniqueId();
+        if (!match.getArena().hasModule("combo")) {
+            // Module off: nothing would ever reset the counter the action bar displays
+            match.resetCombo(uid);
+            return;
+        }
         int combo = match.getCombo(uid);
 
         if (combo > 1) {
@@ -40,7 +43,7 @@ public class ComboModule {
         if (existing != null) existing.cancel();
 
         BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (match.getCombo(uid) > 1) {
+            if (match.getCombo(uid) > 1 && killer.isOnline()) {
                 plugin.getVisual().getActionBarManager().sendComboBroken(killer);
             }
             match.resetCombo(uid);
@@ -48,6 +51,12 @@ public class ComboModule {
         }, COMBO_WINDOW_TICKS);
 
         comboResetTasks.put(uid, task);
+    }
+
+    /** The player died or left: their chain is over and no reset timer should linger. */
+    public void clear(UUID uid) {
+        BukkitTask t = comboResetTasks.remove(uid);
+        if (t != null) t.cancel();
     }
 
     public void cancelAll() {

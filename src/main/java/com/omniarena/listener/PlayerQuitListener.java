@@ -18,6 +18,16 @@ public class PlayerQuitListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        if (plugin.getVisual() != null) {
+            plugin.getVisual().getBossBarManager().removePlayer(player);
+            plugin.getVisual().getScoreboardManager().removeBoard(player);
+        }
+        com.omniarena.queue.QueueManager qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null) qm.forceRemove(player.getUniqueId(), player.getName() + " disconnected");
+        com.omniarena.party.PartyManager pm = com.omniarena.party.PartyManager.getInstance();
+        if (pm != null) pm.handleQuit(player);
+        com.omniarena.kit.KitManager km = com.omniarena.kit.KitManager.getInstance();
+        if (km != null) km.evict(player.getUniqueId());
         MatchManager mm = MatchManager.getInstance();
 
         if (mm.isSpectating(player)) {

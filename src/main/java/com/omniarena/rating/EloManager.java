@@ -46,36 +46,82 @@ public class EloManager {
                     rating.setLosses(cfg.getInt(path + ".losses"));
                     rating.setDraws(cfg.getInt(path + ".draws"));
                     // Note: highestRating not persisted, recalculated on load
-                    if (rating.getRating() > rating.getHighestRating()) {
-                        rating.getClass().getDeclaredField("highestRating").setInt(rating, rating.getRating());
-                    }
+                    rating.setHighestRating(Math.max(rating.getRating(),
+                            cfg.getInt(path + ".highestRating", rating.getRating())));
                     ratings.put(uuid, rating);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to load ELO for " + uuidStr + ": " + e.getMessage());
+                    plugin.getLogger().warning("Skipped corrupt ELO entry for player " + uuidStr + " in plugins/OmniArena/elo.yml (" + e + "). Fix: correct or remove that entry; the player restarts at the default rating.");
                 }
             }
             plugin.getLogger().info("Loaded ELO ratings for " + ratings.size() + " player(s).");
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to load ELO file: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to load plugins/OmniArena/elo.yml (" + e.getMessage() + "). Ratings will start at defaults. Fix: back up the file, repair its YAML syntax (or delete it) and restart.", e);
         }
     }
 
+    private final Object saveLock = new Object();
+    private final java.util.concurrent.ExecutorService saveExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "OmniArena-EloSave");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** Snapshots on the calling (main) thread, then writes async on a single writer; inline when disabled. */
     public void saveAll() {
-        com.omniarena.util.AsyncUtil.runAsync(() -> {
-            FileConfiguration cfg = new YamlConfiguration();
-            for (Map.Entry<UUID, EloRating> entry : ratings.entrySet()) {
-                String path = "ratings." + entry.getKey();
-                EloRating r = entry.getValue();
-                cfg.set(path + ".name", r.getPlayerName());
-                cfg.set(path + ".rating", r.getRating());
-                cfg.set(path + ".wins", r.getWins());
-                cfg.set(path + ".losses", r.getLosses());
-                cfg.set(path + ".draws", r.getDraws());
-                cfg.set(path + ".highestRating", r.getHighestRating());
-            }
+        final FileConfiguration cfg = snapshot();
+        if (!plugin.isEnabled()) {
+            write(cfg); // scheduling/executors are unreliable during shutdown
+            return;
+        }
+        try {
+            saveExecutor.execute(() -> write(cfg));
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            write(cfg);
+        }
+    }
+
+    /** Flushes pending async writes (call on disable after the final saveAll). */
+    public void shutdown() {
+        saveExecutor.shutdown();
+        try { saveExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+    }
+
+    private FileConfiguration snapshot() {
+        FileConfiguration cfg = new YamlConfiguration();
+        for (Map.Entry<UUID, EloRating> entry : ratings.entrySet()) {
+            String path = "ratings." + entry.getKey();
+            EloRating r = entry.getValue();
+            cfg.set(path + ".name", r.getPlayerName());
+            cfg.set(path + ".rating", r.getRating());
+            cfg.set(path + ".wins", r.getWins());
+            cfg.set(path + ".losses", r.getLosses());
+            cfg.set(path + ".draws", r.getDraws());
+            cfg.set(path + ".highestRating", r.getHighestRating());
+        }
+        return cfg;
+    }
+
+    private void write(FileConfiguration cfg) {
+        synchronized (saveLock) {
             com.omniarena.util.YamlUtil.save(cfg, eloFile, plugin.getLogger());
-        });
+        }
+    }
+
+    /**
+     * Read-only lookup: returns the stored rating or a transient default that is NOT cached,
+     * so placeholders/leaderboards don't create entries for unknown UUIDs.
+     */
+    public EloRating peekRating(UUID uuid) {
+        EloRating r = ratings.get(uuid);
+        return r != null ? r : new EloRating(uuid, "Unknown");
+    }
+
+    /** Rating value for read-only queries (placeholders, leaderboards) without caching. */
+    public int peekElo(UUID uuid) {
+        EloRating r = ratings.get(uuid);
+        return r != null ? r.getRating() : EloRating.DEFAULT_RATING;
     }
 
     public EloRating getRating(UUID uuid) {
@@ -101,14 +147,8 @@ public class EloManager {
         int oldWinnerRating = winnerRating.getRating();
         int oldLoserRating = loserRating.getRating();
 
-        // Calculate new ratings
-        int[] newRatings = EloRating.calculateRatingChange(oldWinnerRating, oldLoserRating);
-        
-        // Update ratings
-        winnerRating.setRating(newRatings[0]);
-        loserRating.setRating(newRatings[1]);
-        
-        // Update win/loss records
+        // recordWin/recordLoss compute and apply the new rating themselves from the
+        // pre-match ratings (also applying it here double-counted the change).
         winnerRating.recordWin(oldLoserRating);
         loserRating.recordLoss(oldWinnerRating);
 
@@ -117,6 +157,54 @@ public class EloManager {
         matchHistory.put(winner, (int) (now / 1000));
         matchHistory.put(loser, (int) (now / 1000));
 
+        saveAll();
+    }
+
+    /**
+     * Record a team result: every player's rating is updated against the opposing side's
+     * average rating (computed from pre-match ratings).
+     */
+    public void recordTeamMatch(Collection<UUID> winners, Collection<UUID> losers) {
+        int winAvg = averageRating(winners), loseAvg = averageRating(losers);
+        long now = System.currentTimeMillis();
+        for (UUID u : winners) {
+            getRating(u).recordWin(loseAvg);
+            matchHistory.put(u, (int) (now / 1000));
+        }
+        for (UUID u : losers) {
+            getRating(u).recordLoss(winAvg);
+            matchHistory.put(u, (int) (now / 1000));
+        }
+        saveAll();
+    }
+
+    /** Record a team draw: every player scores 0.5 against the opposing side's average rating. */
+    public void recordTeamDraw(Collection<UUID> sideA, Collection<UUID> sideB) {
+        if (sideA.isEmpty() || sideB.isEmpty()) return;
+        int avgA = averageRating(sideA), avgB = averageRating(sideB);
+        int now = (int) (System.currentTimeMillis() / 1000);
+        for (UUID u : sideA) { getRating(u).recordDraw(avgB); matchHistory.put(u, now); }
+        for (UUID u : sideB) { getRating(u).recordDraw(avgA); matchHistory.put(u, now); }
+        saveAll();
+    }
+
+    private int averageRating(Collection<UUID> ids) {
+        if (ids.isEmpty()) return EloRating.DEFAULT_RATING;
+        long sum = 0;
+        for (UUID u : ids) sum += peekElo(u);
+        return (int) Math.round((double) sum / ids.size());
+    }
+
+    /** Record a draw between two players. */
+    public void recordDraw(UUID a, UUID b, String aName, String bName) {
+        EloRating ra = getRating(a, aName);
+        EloRating rb = getRating(b, bName);
+        int oldA = ra.getRating(), oldB = rb.getRating();
+        ra.recordDraw(oldB);
+        rb.recordDraw(oldA);
+        long now = System.currentTimeMillis();
+        matchHistory.put(a, (int) (now / 1000));
+        matchHistory.put(b, (int) (now / 1000));
         saveAll();
     }
 
@@ -133,11 +221,21 @@ public class EloManager {
     /**
      * Get top players by rating
      */
+    private volatile List<EloRating> topCache;
+    private volatile int topCacheLimit = -1;
+    private volatile long topCacheAt;
+
     public List<EloRating> getTopPlayers(int limit) {
-        return ratings.values().stream()
+        // Several holograms refresh in the same tick; share one sort (1s TTL keeps results effectively live).
+        long now = System.currentTimeMillis();
+        List<EloRating> c = topCache;
+        if (c != null && topCacheLimit == limit && now - topCacheAt < 1000L) return c;
+        List<EloRating> res = ratings.values().stream()
                 .sorted(Comparator.comparingInt(EloRating::getRating).reversed())
                 .limit(limit)
                 .toList();
+        topCache = res; topCacheLimit = limit; topCacheAt = now;
+        return res;
     }
 
     /**

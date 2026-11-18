@@ -31,6 +31,9 @@ public class Match {
     private final Map<UUID, String>     selectedKit  = new HashMap<>();
     private final Map<UUID, Long>       spawnProtection = new HashMap<>(); // expiry millis
     private final Map<UUID, MatchTeam>  teamMap     = new HashMap<>();
+    private final Map<UUID, BukkitTask> spawnProtectionTasks = new HashMap<>();
+    /** Pre-arranged side (0-based) per player, e.g. queued parties that must share a team. */
+    private final Map<UUID, Integer> presetSides = new HashMap<>();
 
     // Teams
     private final List<MatchTeam> teams = new ArrayList<>();
@@ -44,9 +47,18 @@ public class Match {
     // Scores
     private boolean firstBloodDealt = false;
 
+    // Ranked (queue) matches record ELO; queueKit overrides the arena's default loadout
+    private boolean ranked = false;
+    private String queueKit;
+    private String queueName;
+    /** Number of players that were in the match when it started (0 before start). */
+    private int startedWith;
+
     // Scheduled tasks
     private BukkitTask countdownTask;
     private BukkitTask matchTimerTask;
+    /** Players waiting for the next WAVE respawn (insertion order). Main thread only. */
+    private final Set<UUID> waveQueue = new LinkedHashSet<>();
 
     public Match(Arena arena) {
         this.arena = arena;
@@ -63,6 +75,8 @@ public class Match {
     public Map<UUID, Integer> getStreakMap() { return streak; }
     public Map<UUID, Integer> getComboMap() { return combo; }
     public Map<UUID, Integer> getLivesMap() { return lives; }
+    public Map<UUID, Integer> getPresetSides() { return presetSides; }
+    public int getLives(UUID uuid) { return lives.getOrDefault(uuid, 0); }
     public Map<UUID, Long> getJoinedAt() { return joinedAt; }
     public Map<UUID, UUID> getLastKilledBy() { return lastKilledBy; }
     public Map<UUID, String> getSelectedKit() { return selectedKit; }
@@ -76,6 +90,14 @@ public class Match {
     public void setCountdownSeconds(int countdownSeconds) { this.countdownSeconds = countdownSeconds; }
     public int getElapsedSeconds() { return elapsedSeconds; }
     public void setElapsedSeconds(int elapsedSeconds) { this.elapsedSeconds = elapsedSeconds; }
+    public boolean isRanked() { return ranked; }
+    public void setRanked(boolean ranked) { this.ranked = ranked; }
+    public String getQueueKit() { return queueKit; }
+    public void setQueueKit(String queueKit) { this.queueKit = queueKit; }
+    public String getQueueName() { return queueName; }
+    public void setQueueName(String queueName) { this.queueName = queueName; }
+    public int getStartedWith() { return startedWith; }
+    public void setStartedWith(int startedWith) { this.startedWith = startedWith; }
     public boolean isFirstBloodDealt() { return firstBloodDealt; }
     public void setFirstBloodDealt(boolean firstBloodDealt) { this.firstBloodDealt = firstBloodDealt; }
 
@@ -89,9 +111,13 @@ public class Match {
         streak.put(uuid, 0);
         combo.put(uuid, 0);
         joinedAt.put(uuid, System.currentTimeMillis());
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(arena);
     }
 
     public void removePlayer(UUID uuid) {
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(arena);
         players.remove(uuid);
         alivePlayers.remove(uuid);
         spectators.remove(uuid);
@@ -101,7 +127,18 @@ public class Match {
         combo.remove(uuid);
         joinedAt.remove(uuid);
         spawnProtection.remove(uuid);
+        waveQueue.remove(uuid);
         teamMap.remove(uuid);
+        BukkitTask spTask = spawnProtectionTasks.remove(uuid);
+        if (spTask != null) spTask.cancel();
+        lives.remove(uuid);
+        presetSides.remove(uuid);
+        lastKilledBy.remove(uuid);
+        lastKilledBy.values().removeIf(uuid::equals);
+        savedInventories.remove(uuid);
+        savedArmor.remove(uuid);
+        selectedKit.remove(uuid);
+        for (MatchTeam t : teams) t.getMembers().remove(uuid);
     }
 
     public boolean hasPlayer(UUID uuid) { return players.contains(uuid); }
@@ -114,12 +151,13 @@ public class Match {
         deaths.merge(victim, 1, Integer::sum);
         streak.merge(killer, 1, Integer::sum);
         streak.put(victim, 0);
+        combo.put(victim, 0);
         combo.merge(killer, 1, Integer::sum);
         lastKilledBy.put(victim, killer);
     }
 
     public void resetStreak(UUID uuid) { streak.put(uuid, 0); }
-    public void resetCombo(UUID uuid)  { combo.put(uuid, 0); }
+    public void resetCombo(UUID uuid)  { combo.computeIfPresent(uuid, (k, v) -> 0); }
 
     public int getKills(UUID uuid)  { return kills.getOrDefault(uuid, 0); }
     public int getDeaths(UUID uuid) { return deaths.getOrDefault(uuid, 0); }
@@ -144,6 +182,16 @@ public class Match {
     }
 
     public Map<UUID, Long> getSpawnProtection() { return spawnProtection; }
+
+    /** Tracks the spawn-protection expiry task so it can be cancelled when the player leaves. */
+    public void setSpawnProtectionTask(UUID uuid, BukkitTask task) {
+        BukkitTask old = spawnProtectionTasks.put(uuid, task);
+        if (old != null) old.cancel();
+    }
+
+    public void clearSpawnProtectionTask(UUID uuid) {
+        spawnProtectionTasks.remove(uuid);
+    }
 
     public void setSpawnProtection(UUID uuid, int seconds) {
         spawnProtection.put(uuid, System.currentTimeMillis() + (seconds * 1000L));
@@ -206,7 +254,12 @@ public class Match {
         matchTimerTask = task;
     }
 
+    public Set<UUID> getWaveQueue() { return waveQueue; }
+
     public void cancelTasks() {
+        waveQueue.clear();
+        spawnProtectionTasks.values().forEach(BukkitTask::cancel);
+        spawnProtectionTasks.clear();
         if (countdownTask != null) {
             countdownTask.cancel();
             countdownTask = null;

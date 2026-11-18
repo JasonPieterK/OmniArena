@@ -2,8 +2,26 @@
 (function () {
   'use strict';
 
+  // Token comes from the /oa website link (?token=...). Keep it in sessionStorage and strip it
+  // from the address bar so it does not linger in history / screenshots.
+  function initToken() {
+    let t = new URLSearchParams(location.search).get('token') || '';
+    try {
+      if (t) {
+        sessionStorage.setItem('omniarena-token', t);
+        history.replaceState(null, '', location.pathname);
+      } else {
+        t = sessionStorage.getItem('omniarena-token') || '';
+      }
+    } catch (e) { /* storage blocked: token lives in memory only */ }
+    return t;
+  }
+
   const S = {
-    token: new URLSearchParams(location.search).get('token') || '',
+    token: initToken(),
+    liveByArena: {},
+    busy: false,
+    expired: false,
     snapshot: null,
     selectedArena: null,
     draftGlobals: {},
@@ -19,24 +37,36 @@
 
   // ── API ──────────────────────────────────────────────────────────────
   async function api(path, opts = {}) {
-    const sep = path.includes('?') ? '&' : '?';
-    const url = path + sep + 'token=' + encodeURIComponent(S.token);
+    let res;
     try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' }, ...opts,
+      res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.token, ...(opts.headers || {}) },
+        cache: 'no-store',
       });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || `HTTP ${res.status}`);
-      }
-      const txt = await res.text();
-      return txt ? JSON.parse(txt) : {};
     } catch (e) {
-      if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
-        throw new Error('Cannot connect to server. Make sure the web dashboard is running.');
-      }
-      throw e;
+      throw new Error('Cannot connect to server. Make sure the web dashboard is running (/oa start).');
     }
+    const txt = await res.text();
+    if (!res.ok) {
+      let msg = '';
+      try { const j = JSON.parse(txt); msg = j.error || (Array.isArray(j.errors) ? j.errors.join('; ') : ''); } catch (e) { msg = txt; }
+      const err = new Error(msg || `HTTP ${res.status}`);
+      err.status = res.status;
+      if (res.status === 401) sessionExpired();
+      throw err;
+    }
+    if (opts.text) return txt;
+    try { return txt ? JSON.parse(txt) : {}; } catch (e) { throw new Error('Server sent an unreadable response.'); }
+  }
+
+  function sessionExpired() {
+    if (S.expired) return;
+    S.expired = true;
+    stopLivePolling();
+    setStatus(false, 'Session expired');
+    $('applyBtn').disabled = true;
+    toast('Session expired or logged out. Run /oa website in-game for a new link.', 'error');
   }
 
   // ── Toast + confetti ───────────────────────────────────────────────────
@@ -45,7 +75,7 @@
     t.className = `toast ${type}`;
     t.innerHTML = `<span class="toast-ico">${type === 'success' ? '✓' : '✕'}</span><span>${esc(msg)}</span>`;
     $('toastContainer').appendChild(t);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, 3000);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, type === 'error' ? 6000 : 3000);
   }
 
   function confettiBurst() {
@@ -97,6 +127,7 @@
         link.classList.add('active');
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         $('tab-' + tab).classList.add('active');
+        stopLivePolling();
         if (tab === 'docs' && !S.docsRaw) loadDocs();
         if (tab === 'live') loadLiveMatches();
         if (tab === 'players') loadPlayers();
@@ -107,31 +138,45 @@
 
   // ── Load ─────────────────────────────────────────────────────────────
   async function load() {
-    if (!S.token) { setStatus(false, 'No token in URL'); renderAll(); return; }
+    if (!S.token) { setStatus(false, 'No token - run /oa website'); $('statGrid').innerHTML = ''; $('arenaGrid').innerHTML = emptyState('ph-key', 'Not logged in', 'Run /oa website in-game and open the link it prints.'); return; }
+    if (S.expired) return;
     setStatus(false, 'Loading…');
+    $('arenaGrid').innerHTML = $('arenaGrid').innerHTML || '<div class="empty"><i class="ph-bold ph-circle-notch"></i><p>Loading…</p></div>';
     try {
-      S.snapshot = await api('/api/state');
+      const [snapshot, live] = await Promise.all([
+        api('/api/state'),
+        api('/api/live-matches').catch(() => []),
+      ]);
+      S.snapshot = snapshot;
+      S.snapshot.arenas = S.snapshot.arenas || [];
+      S.snapshot.globals = S.snapshot.globals || {};
+      S.snapshot.settings = S.snapshot.settings || [];
+      S.liveByArena = {};
+      (Array.isArray(live) ? live : []).forEach(m => { S.liveByArena[String(m.arena).toLowerCase()] = m; });
       S.draftGlobals = { ...S.snapshot.globals };
+      if (S.selectedArena && !S.snapshot.arenas.some(a => a.name === S.selectedArena)) S.selectedArena = null;
       if (!S.selectedArena && S.snapshot.arenas.length)
         S.selectedArena = S.snapshot.arenas[0].name;
       const arena = S.snapshot.arenas.find(a => a.name === S.selectedArena);
       S.draftArena = arena ? cloneArena(arena) : {};
+      S.dirty = false; $('applyBtn').disabled = true;
       setStatus(true, `${S.snapshot.arenas.length} arena${S.snapshot.arenas.length === 1 ? '' : 's'}`);
       renderAll();
     } catch (e) {
+      if (e.status === 401) return;
       const msg = e.message || 'Unknown error';
-      setStatus(false, msg.includes('401') ? 'Invalid token' : msg.includes('Cannot connect') ? 'Server offline' : 'Error');
+      setStatus(false, msg.includes('Cannot connect') ? 'Server offline' : 'Error');
       toast('Failed to load: ' + msg, 'error');
+      if (!S.snapshot) $('arenaGrid').innerHTML = emptyState('ph-warning-circle', 'Could not load', msg);
     }
   }
 
   async function loadDocs() {
     try {
-      const res = await fetch('/api/docs?token=' + encodeURIComponent(S.token));
-      S.docsRaw = await res.text();
+      S.docsRaw = await api('/api/docs', { text: true });
       renderDocs();
     } catch (e) {
-      $('docsBody').innerHTML = '<p>Couldn\'t load docs.</p>';
+      $('docsBody').innerHTML = '<p>Couldn\'t load docs: ' + esc(e.message) + '</p>';
     }
   }
 
@@ -143,12 +188,22 @@
     renderConfig();
   }
 
+  // ArenaView.state is the Java ArenaState name (WAITING, STARTING, RUNNING, ...).
+  function stateOf(a) {
+    if (a.enabled === false) return 'disabled';
+    return String(a.state || 'waiting').toLowerCase();
+  }
+  function arenaPlayers(a) {
+    const m = S.liveByArena[String(a.name).toLowerCase()];
+    return m ? (m.totalPlayers ?? 0) : 0;
+  }
+
   // ── Stats ────────────────────────────────────────────────────────────
   function renderStats() {
     const sn = S.snapshot;
     const arenas = sn?.arenas || [];
-    const live = arenas.filter(a => a.state === 'in_game').length;
-    const players = arenas.reduce((n, a) => n + (a.players ?? 0), 0);
+    const live = arenas.filter(a => stateOf(a) === 'running').length;
+    const players = arenas.reduce((n, a) => n + arenaPlayers(a), 0);
     const cfgCount = sn ? Object.keys(sn.globals || {}).length : 0;
     const cards = [
       { cls: 's-mean',   label: 'Arenas',      val: arenas.length, foot: 'configured' },
@@ -157,10 +212,10 @@
       { cls: 's-sun',    label: 'Settings',    val: cfgCount,      foot: 'config keys' },
     ];
     $('statGrid').innerHTML = cards.map(c => `
-      <div class="stat ${c.cls}">
-        <div class="eyebrow">${c.label}</div>
-        <div class="num" data-count="${c.val}">0</div>
-        <div class="foot">${c.foot}</div>
+      <div class="stat ${esc(c.cls)}">
+        <div class="eyebrow">${esc(c.label)}</div>
+        <div class="num" data-count="${esc(c.val)}">0</div>
+        <div class="foot">${esc(c.foot)}</div>
       </div>`).join('');
     $('statGrid').querySelectorAll('.num').forEach(el => countUp(el, Number(el.dataset.count) || 0));
   }
@@ -176,27 +231,27 @@
     }
     grid.innerHTML = arenas.map(a => {
       const enabled = a.enabled !== false;
-      const state = enabled ? (a.state || 'idle') : 'disabled';
-      const badgeCls = { in_game:'badge-live', starting:'badge-starting', waiting:'badge-waiting', idle:'badge-idle', disabled:'badge-disabled' }[state] || 'badge-idle';
-      const badgeLabel = { in_game:'LIVE', starting:'STARTING', waiting:'WAITING', idle:'IDLE', disabled:'OFF' }[state] || state.toUpperCase();
-      const dot = state === 'in_game' ? '<span class="live-dot"></span>' : '';
-      const cardCls = state === 'in_game' ? 'arena-card live' : state === 'starting' ? 'arena-card starting' : 'arena-card';
-      const players = a.players ?? 0;
+      const state = stateOf(a);
+      const badgeCls = { running:'badge-live', starting:'badge-starting', waiting:'badge-waiting', ending:'badge-starting', resetting:'badge-starting', disabled:'badge-disabled', maintenance:'badge-disabled' }[state] || 'badge-idle';
+      const badgeLabel = { running:'LIVE', starting:'STARTING', waiting:'WAITING', ending:'ENDING', resetting:'RESETTING', disabled:'OFF', maintenance:'MAINT' }[state] || state.toUpperCase();
+      const dot = state === 'running' ? '<span class="live-dot"></span>' : '';
+      const cardCls = state === 'running' ? 'arena-card live' : state === 'starting' ? 'arena-card starting' : 'arena-card';
+      const players = arenaPlayers(a);
       const maxP = a.maxPlayers ?? '?';
       const pct = (a.maxPlayers ? Math.round(players / a.maxPlayers * 100) : 0);
-      return `<div class="${cardCls}">
+      return `<div class="${esc(cardCls)}">
         <div class="arena-card-top">
           <div>
             <div class="arena-card-name">${esc(a.name)}</div>
-            <div class="arena-card-world">${esc(a.regionWorld || a.world || '—')}</div>
+            <div class="arena-card-world">${esc(a.regionWorld || '—')}</div>
           </div>
-          <span class="badge ${badgeCls}">${dot}${esc(badgeLabel)}</span>
+          <span class="badge ${esc(badgeCls)}">${dot}${esc(badgeLabel)}</span>
         </div>
         <div class="arena-card-info">
-          <span><i class="ph-bold ph-users"></i> ${players}/${maxP}</span>
+          <span><i class="ph-bold ph-users"></i> ${esc(players)}/${esc(maxP)}</span>
           <span><i class="ph-bold ph-game-controller"></i> ${esc(a.gameMode || '—')}</span>
         </div>
-        <div class="pbar"><div style="width:${pct}%"></div></div>
+        <div class="pbar"><div style="width:${Number(pct) || 0}%"></div></div>
       </div>`;
     }).join('');
   }
@@ -206,7 +261,7 @@
     const sn = S.snapshot;
     const list = $('arenaList');
     const arenas = sn?.arenas || [];
-    if (!arenas.length) { list.innerHTML = '<div class="card">No arenas.</div>'; return; }
+    if (!arenas.length) { list.innerHTML = '<div class="card">No arenas yet. Click <b>New arena</b> to create one.</div>'; return; }
     list.innerHTML = arenas.map(a => {
       const sel = a.name === S.selectedArena ? ' selected' : '';
       return `<div class="arena-list-item${sel}" data-arena="${esc(a.name)}">
@@ -255,6 +310,8 @@
           ${field('Match duration (s)', numInput('matchDuration', d.matchDuration))}
           ${field('Countdown (s)', numInput('countdown', d.countdown))}
           ${field('Respawn delay (s)', numInput('respawnDelay', d.respawnDelay))}
+          ${field('Lives (0 = mode default)', numInput('lives', d.lives))}
+          ${field('Wave respawn interval (s, WAVE only)', numInput('respawnWaveInterval', d.respawnWaveInterval))}
         </div>
         ${cfgToggle('enabled', 'Enabled', d.enabled)}
         ${cfgToggle('midMatchJoin', 'Mid-match join', d.midMatchJoin)}
@@ -299,7 +356,7 @@
     editor.querySelectorAll('[data-key]').forEach(el => {
       el.addEventListener('change', () => {
         const key = el.dataset.key;
-        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value);
         setNested(S.draftArena, key, val);
         markDirty();
       });
@@ -345,7 +402,7 @@
     container.querySelectorAll('[data-key]').forEach(el => {
       el.addEventListener('change', () => {
         const rawKey = el.dataset.key.replace(/^cfg\./, '');
-        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value);
         S.draftGlobals[rawKey] = val;
         markDirty();
       });
@@ -439,52 +496,85 @@
   }
 
   // ── Apply / save / create / delete ─────────────────────────────────────
-  async function applyAll() {
-    const btn = $('applyBtn');
-    btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch"></i> Applying…';
-    try {
-      await api('/api/apply', { method: 'POST',
-        body: JSON.stringify({ globals: S.draftGlobals, arena: S.selectedArena, arenaSettings: S.draftArena }) });
-      confettiBurst();
-      toast('Changes applied!');
-      S.dirty = false;
-      await load();
-    } catch (e) {
-      toast('Apply failed: ' + e.message, 'error');
-      btn.disabled = false;
-    }
-    btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Apply';
+  // Runs fn once at a time; ignores clicks while another write is in flight (double-submit guard).
+  async function guarded(fn) {
+    if (S.busy || S.expired) return;
+    S.busy = true;
+    document.body.classList.add('busy');
+    try { await fn(); } finally { S.busy = false; document.body.classList.remove('busy'); }
   }
 
-  async function saveArena() {
-    try {
-      await api('/api/apply', { method: 'POST',
-        body: JSON.stringify({ arena: S.selectedArena, arenaSettings: S.draftArena }) });
-      toast('Arena saved');
-      await load();
-    } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+  const APPLY_LABEL = '<i class="ph-bold ph-check-circle"></i> Apply';
+
+  function applyAll() {
+    return guarded(async () => {
+      const btn = $('applyBtn');
+      btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch"></i> Applying…';
+      try {
+        const body = { globals: S.draftGlobals };
+        if (S.selectedArena) { body.arena = S.selectedArena; body.arenaSettings = S.draftArena; }
+        await api('/api/apply', { method: 'POST', body: JSON.stringify(body) });
+        confettiBurst();
+        toast('Changes applied!');
+        S.dirty = false;
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) {
+        toast('Apply failed: ' + e.message, 'error');
+        btn.disabled = S.expired;
+      }
+      btn.innerHTML = APPLY_LABEL;
+    });
   }
 
-  async function createArena() {
-    const name = prompt('New arena name:');
-    if (!name?.trim()) return;
-    try {
-      await api('/api/create-arena', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
-      toast('Arena "' + name.trim() + '" created');
-      S.selectedArena = name.trim();
-      await load();
-    } catch (e) { toast('Create failed: ' + e.message, 'error'); }
+  function saveArena() {
+    return guarded(async () => {
+      try {
+        await api('/api/apply', { method: 'POST',
+          body: JSON.stringify({ arena: S.selectedArena, arenaSettings: S.draftArena }) });
+        toast('Arena saved');
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+    });
   }
 
-  async function deleteArena() {
-    if (!S.selectedArena) return;
+  function createArena() {
+    if (S.busy || S.expired) return;
+    const name = (prompt('New arena name (letters, digits, _ or -, max 32):') || '').trim();
+    if (!name) return;
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(name)) { toast('Invalid arena name: use letters, digits, _ or - (max 32).', 'error'); return; }
+    return guarded(async () => {
+      try {
+        await api('/api/create-arena', { method: 'POST', body: JSON.stringify({ name }) });
+        toast('Arena "' + name + '" created');
+        S.selectedArena = name;
+        S.busy = false; await load(); S.busy = true;
+        // server stores arena names as typed; make sure the editor opens it
+        const created = (S.snapshot?.arenas || []).find(a => a.name.toLowerCase() === name.toLowerCase());
+        if (created && S.selectedArena !== created.name) { S.selectedArena = created.name; S.draftArena = cloneArena(created); renderArenaList(); renderArenaEditor(); }
+      } catch (e) { toast('Create failed: ' + e.message, 'error'); }
+    });
+  }
+
+  function deleteArena() {
+    if (!S.selectedArena || S.busy || S.expired) return;
     if (!confirm('Delete arena "' + S.selectedArena + '"? This cannot be undone.')) return;
-    try {
-      await api('/api/delete-arena', { method: 'POST', body: JSON.stringify({ name: S.selectedArena }) });
-      toast('Arena deleted');
-      S.selectedArena = null;
-      await load();
-    } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+    return guarded(async () => {
+      try {
+        await api('/api/delete-arena', { method: 'POST', body: JSON.stringify({ name: S.selectedArena }) });
+        toast('Arena deleted');
+        S.selectedArena = null;
+        S.busy = false; await load(); S.busy = true;
+      } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+    });
+  }
+
+  async function logout() {
+    try { await api('/api/logout', { method: 'POST', body: '{}' }); } catch (e) { /* already gone */ }
+    try { sessionStorage.removeItem('omniarena-token'); } catch (e) {}
+    S.token = ''; S.expired = true; stopLivePolling();
+    setStatus(false, 'Logged out');
+    $('applyBtn').disabled = true;
+    toast('Logged out. Run /oa website for a new link.');
   }
 
   // ── Arena draft helpers (matches Java ArenaView json) ──────────────────
@@ -492,7 +582,7 @@
     return {
       enabled: a.enabled, gameMode: a.gameMode,
       minPlayers: a.minPlayers, maxPlayers: a.maxPlayers,
-      matchDuration: a.matchDuration, countdown: a.countdown, respawnDelay: a.respawnDelay,
+      matchDuration: a.matchDuration, countdown: a.countdown, respawnDelay: a.respawnDelay, lives: a.lives, respawnWaveInterval: a.respawnWaveInterval,
       midMatchJoin: a.midMatchJoin, spectatorAllowed: a.spectatorAllowed, whitelistEnabled: a.whitelistEnabled,
       region: {
         worldName: a.regionWorld || '',
@@ -520,10 +610,10 @@
   // ── HTML builders ──────────────────────────────────────────────────────
   function section(title, icon, open, body) { return sectionRaw(title, icon, open, null, body); }
   function sectionRaw(title, icon, open, count, body) {
-    const badge = count != null ? `<span class="section-count">${count}</span>` : '';
+    const badge = count != null ? `<span class="section-count">${esc(count)}</span>` : '';
     return `<div class="section${open ? '' : ' collapsed'}">
       <div class="section-head">
-        <span class="section-title"><i class="ph-bold ${icon}"></i> ${esc(title)} ${badge}</span>
+        <span class="section-title"><i class="ph-bold ${esc(icon)}"></i> ${esc(title)} ${badge}</span>
         <i class="ph-bold ph-caret-down chevron"></i>
       </div>
       <div class="section-body">${body}</div>
@@ -541,7 +631,7 @@
       <div class="cfg-control"><label class="toggle"><input type="checkbox" data-key="${esc(key)}"${val ? ' checked' : ''}><span class="slider"></span></label></div></div>`;
   }
   function emptyState(icon, title, sub) {
-    return `<div class="empty"><i class="ph-bold ${icon}"></i><div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink)">${esc(title)}</div><div>${esc(sub)}</div></div>`;
+    return `<div class="empty"><i class="ph-bold ${esc(icon)}"></i><div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink)">${esc(title)}</div><div>${esc(sub)}</div></div>`;
   }
 
   function wireSections(root) {
@@ -552,14 +642,16 @@
 
   // ── Theme Toggle ─────────────────────────────────────────────────────────
   function initTheme() {
-    const saved = localStorage.getItem('omniarena-theme') || 'light';
+    if (!$('themeToggle')) return; // no theme switch in the UI
+    let saved = 'light';
+    try { saved = localStorage.getItem('omniarena-theme') || 'light'; } catch (e) {}
     document.documentElement.setAttribute('data-theme', saved);
     updateThemeIcon(saved);
     $('themeToggle').addEventListener('click', () => {
       const current = document.documentElement.getAttribute('data-theme') || 'light';
       const next = current === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('omniarena-theme', next);
+      try { localStorage.setItem('omniarena-theme', next); } catch (e) {}
       updateThemeIcon(next);
     });
   }
@@ -575,6 +667,9 @@
     initTheme();
     $('refreshBtn').addEventListener('click', load);
     $('applyBtn').addEventListener('click', applyAll);
+    $('logoutBtn').addEventListener('click', logout);
+    window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+    window.addEventListener('load', detectIcons);
     $('createArenaBtn').addEventListener('click', createArena);
 
     $('cfgSearch').addEventListener('input', (e) => { S.cfgQuery = e.target.value; renderConfig(); });
@@ -595,31 +690,36 @@
   }
 
   // ── Live Matches ───────────────────────────────────────────────────────
-  let liveMatchInterval = null;
+  let liveMatchTimer = null;
+  function stopLivePolling() { if (liveMatchTimer) { clearTimeout(liveMatchTimer); liveMatchTimer = null; } }
+  function liveTabActive() { return $('tab-live').classList.contains('active'); }
   async function loadLiveMatches() {
+    stopLivePolling();
+    if (S.expired || !S.token) return;
     try {
       const data = await api('/api/live-matches');
       renderLiveMatches(data);
-      if (liveMatchInterval) clearInterval(liveMatchInterval);
-      liveMatchInterval = setInterval(loadLiveMatches, 5000);
     } catch (e) {
-      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-warning-circle"></i><p>Failed to load live matches</p></div>';
+      if (e.status === 401) return;
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-warning-circle"></i><p>Failed to load live matches: ' + esc(e.message) + '</p></div>';
     }
+    // poll only while the Live tab is open and the browser tab is visible
+    if (liveTabActive() && !S.expired) liveMatchTimer = setTimeout(loadLiveMatches, 5000);
   }
 
   function renderLiveMatches(matches) {
     if (!matches || matches.length === 0) {
-      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-soccer-ball"></i><p>No live matches currently</p></div>';
+      $('liveMatchesGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-soccer-ball"></i><p>No live matches right now. Matches appear here once an arena starts.</p></div>';
       return;
     }
     $('liveMatchesGrid').innerHTML = matches.map(m => {
-      const leaderboardRows = m.leaderboard.slice(0, 10).map((p, idx) => `
+      const leaderboardRows = (m.leaderboard || []).slice(0, 10).map((p, idx) => `
         <tr class="lb-row">
           <td class="lb-rank">${idx + 1}</td>
           <td class="lb-name">${esc(p.name)}</td>
-          <td class="lb-stat">${p.kills}</td>
-          <td class="lb-stat">${p.deaths}</td>
-          <td class="lb-stat">${p.streak}</td>
+          <td class="lb-stat">${esc(p.kills)}</td>
+          <td class="lb-stat">${esc(p.deaths)}</td>
+          <td class="lb-stat">${esc(p.streak)}</td>
         </tr>
       `).join('');
       return `
@@ -639,29 +739,29 @@
             <div class="live-match-scoreboard">
               <div class="live-match-team">
                 <div class="live-match-team-name">${esc(m.team1.name || 'Team 1')}</div>
-                <div class="live-match-team-score">${m.team1.score}</div>
-                <div class="live-match-team-members">${m.team1.members} members</div>
+                <div class="live-match-team-score">${esc(m.team1.score)}</div>
+                <div class="live-match-team-members">${esc(m.team1.members)} members</div>
               </div>
               <div class="live-match-divider">VS</div>
               <div class="live-match-team">
                 <div class="live-match-team-name">${esc(m.team2.name || 'Team 2')}</div>
-                <div class="live-match-team-score">${m.team2.score}</div>
-                <div class="live-match-team-members">${m.team2.members} members</div>
+                <div class="live-match-team-score">${esc(m.team2.score)}</div>
+                <div class="live-match-team-members">${esc(m.team2.members)} members</div>
               </div>
             </div>
 
             <div class="live-match-stats-grid">
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Kills</div>
-                <div class="live-match-stat-value">${m.team1.kills} - ${m.team2.kills}</div>
+                <div class="live-match-stat-value">${esc(m.team1.kills)} - ${esc(m.team2.kills)}</div>
               </div>
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Deaths</div>
-                <div class="live-match-stat-value">${m.team1.deaths} - ${m.team2.deaths}</div>
+                <div class="live-match-stat-value">${esc(m.team1.deaths)} - ${esc(m.team2.deaths)}</div>
               </div>
               <div class="live-match-stat">
                 <div class="live-match-stat-label">Players</div>
-                <div class="live-match-stat-value">${m.playersAlive} / ${m.totalPlayers}</div>
+                <div class="live-match-stat-value">${esc(m.playersAlive)} / ${esc(m.totalPlayers)}</div>
               </div>
             </div>
 
@@ -691,48 +791,62 @@
   // ── Players ───────────────────────────────────────────────────────────
   async function loadPlayers() {
     const query = $('playerSearch').value.trim();
+    if (S.expired || !S.token) return;
     try {
       const data = await api(`/api/players${query ? '?search=' + encodeURIComponent(query) : ''}`);
       renderPlayers(data);
     } catch (e) {
-      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>Failed to load players</p></div>';
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>Failed to load players: ' + esc(e.message) + '</p></div>';
     }
   }
 
   function renderPlayers(players) {
     if (!players || players.length === 0) {
-      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>No players found</p></div>';
+      $('playersGrid').innerHTML = '<div class="empty"><i class="ph-bold ph-users"></i><p>No online players found.</p></div>';
       return;
     }
     $('playersGrid').innerHTML = players.map(p => `
       <div class="player-card">
         <div class="player-card-header">
-          <div class="player-card-avatar">${esc(p.name.charAt(0).toUpperCase())}</div>
+          <div class="player-card-avatar">${esc(String(p.name ?? '?').charAt(0).toUpperCase())}</div>
           <div>
             <div class="player-card-name">${esc(p.name)}</div>
-            <div class="player-card-elo">ELO: ${p.elo}</div>
+            <div class="player-card-elo">ELO: ${esc(p.elo)}</div>
           </div>
         </div>
         <div class="player-card-stats">
           <div class="player-card-stat">
             <div class="player-card-stat-label">Wins</div>
-            <div class="player-card-stat-value">${p.wins}</div>
+            <div class="player-card-stat-value">${esc(p.wins)}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">Losses</div>
-            <div class="player-card-stat-value">${p.losses}</div>
+            <div class="player-card-stat-value">${esc(p.losses)}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">K/D</div>
-            <div class="player-card-stat-value">${p.kd.toFixed(2)}</div>
+            <div class="player-card-stat-value">${esc((Number(p.kd) || 0).toFixed(2))}</div>
           </div>
           <div class="player-card-stat">
             <div class="player-card-stat-label">Matches</div>
-            <div class="player-card-stat-value">${p.matches}</div>
+            <div class="player-card-stat-value">${esc(p.matches)}</div>
           </div>
         </div>
       </div>
     `).join('');
+  }
+
+  // If the icon font (unpkg) did not load, hide the empty glyph boxes; labels remain.
+  function detectIcons() {
+    try {
+      const probe = document.createElement('i');
+      probe.className = 'ph-bold ph-check-circle';
+      probe.style.cssText = 'position:absolute;visibility:hidden';
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe, '::before').content;
+      probe.remove();
+      if (!c || c === 'none' || c === 'normal') document.documentElement.classList.add('no-icons');
+    } catch (e) { /* ignore */ }
   }
 
   function debounce(fn, delay) {

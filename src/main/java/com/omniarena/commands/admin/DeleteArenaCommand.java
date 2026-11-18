@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.ArenaManager;
 import com.omniarena.commands.SubCommand;
@@ -24,6 +25,7 @@ public class DeleteArenaCommand extends SubCommand {
             return;
         }
         String name = args[0];
+        ArenaManager.getInstance().get(name).ifPresent(DisableArenaCommand::kickAll);
         if (!ArenaManager.getInstance().delete(name)) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found")
                     .replace("{arena}", name));
@@ -35,11 +37,7 @@ public class DeleteArenaCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1)
-            return ArenaManager.getInstance().getAll().stream()
-                    .map(a -> a.getName())
-                    .filter(n -> n.startsWith(args[0]))
-                    .toList();
+        if (args.length == 1) return TabUtil.arenas(args[0]);
         return List.of();
     }
 }

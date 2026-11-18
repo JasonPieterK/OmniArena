@@ -36,10 +36,26 @@ public class KillstreakModule {
             milestones.put(20, "GODLIKE");
         } else {
             for (String key : section.getKeys(false)) {
-                try { milestones.put(Integer.parseInt(key), section.getString(key)); }
+                try { String v = section.getString(key); if (v != null) milestones.put(Integer.parseInt(key), v); }
                 catch (NumberFormatException ignored) {}
             }
         }
+    }
+
+    private void playConfiguredSound(Player p, int streak, String name) {
+        if (!com.omniarena.visual.VisualGate.sounds(p)) return;
+        org.bukkit.Sound sound;
+        try { sound = org.bukkit.Sound.valueOf(name.toUpperCase()); }
+        catch (Exception e) { sound = org.bukkit.Sound.ENTITY_LIGHTNING_BOLT_THUNDER; }
+        p.playSound(p.getLocation(), sound, 0.6f, Math.min(2.0f, 0.8f + (streak * 0.1f)));
+    }
+
+    private void spawnConfiguredParticle(Player p, String name) {
+        if (!com.omniarena.visual.VisualGate.particles(p)) return;
+        org.bukkit.Particle particle;
+        try { particle = org.bukkit.Particle.valueOf(name.toUpperCase()); }
+        catch (Exception e) { particle = org.bukkit.Particle.FLAME; }
+        p.getWorld().spawnParticle(particle, p.getLocation().add(0, 1, 0), 8, 0.3, 0.5, 0.3, 0.05);
     }
 
     public void handleKill(Player killer, Match match) {
@@ -50,8 +66,11 @@ public class KillstreakModule {
 
         if (title != null) {
             // Notify killer
-            plugin.getVisual().getTitleManager().sendKillstreakTitle(killer, streak, title);
-            plugin.getVisual().getSoundManager().playKillstreak(killer, streak);
+            var cfg = ConfigManager.getInstance().getConfig();
+            if (cfg.getBoolean("visual.killstreak-titles", true)) {
+                plugin.getVisual().getTitleManager().sendKillstreakTitle(killer, streak, title);
+            }
+            playConfiguredSound(killer, streak, cfg.getString("killstreak.sound", "ENTITY_LIGHTNING_BOLT_THUNDER"));
 
             // Broadcast to arena
             String broadcastMsg = ConfigManager.getInstance().getMessage("killstreak-broadcast")
@@ -65,7 +84,7 @@ public class KillstreakModule {
             }
 
             // Trail effect every 5 kills
-            plugin.getVisual().getEffectManager().playKillstreakTrail(killer);
+            spawnConfiguredParticle(killer, ConfigManager.getInstance().getConfig().getString("killstreak.particle", "FLAME"));
         }
 
         // Notify self of streak
@@ -83,12 +102,8 @@ public class KillstreakModule {
     }
 
     private String getTitle(int streak) {
-        String last = null;
-        for (java.util.Map.Entry<Integer, String> entry : milestones.entrySet()) {
-            if (streak >= entry.getKey()) last = entry.getValue();
-        }
         // Only show on exact milestone
-        return milestones.containsKey(streak) ? milestones.get(streak) : null;
+        return milestones.get(streak);
     }
 
     public void reload() { loadMilestones(); }

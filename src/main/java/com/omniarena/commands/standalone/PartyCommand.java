@@ -1,6 +1,7 @@
 package com.omniarena.commands.standalone;
 
 import com.omniarena.OmniArena;
+import com.omniarena.config.ConfigManager;
 import com.omniarena.party.PartyManager;
 import com.omniarena.util.MessageUtil;
 import org.bukkit.command.Command;
@@ -25,8 +26,12 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (plugin.isStopped()) {
+            com.omniarena.util.MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("plugin-stopped"));
+            return true;
+        }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("This command is for players only.");
+            com.omniarena.util.MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("player-only"));
             return true;
         }
 
@@ -39,21 +44,19 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
         switch (action) {
             case "create" -> {
-                if (partyManager.createParty(player) != null) {
-                    MessageUtil.send(player, "<green>Party created! Use <yellow>/party invite <player></yellow> to invite members.");
-                }
+                partyManager.createParty(player); // PartyManager sends the feedback
             }
             case "disband" -> {
                 partyManager.disbandParty(player);
             }
             case "invite" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party invite <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party invite <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.invitePlayer(player, target);
@@ -69,24 +72,24 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "kick" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party kick <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party kick <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.kickPlayer(player, target);
             }
             case "leader" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Usage: /party leader <player>");
+                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party leader <player></yellow> <gray>(the player must be online; use tab-complete).");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
                 if (target == null || !target.isOnline()) {
-                    MessageUtil.send(player, "<red>Player not found.");
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return true;
                 }
                 partyManager.setLeader(player, target);
@@ -94,7 +97,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             case "info" -> {
                 com.omniarena.party.PartyManager.Party party = partyManager.getParty(player);
                 if (party == null) {
-                    MessageUtil.send(player, "<red>You are not in a party.");
+                    MessageUtil.send(player, "<red>You are not in a party. <gray>Create one with <white>/party create</white> or accept an invite with <white>/party accept</white>.");
                 } else {
                     MessageUtil.send(player, "<yellow>Party Info:");
                     MessageUtil.send(player, "<gray>Leader: <yellow>" + party.getLeaderName());
@@ -122,17 +125,34 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (!(sender instanceof Player player)) return List.of();
         if (args.length == 1) {
-            return Arrays.asList("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info")
-                    .stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .collect(Collectors.toList());
+            return com.omniarena.commands.TabUtil.filter(
+                    List.of("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info"), cur);
         }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("invite") || args[0].equalsIgnoreCase("kick") || args[0].equalsIgnoreCase("leader"))) {
-            return plugin.getServer().getOnlinePlayers().stream()
-                    .map(Player::getName)
-                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
-                    .collect(Collectors.toList());
+        if (args.length == 2) {
+            String a = args[0].toLowerCase(java.util.Locale.ROOT);
+            PartyManager.Party party = partyManager.getParty(player);
+            if (a.equals("invite")) {
+                java.util.Set<java.util.UUID> inParty = party != null ? party.getMembers() : java.util.Set.of();
+                List<String> names = new java.util.ArrayList<>();
+                for (Player p : plugin.getServer().getOnlinePlayers()) {
+                    if (p.equals(player) || inParty.contains(p.getUniqueId()) || !player.canSee(p)) continue;
+                    names.add(p.getName());
+                }
+                return com.omniarena.commands.TabUtil.filter(names, cur);
+            }
+            if (a.equals("kick") || a.equals("leader")) {
+                if (party == null) return List.of();
+                List<String> names = new java.util.ArrayList<>();
+                for (java.util.UUID id : party.getMembers()) {
+                    if (id.equals(player.getUniqueId())) continue;
+                    String n = org.bukkit.Bukkit.getOfflinePlayer(id).getName();
+                    if (n != null) names.add(n);
+                }
+                return com.omniarena.commands.TabUtil.filter(names, cur);
+            }
         }
         return List.of();
     }

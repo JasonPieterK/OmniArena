@@ -1,54 +1,97 @@
 package com.omniarena.arena.regen;
 
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Map;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
 public enum RegenAnimationType {
-    // ── Original 15 animations (renamed for clarity) ──
-    SPIRAL_ASCENT,           // 1. Blocks spiral upward in a helix pattern
-    COLLAPSE_INWARD,         // 2. Walls collapse inward from all sides
-    RADIATE_OUTWARD,         // 3. Blocks expand outward from center
-    GRAVITY_DESCENT,         // 4. Blocks fall from above like rain
-    UPWARD_SURGE,            // 5. Blocks rise up from ground
-    RAIN_OF_LIGHT,           // 6. Glowing laser rain descends
-    ARMORED_DESCENT,         // 7. Red armored suit pieces fall
-    CHAOTIC_ERUPTION,        // 8. Random bursts of glowstone
-    INSTANT_RESTORE,         // 9. Instant placement (no animation)
-    BEACON_WAVE,             // 10. Beacon light sweeps across arena
-    VOID_SHOCKWAVE,          // 11. Purple void shockwave expands
-    ICE_CRYSTAL_GROWTH,      // 12. Ice crystals grow from floor
-    DARK_VORTEX,             // 13. Emerald vortex spirals inward
-    METEOR_STRIKE,           // 14. Meteors rain down with fire
-    PRISM_CASCADE,           // 15. Rainbow colored wave pattern
+    INSTANT,          // no animation, batched placement, one whoosh sound
+    SPHERE,           // expanding sphere from the region center (default)
+    RISE,             // bottom to top
+    FALL,             // top to bottom
+    SWEEP,            // vertical plane along the longest horizontal axis
+    TIME_REWIND,      // reverse of the order blocks were changed during the match
+    GALAXY,           // spiral arms around the center
+    HOLOGRAM_SCAN,    // scan plane shows glass previews, then real blocks replace them
+    METEOR_SHOWER,    // impact points rebuild their surroundings
+    OVERGROWTH;       // flood growth from a few seeds
 
-    // ── New 5 animations ──
-    BINARY_FILL,             // 16. Digital matrix-style with cyan and lime
-    PHOENIX_REBIRTH,         // 17. Fire/lava blocks rise like phoenix
-    QUANTUM_MESH,            // 18. Glitchy purple/cyan teleport effect
-    DIAMOND_FUSION,          // 19. Blue diamond/ice blocks grow inward
-    TSUNAMI_SURGE;           // 20. Water-like wave with aqua blocks
+    public static final RegenAnimationType DEFAULT = SPHERE;
 
+    /** Old (20-style era) names and legacy aliases mapped to the closest current style. */
+    private static final Map<String, RegenAnimationType> LEGACY = Map.ofEntries(
+            // old 20 enum names
+            Map.entry("SPIRAL_ASCENT", GALAXY),
+            Map.entry("COLLAPSE_INWARD", SPHERE),
+            Map.entry("RADIATE_OUTWARD", SPHERE),
+            Map.entry("GRAVITY_DESCENT", FALL),
+            Map.entry("UPWARD_SURGE", RISE),
+            Map.entry("RAIN_OF_LIGHT", FALL),
+            Map.entry("ARMORED_DESCENT", FALL),
+            Map.entry("CHAOTIC_ERUPTION", METEOR_SHOWER),
+            Map.entry("INSTANT_RESTORE", INSTANT),
+            Map.entry("BEACON_WAVE", SWEEP),
+            Map.entry("VOID_SHOCKWAVE", SPHERE),
+            Map.entry("ICE_CRYSTAL_GROWTH", OVERGROWTH),
+            Map.entry("DARK_VORTEX", GALAXY),
+            Map.entry("METEOR_STRIKE", METEOR_SHOWER),
+            Map.entry("PRISM_CASCADE", HOLOGRAM_SCAN),
+            Map.entry("BINARY_FILL", HOLOGRAM_SCAN),
+            Map.entry("PHOENIX_REBIRTH", METEOR_SHOWER),
+            Map.entry("QUANTUM_MESH", GALAXY),
+            Map.entry("DIAMOND_FUSION", OVERGROWTH),
+            Map.entry("TSUNAMI_SURGE", SWEEP),
+            // older aliases
+            Map.entry("TOP_DOWN", FALL),
+            Map.entry("TOP_TO_BOTTOM", FALL),
+            Map.entry("BOTTOM_UP", RISE),
+            Map.entry("BOTTOM_TO_TOP", RISE),
+            Map.entry("OUTSIDE_IN", SPHERE),
+            Map.entry("CENTER_OUT", SPHERE),
+            Map.entry("LASER_RAIN", FALL),
+            Map.entry("IRON_MAN", FALL),
+            Map.entry("RANDOM_BURST", METEOR_SHOWER),
+            Map.entry("BEAM_SWEEP", SWEEP),
+            Map.entry("SHOCKWAVE", SPHERE),
+            Map.entry("CRYSTAL_GROWTH", OVERGROWTH),
+            Map.entry("VORTEX_REBUILD", GALAXY),
+            Map.entry("METEOR_DROP", METEOR_SHOWER),
+            Map.entry("PRISM_WAVE", HOLOGRAM_SCAN),
+            Map.entry("SPIRAL", GALAXY),
+            Map.entry("WAVE_SHUFFLE", SPHERE));
+
+    /** Comma separated list of the valid style names. */
+    public static String validList() {
+        return Arrays.stream(values()).map(Enum::name).collect(Collectors.joining(", "));
+    }
+
+    /** Resolves a config value; blank gives SPHERE silently, unknown gives SPHERE with a console warning. */
     public static RegenAnimationType fromConfig(String value) {
-        if (value == null || value.isBlank()) return RADIATE_OUTWARD;
-        // legacy name compat
-        String v = value.trim().toUpperCase(java.util.Locale.ROOT);
-        // Old names map to new ones
-        if (v.equals("TOP_DOWN") || v.equals("TOP_TO_BOTTOM")) return GRAVITY_DESCENT;
-        if (v.equals("BOTTOM_UP") || v.equals("BOTTOM_TO_TOP")) return UPWARD_SURGE;
-        if (v.equals("OUTSIDE_IN")) return COLLAPSE_INWARD;
-        if (v.equals("CENTER_OUT")) return RADIATE_OUTWARD;
-        if (v.equals("LASER_RAIN")) return RAIN_OF_LIGHT;
-        if (v.equals("IRON_MAN")) return ARMORED_DESCENT;
-        if (v.equals("RANDOM_BURST")) return CHAOTIC_ERUPTION;
-        if (v.equals("BEAM_SWEEP")) return BEACON_WAVE;
-        if (v.equals("SHOCKWAVE")) return VOID_SHOCKWAVE;
-        if (v.equals("CRYSTAL_GROWTH")) return ICE_CRYSTAL_GROWTH;
-        if (v.equals("VORTEX_REBUILD")) return DARK_VORTEX;
-        if (v.equals("METEOR_DROP")) return METEOR_STRIKE;
-        if (v.equals("PRISM_WAVE")) return PRISM_CASCADE;
-        if (v.equals("INSTANT")) return INSTANT_RESTORE;
-        if (v.equals("SPIRAL")) return SPIRAL_ASCENT;
+        if (value == null || value.isBlank()) return DEFAULT;
+        String v = value.trim().toUpperCase(Locale.ROOT);
         try {
-            return RegenAnimationType.valueOf(v);
+            return valueOf(v);
         } catch (IllegalArgumentException ignored) {
-            return RADIATE_OUTWARD;
+            // fall through to legacy names
         }
+        RegenAnimationType mapped = LEGACY.get(v);
+        if (mapped != null) return mapped;
+        try {
+            Logger.getLogger("OmniArena").warning("Unknown regen.animation.type '" + value
+                    + "', using " + DEFAULT.name() + ". Valid styles: " + validList());
+        } catch (Throwable ignored) {
+            // logging must never break config parsing
+        }
+        return DEFAULT;
+    }
+
+    /** Strict parse for commands: current names and legacy names, or null when invalid. */
+    public static RegenAnimationType parse(String value) {
+        if (value == null || value.isBlank()) return null;
+        String v = value.trim().toUpperCase(Locale.ROOT);
+        try { return valueOf(v); } catch (IllegalArgumentException ignored) { }
+        return LEGACY.get(v);
     }
 }

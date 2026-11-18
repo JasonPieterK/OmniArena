@@ -26,13 +26,100 @@ public class MatchManager {
     private final Map<String, Match> activeMatches = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerArena    = new ConcurrentHashMap<>();
     private final EndCommandHandler endCommandHandler;
+    private final RewardHandler rewardHandler;
     private final Set<String> frozenArenas = ConcurrentHashMap.newKeySet();
     private final Set<UUID> godModePlayers = ConcurrentHashMap.newKeySet();
     private volatile boolean lockdown = false;
+    /** Players mid plugin-initiated teleport; PlayerTeleportListener ignores them. */
+    private final Set<UUID> internalTeleports = ConcurrentHashMap.newKeySet();
+
+    /** Everything about a player that arena play overwrites; restored when they leave. */
+    private record PlayerState(Location location, GameMode gameMode, double health, int food, float saturation,
+                               int level, float exp, java.util.Collection<org.bukkit.potion.PotionEffect> effects,
+                               boolean allowFlight, boolean flying, float walkSpeed, float flySpeed,
+                               boolean invisible, org.bukkit.inventory.ItemStack[] contents,
+                               org.bukkit.inventory.ItemStack[] armor) {}
+
+    private final Map<UUID, PlayerState> savedStates = new ConcurrentHashMap<>();
+    private PlayerStateStore stateStore;
+
+    /** Crash-safe on-disk copy of saved pre-arena states (lazy: needs the plugin data folder). */
+    public PlayerStateStore getStateStore() {
+        if (stateStore == null) stateStore = new PlayerStateStore(plugin);
+        return stateStore;
+    }
+
+    /** Flushes pending state-file writes/deletes; call on plugin disable after players were restored. */
+    public void shutdownStateStore() {
+        if (stateStore != null) stateStore.shutdown();
+    }
+
+    private void saveState(Player p) {
+        boolean inv = ConfigManager.getInstance().getConfig().getBoolean("arena.inventory-restore", true);
+        if (ConfigManager.getInstance().getConfig().getBoolean("arena.persist-player-state", true)) {
+            getStateStore().save(p, inv);
+        }
+        savedStates.put(p.getUniqueId(), new PlayerState(p.getLocation().clone(), p.getGameMode(), p.getHealth(),
+                p.getFoodLevel(), p.getSaturation(), p.getLevel(), p.getExp(),
+                new ArrayList<>(p.getActivePotionEffects()), p.getAllowFlight(), p.isFlying(),
+                p.getWalkSpeed(), p.getFlySpeed(), p.isInvisible(),
+                inv ? p.getInventory().getContents().clone() : null,
+                inv ? p.getInventory().getArmorContents().clone() : null));
+    }
+
+    /** Puts the player back exactly as they were before joining (or sane defaults if unknown). */
+    private void restoreState(Player p) {
+        PlayerState s = savedStates.remove(p.getUniqueId());
+        if (stateStore != null) stateStore.delete(p.getUniqueId());
+        if (p.isDead()) {
+            try { p.spigot().respawn(); } catch (Throwable ignored) {}
+        }
+        for (org.bukkit.potion.PotionEffect fx : new ArrayList<>(p.getActivePotionEffects())) {
+            p.removePotionEffect(fx.getType());
+        }
+        p.setFireTicks(0);
+        p.setFallDistance(0f);
+        p.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+
+        Location back = s != null && s.location().getWorld() != null ? s.location()
+                : (p.getBedSpawnLocation() != null ? p.getBedSpawnLocation() : p.getWorld().getSpawnLocation());
+        markInternalTeleport(p, back);
+
+        if (s == null) {
+            p.setGameMode(GameMode.SURVIVAL);
+            p.setWalkSpeed(0.2f);
+            p.setFlySpeed(0.1f);
+            p.setInvisible(false);
+            return;
+        }
+        if (s.contents() != null) {
+            p.getInventory().setContents(s.contents());
+            p.getInventory().setArmorContents(s.armor());
+        }
+        p.setGameMode(s.gameMode());
+        p.setAllowFlight(s.allowFlight());
+        if (s.allowFlight() && s.flying()) p.setFlying(true);
+        double max = p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue();
+        p.setHealth(Math.max(0.5, Math.min(max, s.health())));
+        p.setFoodLevel(s.food());
+        p.setSaturation(s.saturation());
+        p.setLevel(s.level());
+        p.setExp(s.exp());
+        for (org.bukkit.potion.PotionEffect fx : s.effects()) p.addPotionEffect(fx);
+        p.setWalkSpeed(s.walkSpeed());
+        p.setFlySpeed(s.flySpeed());
+        p.setInvisible(s.invisible());
+    }
+
+    private int effectiveMin(Match match) {
+        int min = match.getArena().getMinPlayers();
+        return match.isRanked() ? Math.max(1, Math.min(2, min)) : min;
+    }
 
     public MatchManager(OmniArena plugin) {
         this.plugin = plugin;
         this.endCommandHandler = new EndCommandHandler(plugin);
+        this.rewardHandler = new RewardHandler(plugin);
         instance = this;
     }
 
@@ -47,6 +134,16 @@ public class MatchManager {
     }
 
     // ── Join / Leave ──────────────────────────────────────────────
+
+    public boolean isInternalTeleport(UUID uuid) { return internalTeleports.contains(uuid); }
+
+    /** Teleports a player on behalf of the plugin without triggering out-of-arena handling. */
+    public void markInternalTeleport(Player player, Location to) {
+        if (to == null) return;
+        internalTeleports.add(player.getUniqueId());
+        try { player.teleport(to); }
+        finally { internalTeleports.remove(player.getUniqueId()); }
+    }
 
     public void setLockdown(boolean lockdown) { this.lockdown = lockdown; }
     public boolean isLockdown() { return lockdown; }
@@ -76,6 +173,20 @@ public class MatchManager {
         if (uuid != null) godModePlayers.remove(uuid);
     }
 
+    /** True when an in-progress tournament uses this arena and the player is not in one of its pending matches. */
+    public boolean isArenaReserved(String arenaName, UUID uuid) {
+        var tm = plugin.getTournamentManager();
+        if (tm == null) return false;
+        for (var t : tm.getAll()) {
+            if (t.getState() != com.omniarena.tournament.TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
+            if (!arenaName.equalsIgnoreCase(t.getArenaName())) continue;
+            boolean allowed = t.getBracket().getCurrentRound().stream()
+                    .anyMatch(m -> !m.isCompleted() && !m.isBye() && m.involves(uuid));
+            if (!allowed) return true;
+        }
+        return false;
+    }
+
     public Match getOrCreateMatch(Arena arena) {
         return activeMatches.computeIfAbsent(arena.getName(), k -> {
             Match m = new Match(arena);
@@ -90,24 +201,46 @@ public class MatchManager {
             return false;
         }
         if (playerArena.containsKey(player.getUniqueId())) return false;
-        if (!arena.isJoinable()) return false;
+        if (!arena.isJoinable() && !(arena.isRunning() && arena.isMidMatchJoin())) return false;
+        if (isArenaReserved(arena.getName(), player.getUniqueId())) {
+            MessageUtil.send(player, "<red>That arena is reserved for a tournament match.");
+            return false;
+        }
         if (arena.isBanned(player.getUniqueId())) {
+            ConfigManager.debugLog(() -> "join refused: " + player.getName() + " is blacklisted in arena " + arena.getName());
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-banned"));
             return false;
         }
+        if (!arena.isWhitelisted(player.getUniqueId()) && !com.omniarena.permission.PermissionChecker.canBypassJoin(player)) {
+            ConfigManager.debugLog(() -> "join refused: " + player.getName() + " is not whitelisted in arena " + arena.getName());
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-not-whitelisted"));
+            return false;
+        }
 
+        Match existing = activeMatches.get(arena.getName());
+        if (existing != null && existing.isRanked() && existing.getState() != MatchState.WAITING
+                && existing.getState() != MatchState.STARTING) {
+            return false; // queued ranked matches are closed to outsiders once underway
+        }
         Match match = activeMatches.computeIfAbsent(arena.getName(), k -> {
             Match m = new Match(arena);
             startCountdown(m);
             return m;
         });
 
-        saveInventory(player, match);
+        // Joining an arena manually cancels any queue entry
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null) qm.forceRemove(player.getUniqueId(), player.getName() + " entered an arena");
+
+        saveState(player);
+        player.getInventory().clear();
         match.addPlayer(player.getUniqueId());
         playerArena.put(player.getUniqueId(), arena.getName());
+        // Entering an arena ends any open-world combat tag (arena combat has its own rules)
+        if (plugin.getCombatManager() != null) plugin.getCombatManager().clearCombat(player.getUniqueId());
 
         Location spawn = arena.getLobbySpawn();
-        if (spawn != null) player.teleport(spawn);
+        if (spawn != null) markInternalTeleport(player, spawn);
 
         player.setGameMode(GameMode.ADVENTURE);
         player.getInventory().clear();
@@ -116,14 +249,27 @@ public class MatchManager {
         player.setHealth(player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
         player.setFoodLevel(20);
         player.setSaturation(20f);
-        player.getActivePotionEffects().clear();
+        for (org.bukkit.potion.PotionEffect fx : player.getActivePotionEffects()) {
+            player.removePotionEffect(fx.getType()); // getActivePotionEffects() is a copy
+        }
         player.setWalkSpeed(0);
         player.setFlySpeed(0);
+        player.setFlying(false);
+        player.setAllowFlight(false);
+        player.setInvisible(false);
+        player.setFireTicks(0);
+        player.setFallDistance(0f);
+        player.setLevel(0);
+        player.setExp(0f);
 
         broadcastArena(match, ConfigManager.getInstance().getMessage("join-arena")
                 .replace("{arena}", arena.getName()));
 
         if (!tabTakeover()) plugin.getVisual().getScoreboardManager().createBoard(player, match);
+        if (!tabTakeover()) {
+            plugin.getVisual().getBossBarManager().addPlayer(player, match);
+            plugin.getVisual().getBossBarManager().updateTimer(match);
+        }
 
         if (match.getState() == MatchState.RUNNING && arena.isMidMatchJoin()) {
             spawnPlayer(player, match);
@@ -133,27 +279,85 @@ public class MatchManager {
     }
 
     public void leaveArena(Player player) {
+        String key = playerArena.get(player.getUniqueId());
+        if (key == null) return;
+        if (key.endsWith(":spectator")) { leaveSpectator(player); return; }
         String arenaName = playerArena.remove(player.getUniqueId());
-        if (arenaName == null) return;
 
         Match match = activeMatches.get(arenaName);
-        if (match == null) return;
+        if (match == null || !match.hasPlayer(player.getUniqueId())) {
+            // Stale mapping (match already cleaned up): still give the player their state back
+            restoreState(player);
+            plugin.getVisual().getScoreboardManager().removeBoard(player);
+            plugin.getVisual().getBossBarManager().removePlayer(player);
+            return;
+        }
+
+        // Leaving a running ranked (queue) match counts as a forfeit: the leaver loses ELO.
+        MatchResult forfeit = null;
+        if (match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
+                && match.hasPlayer(player.getUniqueId())) {
+            List<UUID> others = match.getPlayers().stream()
+                    .filter(u -> !u.equals(player.getUniqueId())).toList();
+            if (others.size() == 1) {
+                forfeit = new MatchResult(arenaName, others.get(0), player.getUniqueId(), null,
+                        MatchResult.Outcome.FORFEIT, match.getDurationSeconds(),
+                        new ArrayList<>(match.getPlayers()));
+            }
+        }
+
+        // Ranked team forfeit: the last member of a side leaving a running 2-team match loses for that side
+        // (the leaver is removed from the team below, so the end-of-match ELO pass would see no losers).
+        // (skipped when a 1v1 forfeit result is already built above: endMatch records that one, never both)
+        if (forfeit == null && match.getState() == MatchState.RUNNING && match.isRanked() && !plugin.isStopped()
+                && match.getTeams().size() == 2 && match.getTeam(player.getUniqueId()) != null) {
+            MatchTeam own = match.getTeam(player.getUniqueId());
+            MatchTeam opp = match.getTeams().get(0) == own ? match.getTeams().get(1) : match.getTeams().get(0);
+            if (own.getMembers().size() == 1 && !opp.getMembers().isEmpty()) {
+                plugin.getEloManager().recordTeamMatch(new ArrayList<>(opp.getMembers()),
+                        List.of(player.getUniqueId()));
+            }
+        }
 
         match.removePlayer(player.getUniqueId());
         plugin.getVisual().getScoreboardManager().removeBoard(player);
-        restoreInventory(player, match);
+        plugin.getVisual().getBossBarManager().removePlayer(player);
 
-        Location back = player.getBedSpawnLocation() != null
-                ? player.getBedSpawnLocation()
-                : player.getWorld().getSpawnLocation();
-        player.teleport(back);
-        player.setGameMode(GameMode.SURVIVAL);
+        // Restores inventory, armor, xp, health, food, effects, gamemode, flight, speeds and location
+        restoreState(player);
 
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("leave-arena")
                 .replace("{arena}", arenaName));
 
-        if (match.getState() == MatchState.RUNNING) {
+        if (forfeit != null) {
+            endMatch(match, forfeit);
+        } else if (match.getState() == MatchState.RUNNING && !plugin.isStopped()) {
             checkEndConditions(match);
+        }
+
+        // A queued (ranked) match that fell apart before it started: send the other player back to the queue
+        if (match.isRanked() && !plugin.isStopped() && match.getPlayerCount() > 0
+                && (match.getState() == MatchState.WAITING || match.getState() == MatchState.STARTING)
+                && match.getPlayerCount() < effectiveMin(match)) {
+            String queue = match.getQueueName();
+            List<Player> stranded = new ArrayList<>();
+            for (UUID uuid : new ArrayList<>(match.getPlayers())) {
+                Player other = Bukkit.getPlayer(uuid);
+                if (other == null) continue;
+                leaveArena(other);
+                stranded.add(other);
+            }
+            var qm = com.omniarena.queue.QueueManager.getInstance();
+            var pm = com.omniarena.party.PartyManager.getInstance();
+            if (queue != null && qm != null) {
+                for (Player other : stranded) {
+                    // Parties re-queue as a unit through their leader; other members just wait for it
+                    var party = pm != null ? pm.getParty(other) : null;
+                    if (party != null && party.getSize() > 1 && !party.isLeader(other.getUniqueId())) continue;
+                    MessageUtil.send(other, "<yellow>Your opponent left. Returning you to the queue.");
+                    qm.joinQueue(other, queue);
+                }
+            }
         }
 
         if (match.getPlayerCount() == 0) {
@@ -168,6 +372,7 @@ public class MatchManager {
         Match match = activeMatches.get(arena.getName());
         if (match == null) return false;
 
+        saveState(player);
         match.getSpectators().add(player.getUniqueId());
         playerArena.put(player.getUniqueId(), arena.getName() + ":spectator");
 
@@ -175,7 +380,12 @@ public class MatchManager {
         if (spec != null) player.teleport(spec);
 
         player.setGameMode(GameMode.SPECTATOR);
-        player.setInvisible(true);
+        player.setInvisible(ConfigManager.getInstance().getConfig().getBoolean("visual.spectator-invisibility", true));
+        if (!tabTakeover()) {
+            plugin.getVisual().getScoreboardManager().createBoard(player, match);
+            plugin.getVisual().getBossBarManager().addPlayer(player, match);
+        }
+        player.setFireTicks(0);
 
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-joined")
                 .replace("{arena}", arena.getName()));
@@ -190,11 +400,9 @@ public class MatchManager {
         Match match = activeMatches.get(arenaName);
         if (match != null) match.getSpectators().remove(player.getUniqueId());
 
-        player.setGameMode(GameMode.SURVIVAL);
-        player.setInvisible(false);
-
-        Location back = player.getWorld().getSpawnLocation();
-        player.teleport(back);
+        plugin.getVisual().getScoreboardManager().removeBoard(player);
+        plugin.getVisual().getBossBarManager().removePlayer(player);
+        restoreState(player);
     }
 
     // ── Countdown ────────────────────────────────────────────────
@@ -202,20 +410,28 @@ public class MatchManager {
     private void startCountdown(Match match) {
         match.setState(MatchState.WAITING);
         final int[] secondsLeft = {match.getArena().getCountdown()};
+        final int[] waitedSeconds = {0}; // seconds spent below the minimum player count (arena.lobby-timeout)
         match.setCountdownSeconds(secondsLeft[0]);
 
         BukkitTask task = AsyncUtil.runSyncRepeating(() -> {
             if (match.getState() != MatchState.WAITING && match.getState() != MatchState.STARTING) return;
-            if (match.getPlayerCount() < match.getArena().getMinPlayers()) {
+            if (match.getPlayerCount() < effectiveMin(match)) {
                 match.setState(MatchState.WAITING);
-                
+
+                int lobbyTimeout = ConfigManager.getInstance().getConfig().getInt("arena.lobby-timeout", 0);
+                if (lobbyTimeout > 0 && ++waitedSeconds[0] >= lobbyTimeout) {
+                    broadcastArena(match, "<yellow>Not enough players joined in time - the lobby was closed.");
+                    resetMatch(match);
+                    return;
+                }
+
                 // Show title instead of chat spam
                 for (UUID uuid : match.getPlayers()) {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null && player.isOnline()) {
-                        com.omniarena.util.MessageUtil.sendTitle(player,
+                        if (com.omniarena.visual.VisualGate.titles(match)) com.omniarena.util.MessageUtil.sendTitle(player,
                             "<yellow>Waiting for players</yellow>",
-                            "<gray>" + match.getPlayerCount() + "/" + match.getArena().getMinPlayers() + "</gray>",
+                            "<gray>" + match.getPlayerCount() + "/" + effectiveMin(match) + "</gray>",
                             0, 20, 0
                         );
                         // Lock player in place during waiting
@@ -230,6 +446,7 @@ public class MatchManager {
             }
 
             match.setState(MatchState.STARTING);
+            waitedSeconds[0] = 0;
             
             // Unlock players when starting
             for (UUID uuid : match.getPlayers()) {
@@ -249,9 +466,16 @@ public class MatchManager {
                 broadcastArena(match, ConfigManager.getInstance().getMessage("match-starting")
                         .replace("{seconds}", String.valueOf(secondsLeft[0])));
                 plugin.getVisual().getTitleManager().sendCountdownTitle(match, secondsLeft[0]);
-                plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
+                if (ConfigManager.getInstance().getConfig().getBoolean("visual.countdown-sounds", true)) {
+                    plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
+                }
             }
             secondsLeft[0]--;
+            match.setCountdownSeconds(Math.max(0, secondsLeft[0]));
+            if (!tabTakeover()) {
+                plugin.getVisual().getBossBarManager().updateTimer(match);
+                plugin.getVisual().getScoreboardManager().updateAll(match);
+            }
         }, 20L, 20L);
         match.setCountdownTask(task);
     }
@@ -262,10 +486,13 @@ public class MatchManager {
         match.cancelTasks();
 
         Arena arena = match.getArena();
+        if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().clearChangeLog(arena.getName()); // TIME_REWIND log: this match only
         arena.setState(ArenaState.RUNNING);
         match.setState(MatchState.RUNNING);
         match.setStartTime(System.currentTimeMillis());
         plugin.getBettingManager().onMatchStart(arena.getName());
+
+        match.setStartedWith(match.getPlayerCount());
 
         // Assign teams
         if (arena.getTeamConfig().isEnabled()) assignTeams(match);
@@ -294,19 +521,129 @@ public class MatchManager {
     private void spawnPlayer(Player player, Match match, Location spawn) {
         Arena arena = match.getArena();
         if (spawn == null) spawn = arena.getRandomBattleSpawn();
-        if (spawn != null) player.teleport(spawn);
+        if (spawn != null) markInternalTeleport(player, spawn);
 
+        if (arena.getLives() > 0) match.getLivesMap().putIfAbsent(player.getUniqueId(), arena.getLives());
         player.setGameMode(GameMode.SURVIVAL);
+        player.setWalkSpeed(0.2f);
+        player.setFlySpeed(0.1f);
+        player.setFireTicks(0);
+        player.setFallDistance(0f);
         player.setHealth(player.getAttribute(
                 org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
         player.setFoodLevel(20);
         player.setSaturation(20f);
 
-        // Hand the player this game type's full loadout.
-        arena.getGameMode().applyLoadout(player);
+        // Hand the player the queued kit if any, else this game type's full loadout.
+        applyLoadout(player, match);
 
         if (arena.getSpawnProtection() > 0) {
             match.setSpawnProtection(player.getUniqueId(), arena.getSpawnProtection());
+        }
+    }
+
+    /** Equips the queued kit when the match has one, otherwise the arena game mode's loadout. */
+    public void applyLoadout(Player player, Match match) {
+        String kit = match.getQueueKit();
+        if (kit != null) {
+            var adminKit = com.omniarena.kit.KitManager.getInstance().getAdminKit(kit);
+            if (adminKit.isPresent()) {
+                com.omniarena.kit.KitManager.getInstance().equipKit(player, adminKit.get());
+                return;
+            }
+        }
+        match.getArena().getGameMode().applyLoadout(player);
+    }
+
+    // ── Respawn: shared completion + WAVE mode ─────────────────
+
+    /**
+     * Brings a dead player back into the fight: respawn screen, battle spawn, loadout, spawn protection.
+     * Used by INSTANT/DELAYED (after their delay) and by WAVE (when a wave is released).
+     */
+    public void completeRespawn(UUID victimId, Match match) {
+        Arena arena = match.getArena();
+        Player victim = Bukkit.getPlayer(victimId);
+        if (victim == null || !victim.isOnline() || !match.hasPlayer(victimId) || !isInArena(victim)) return;
+        if (activeMatches.get(arena.getName()) != match) return;
+        if (victim.isDead()) victim.spigot().respawn();
+        if (match.getState() != MatchState.RUNNING) return;
+
+        match.getAlivePlayers().add(victimId);
+        victim.setGameMode(GameMode.SURVIVAL); // WAVE holds players in spectator until released
+
+        // Teleport to spawn + re-equip this game type's loadout
+        Location spawn = arena.getRandomBattleSpawn();
+        if (spawn != null) markInternalTeleport(victim, spawn);
+        if (spawn != null) victim.teleport(spawn);
+        applyLoadout(victim, match);
+
+        // Spawn protection
+        if (arena.getSpawnProtection() > 0) {
+            match.setSpawnProtection(victimId, arena.getSpawnProtection());
+            plugin.getVisual().getEffectManager().playSpawnProtectionEffect(victim);
+            plugin.getVisual().getSoundManager().playSpawnProtection(victim);
+            match.setSpawnProtectionTask(victimId, Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                match.clearSpawnProtectionTask(victimId);
+                match.getSpawnProtection().remove(victimId);
+                Player p = Bukkit.getPlayer(victimId);
+                if (p == null || !p.isOnline()) return;
+                plugin.getVisual().getEffectManager().removeSpawnProtectionEffect(p);
+                plugin.getVisual().getActionBarManager().sendSpawnProtectionExpired(p);
+            }, (long) arena.getSpawnProtection() * 20));
+        }
+        plugin.getVisual().getEffectManager().playSpawnEffect(victim);
+    }
+
+    /**
+     * WAVE respawn: the dead player is parked (spectator mode at the arena's spectator spot) and returns together
+     * with everybody else who died since the previous wave. Waves fire every {@code respawn.wave-interval}
+     * seconds of match time (arena key, default 10).
+     */
+    public void queueWaveRespawn(UUID victimId, Match match) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player victim = Bukkit.getPlayer(victimId);
+            if (victim == null || !victim.isOnline() || !match.hasPlayer(victimId) || !isInArena(victim)) return;
+            if (activeMatches.get(match.getArena().getName()) != match || match.getState() != MatchState.RUNNING) return;
+            if (victim.isDead()) victim.spigot().respawn(); // PlayerDeathListener.onRespawn places them at the spectator spot
+            victim.setGameMode(GameMode.SPECTATOR);
+            match.getWaveQueue().add(victimId);
+            int interval = Math.max(1, match.getArena().getRespawnWaveInterval());
+            sendWaveCountdown(victim, match, interval - (match.getElapsedSeconds() % interval));
+        }, 1L);
+    }
+
+    /** Called once per second from the match timer: counts down for waiting players and releases the wave. */
+    private void tickWave(Match match) {
+        if (match.getWaveQueue().isEmpty()) return;
+        int interval = Math.max(1, match.getArena().getRespawnWaveInterval());
+        int into = match.getElapsedSeconds() % interval;
+        if (into == 0) {
+            List<UUID> wave = new ArrayList<>(match.getWaveQueue());
+            match.getWaveQueue().clear();
+            ConfigManager.debugLog(() -> "wave respawn in arena " + match.getArena().getName() + ": releasing " + wave.size() + " player(s)");
+            for (UUID id : wave) {
+                completeRespawn(id, match);
+                Player p = Bukkit.getPlayer(id);
+                if (p != null && p.isOnline()) {
+                    if (match.getArena().getVisual().isActionBar()) MessageUtil.sendActionBar(p, "<green>Wave respawn!");
+                }
+            }
+            return;
+        }
+        int left = interval - into;
+        for (UUID id : new ArrayList<>(match.getWaveQueue())) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) sendWaveCountdown(p, match, left);
+        }
+    }
+
+    private void sendWaveCountdown(Player p, Match match, int secondsLeft) {
+        if (match.getArena().getVisual().isActionBar()) {
+            MessageUtil.sendActionBar(p, "<yellow>Respawning with the next wave in <white>" + secondsLeft + "s");
+        }
+        if (secondsLeft <= 3 && VisualGate.titles(match)) {
+            MessageUtil.sendTitle(p, "<yellow>" + secondsLeft, "<gray>Next wave", 0, 20, 5);
         }
     }
 
@@ -318,6 +655,7 @@ public class MatchManager {
             plugin.getVisual().getScoreboardManager().updateAll(match);
             plugin.getVisual().getBossBarManager().updateTimer(match);
             plugin.getVisual().getActionBarManager().updateAll(match);
+            tickWave(match); // after the action bar update so the wave countdown is what players see
 
             if (match.getTimeRemaining() <= 0) {
                 endMatch(match, buildTimeoutResult(match));
@@ -329,14 +667,34 @@ public class MatchManager {
     // ── End Match ────────────────────────────────────────────────
 
     public void endMatch(Match match, MatchResult result) {
-        if (match.getState() == MatchState.ENDING) return;
+        if (match.getState() == MatchState.ENDING || match.getState() == MatchState.RESETTING) return;
+        if (activeMatches.get(match.getArena().getName()) != match) return;
         match.cancelTasks();
         match.setState(MatchState.ENDING);
         match.setEndTime(System.currentTimeMillis());
         match.getArena().setState(ArenaState.ENDING);
 
-        // Update ELO ratings for competitive matches
-        if (result.getWinnerId() != null && result.getLoserId() != null) {
+        try {
+            endMatchEffects(match, result);
+        } catch (Throwable t) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error while finishing the match in arena " + match.getArena().getName()
+                    + " (" + t + "). The arena is still reset after the end delay.", t);
+        }
+
+        int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
+        AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
+    }
+
+    /** ELO, betting, tournament, visuals, rewards and stats for a finished match (isolated so a failure cannot strand the arena in ENDING). */
+    private void endMatchEffects(Match match, MatchResult result) {
+        // Update ELO ratings for ranked (queue) matches only
+        if (match.isRanked() && result.isDraw() && result.getParticipants() != null
+                && match.getTeams().isEmpty() && result.getParticipants().size() == 2) {
+            UUID a = result.getParticipants().get(0), b = result.getParticipants().get(1);
+            String an = Bukkit.getOfflinePlayer(a).getName();
+            String bn = Bukkit.getOfflinePlayer(b).getName();
+            plugin.getEloManager().recordDraw(a, b, an != null ? an : "Unknown", bn != null ? bn : "Unknown");
+        } else if (match.isRanked() && result.getWinnerId() != null && result.getLoserId() != null) {
             String winnerName = Bukkit.getOfflinePlayer(result.getWinnerId()).getName();
             String loserName = Bukkit.getOfflinePlayer(result.getLoserId()).getName();
             plugin.getEloManager().recordMatch(result.getWinnerId(), result.getLoserId(), 
@@ -344,27 +702,50 @@ public class MatchManager {
                     loserName != null ? loserName : "Unknown");
         }
 
+        // Ranked team draw: each player scores 0.5 against the opposing side's average
+        if (match.isRanked() && result.isDraw() && match.getTeams().size() == 2) {
+            plugin.getEloManager().recordTeamDraw(match.getTeams().get(0).getMembers(),
+                    match.getTeams().get(1).getMembers());
+        }
+
+        // Ranked team matches (e.g. queued parties): per-player ELO against the opposing side's average
+        if (match.isRanked() && !result.isDraw() && result.getWinnerTeamName() != null && !match.getTeams().isEmpty()) {
+            List<UUID> winners = new ArrayList<>(), losers = new ArrayList<>();
+            for (MatchTeam t : match.getTeams()) {
+                (t.getName().equals(result.getWinnerTeamName()) ? winners : losers).addAll(t.getMembers());
+            }
+            if (!winners.isEmpty() && !losers.isEmpty()) plugin.getEloManager().recordTeamMatch(winners, losers);
+        }
+
         // Betting payout
         plugin.getBettingManager().processMatchResults(
                 match.getArena().getName(), result.getWinnerId(), result.getLoserId());
+        plugin.getTournamentManager().onMatchEnd(result);
 
         plugin.getVisual().getTitleManager().sendMatchEndTitle(match, result);
         plugin.getVisual().getSoundManager().playMatchEnd(match, result);
-        plugin.getVisual().getEffectManager().playVictoryFireworks(match, result);
+        if (ConfigManager.getInstance().getConfig().getBoolean("visual.victory-fireworks", true)) {
+            plugin.getVisual().getEffectManager().playVictoryFireworks(match, result);
+        }
         plugin.getVisual().getBossBarManager().removeAll(match);
 
         endCommandHandler.execute(match, result);
+        rewardHandler.onWin(match, result);
         StatsManager.getInstance().recordResult(match, result);
+
+        if (match.getArena().isAnnouncements()
+                && ConfigManager.getInstance().getConfig().getBoolean("match.announce-arena", true)) {
+            broadcastArena(match, ConfigManager.getInstance().getMessage("match-ended")
+                    .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
+                            (result.getWinnerId() != null ? String.valueOf(Bukkit.getOfflinePlayer(result.getWinnerId()).getName()) : String.valueOf(result.getWinnerTeamName()))));
+        }
 
         if (ConfigManager.getInstance().getConfig().getBoolean("match.announce-global")) {
             String msg = ConfigManager.getInstance().getMessage("match-ended")
                     .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
                             (result.getWinnerId() != null ? Bukkit.getOfflinePlayer(result.getWinnerId()).getName() : result.getWinnerTeamName()));
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(msg));
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(msg));
         }
-
-        int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
-        AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
     }
 
     public void forceWin(Match match, UUID winnerId) {
@@ -384,17 +765,65 @@ public class MatchManager {
     }
 
     public void checkEndConditions(Match match) {
+        if (match.getState() != MatchState.RUNNING) return;
         Arena arena = match.getArena();
         List<UUID> alive = new ArrayList<>(match.getAlivePlayers());
+        boolean teamed = !match.getTeams().isEmpty();
+
+        // Everyone (or every other team) left a match that started with several sides
+        if (match.getStartedWith() > 1) {
+            if (teamed) {
+                Set<MatchTeam> present = new LinkedHashSet<>();
+                for (UUID u : match.getPlayers()) {
+                    MatchTeam t = match.getTeam(u);
+                    if (t != null) present.add(t);
+                }
+                if (present.size() == 1) {
+                    endMatch(match, teamWin(match, present.iterator().next()));
+                    return;
+                }
+            } else if (match.getPlayerCount() == 1) {
+                UUID w = match.getPlayers().iterator().next();
+                endMatch(match, new MatchResult(arena.getName(), w, null, null, MatchResult.Outcome.WIN,
+                        match.getDurationSeconds(), new ArrayList<>(match.getPlayers())));
+                return;
+            }
+        }
 
         // The game type drives the win condition; arena goal value overrides the
         // mode default only when an admin set one (> 0).
         var mode = arena.getGameMode();
-        GoalType goal = mode.getGoalType();
+        GoalType goal = arena.getGoalType(); // arena goal.type override, else the mode's goal
         int goalValue = arena.getGoalValue() > 0 ? arena.getGoalValue() : mode.getDefaultGoalValue();
+
+        // Per-player lives on a kills-goal arena: last player/team with lives left also wins
+        if (arena.getLives() > 0 && goal == GoalType.KILLS && match.getStartedWith() > 1) {
+            boolean teamWon = false;
+            if (teamed) {
+                for (MatchTeam t : match.getTeams()) {
+                    if (t.getKills() >= goalValue) { teamWon = true; break; }
+                }
+            } else {
+                UUID l = match.getLeader();
+                teamWon = l != null && match.getKills(l) >= goalValue;
+            }
+            if (!teamWon) {
+                checkLastAlive(match, alive, teamed);
+                if (match.getState() != MatchState.RUNNING) return;
+            }
+        }
 
         switch (goal) {
             case KILLS -> {
+                if (teamed) {
+                    for (MatchTeam t : match.getTeams()) {
+                        if (t.getKills() >= goalValue) {
+                            endMatch(match, teamWin(match, t));
+                            return;
+                        }
+                    }
+                    return;
+                }
                 UUID leader = match.getLeader();
                 if (leader != null && match.getKills(leader) >= goalValue) {
                     UUID loserUuid = match.getPlayers().stream()
@@ -405,20 +834,38 @@ public class MatchManager {
                     endMatch(match, result);
                 }
             }
-            case LAST_ALIVE -> {
-                if (alive.size() == 1) {
-                    UUID winnerUuid = alive.get(0);
-                    UUID loserUuid = match.getPlayers().stream()
-                            .filter(u -> !u.equals(winnerUuid)).findFirst().orElse(null);
-                    MatchResult result = new MatchResult(arena.getName(), winnerUuid, loserUuid, null,
-                            MatchResult.Outcome.WIN, match.getDurationSeconds(),
-                            new ArrayList<>(match.getPlayers()));
-                    endMatch(match, result);
-                } else if (alive.isEmpty()) {
-                    endMatch(match, buildDrawResult(match));
-                }
-            }
+            case LAST_ALIVE -> checkLastAlive(match, alive, teamed);
+            default -> {}
         }
+    }
+
+    /** Last-one/last-team-standing resolution (also used for KILLS modes with per-player lives). */
+    private void checkLastAlive(Match match, List<UUID> alive, boolean teamed) {
+        Arena arena = match.getArena();
+        if (teamed) {
+            Set<MatchTeam> aliveTeams = new LinkedHashSet<>();
+            for (UUID u : alive) {
+                MatchTeam t = match.getTeam(u);
+                if (t != null) aliveTeams.add(t);
+            }
+            if (aliveTeams.size() == 1) endMatch(match, teamWin(match, aliveTeams.iterator().next()));
+            else if (aliveTeams.isEmpty()) endMatch(match, buildDrawResult(match));
+        } else if (alive.size() == 1) {
+            UUID winnerUuid = alive.get(0);
+            UUID loserUuid = match.getPlayers().stream()
+                    .filter(u -> !u.equals(winnerUuid)).findFirst().orElse(null);
+            MatchResult result = new MatchResult(arena.getName(), winnerUuid, loserUuid, null,
+                    MatchResult.Outcome.WIN, match.getDurationSeconds(),
+                    new ArrayList<>(match.getPlayers()));
+            endMatch(match, result);
+        } else if (alive.isEmpty()) {
+            endMatch(match, buildDrawResult(match));
+        }
+    }
+
+    private MatchResult teamWin(Match match, MatchTeam team) {
+        return new MatchResult(match.getArena().getName(), null, null, team.getName(),
+                MatchResult.Outcome.WIN, match.getDurationSeconds(), new ArrayList<>(match.getPlayers()));
     }
 
     // ── Reset ────────────────────────────────────────────────────
@@ -443,27 +890,64 @@ public class MatchManager {
 
     private void cleanupMatch(Match match) {
         match.cancelTasks();
-        activeMatches.remove(match.getArena().getName());
-        match.getArena().setState(ArenaState.WAITING);
+        // Only release the arena if this match still owns it: the delayed resetMatch()
+        // of an already-cleaned-up match must not tear down a newer match on the same arena.
+        if (!activeMatches.remove(match.getArena().getName(), match)) return;
+        // Don't strand spectators on a match that no longer exists
+        for (UUID uuid : new ArrayList<>(match.getSpectators())) {
+            Player sp = Bukkit.getPlayer(uuid);
+            if (sp != null) leaveSpectator(sp);
+            else playerArena.remove(uuid);
+        }
+        match.getSpectators().clear();
+        // A played match whose last player left before the delayed reset ran still dirtied the arena: regen it too
+        if (match.getState() == MatchState.RUNNING || match.getState() == MatchState.ENDING) match.setState(MatchState.RESETTING);
+        // After a played match the arena stays RESETTING until the block regen finishes
+        if (!startAutoRegen(match)) match.getArena().setState(ArenaState.WAITING);
         plugin.getBettingManager().onMatchCleanup(match.getArena().getName());
     }
 
-    // ── Inventory save / restore ──────────────────────────────────
-
-    private void saveInventory(Player player, Match match) {
-        if (!ConfigManager.getInstance().getConfig().getBoolean("arena.inventory-restore", true)) return;
-        match.saveInventory(player.getUniqueId(),
-                player.getInventory().getContents(),
-                player.getInventory().getArmorContents());
-        player.getInventory().clear();
+    /**
+     * Restores the arena blocks from its snapshot after a finished match. The arena is RESETTING (not joinable)
+     * until the regen completes; it returns to WAITING on completion, and also on failure so it never stays stuck.
+     * @return true if a regen was started (the callbacks then own the WAITING transition)
+     */
+    private boolean startAutoRegen(Match match) {
+        Arena arena = match.getArena();
+        // Not gated on isStopped(): matches ended by /oa stop or onDisable must still restore their arena
+        // (BlockRestoreModule.cancelAll() then finalizes that regen synchronously).
+        if (match.getState() != MatchState.RESETTING || !plugin.isEnabled()) return false;
+        var restore = plugin.getBlockRestoreModule();
+        if (restore == null || !arena.getRegion().isDefined()) return false;
+        var cfg = ConfigManager.getInstance().getConfig();
+        String path = "regen.arenas." + arena.getName().toLowerCase() + ".auto";
+        boolean auto = cfg.isSet(path) ? cfg.getBoolean(path) : cfg.getBoolean("regen.auto", true);
+        if (!auto) return false;
+        String name = arena.getName();
+        if (!restore.hasSnapshot(name)) {
+            plugin.getLogger().warning("Auto-regen skipped for arena " + name + ": no snapshot. Run /oa regen snapshot " + name + ".");
+            notifyAdmins("<red>Arena <yellow>" + name + "</yellow> was not regenerated: no snapshot. Run <yellow>/oa regen snapshot " + name + "</yellow>.");
+            return false;
+        }
+        arena.setState(ArenaState.RESETTING);
+        Runnable release = () -> {
+            // Do not override an admin disabling/maintaining the arena or a newer match meanwhile
+            if (arena.getState() == ArenaState.RESETTING && !activeMatches.containsKey(name)) arena.setState(ArenaState.WAITING);
+        };
+        restore.restore(arena, release, () -> {
+            String why = restore.getLastError(name);
+            plugin.getLogger().severe("Auto-regen failed for arena " + name + (why != null ? ": " + why : "."));
+            notifyAdmins("<red>Auto-regen of arena <yellow>" + name + "</yellow> failed. "
+                    + (why != null ? why : "See console.") + " The arena was reopened with its current blocks.");
+            release.run();
+        });
+        return true;
     }
 
-    private void restoreInventory(Player player, Match match) {
-        if (!ConfigManager.getInstance().getConfig().getBoolean("arena.inventory-restore", true)) return;
-        org.bukkit.inventory.ItemStack[] contents = match.getSavedContents(player.getUniqueId());
-        org.bukkit.inventory.ItemStack[] armor    = match.getSavedArmor(player.getUniqueId());
-        if (contents != null) player.getInventory().setContents(contents);
-        if (armor != null)    player.getInventory().setArmorContents(armor);
+    private void notifyAdmins(String miniMessage) {
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.hasPermission("omniarena.admin") || p.hasPermission("omniarena.admin.arena")) MessageUtil.send(p, miniMessage);
+        }
     }
 
     // ── Team assignment ───────────────────────────────────────────
@@ -481,8 +965,17 @@ public class MatchManager {
 
         List<UUID> playerList = new ArrayList<>(match.getPlayers());
         Collections.shuffle(playerList);
-        for (int i = 0; i < playerList.size(); i++) {
-            match.assignTeam(playerList.get(i), teams.get(i % teamCount));
+        // Queued parties arrive with a preset side so they stay together
+        List<UUID> unassigned = new ArrayList<>();
+        for (UUID u : playerList) {
+            Integer side = match.getPresetSides().get(u);
+            if (side != null && teamCount > 0) match.assignTeam(u, teams.get(side % teamCount));
+            else unassigned.add(u);
+        }
+        for (UUID u : unassigned) {
+            MatchTeam smallest = teams.get(0);
+            for (MatchTeam t : teams) if (t.getMembers().size() < smallest.getMembers().size()) smallest = t;
+            match.assignTeam(u, smallest);
         }
     }
 
@@ -496,6 +989,23 @@ public class MatchManager {
     }
 
     private MatchResult buildTimeoutResult(Match match) {
+        // Kill-based modes: whoever is strictly ahead when time runs out wins
+        if (match.getArena().getGoalType() == GoalType.KILLS && match.getPlayerCount() > 1) {
+            if (!match.getTeams().isEmpty()) {
+                List<MatchTeam> sorted = new ArrayList<>(match.getTeams());
+                sorted.sort((a, b) -> Integer.compare(b.getKills(), a.getKills()));
+                if (sorted.size() >= 2 && sorted.get(0).getKills() > sorted.get(1).getKills()) {
+                    return teamWin(match, sorted.get(0));
+                }
+            } else {
+                List<UUID> sorted = match.getRankedPlayers();
+                if (sorted.size() >= 2 && match.getKills(sorted.get(0)) > match.getKills(sorted.get(1))) {
+                    UUID loser = sorted.size() == 2 ? sorted.get(1) : null;
+                    return new MatchResult(match.getArena().getName(), sorted.get(0), loser, null,
+                            MatchResult.Outcome.WIN, match.getDurationSeconds(), new ArrayList<>(match.getPlayers()));
+                }
+            }
+        }
         return new MatchResult(match.getArena().getName(), null, null, null,
                 MatchResult.Outcome.TIMEOUT, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
@@ -508,6 +1018,8 @@ public class MatchManager {
     }
 
     // ── Lookup ───────────────────────────────────────────────────
+
+    public RewardHandler getRewardHandler() { return rewardHandler; }
 
     public Optional<Match> getMatch(Arena arena) {
         return Optional.ofNullable(activeMatches.get(arena.getName()));

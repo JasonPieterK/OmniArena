@@ -25,6 +25,7 @@ public class PlayerMoveListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
+        if (plugin.isStopped()) return;
         // Only act on full block movements (skip look-only events)
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()
                 && event.getFrom().getBlockY() == event.getTo().getBlockY()
@@ -34,6 +35,7 @@ public class PlayerMoveListener implements Listener {
         MatchManager mm = MatchManager.getInstance();
 
         if (!mm.isInArena(player) || mm.isSpectating(player)) return;
+        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) return; // eliminated
 
         Optional<String> arenaName = mm.getArenaName(player);
         if (arenaName.isEmpty()) return;

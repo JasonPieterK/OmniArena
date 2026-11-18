@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -29,15 +30,27 @@ public class EnableArenaCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[0]));
             return;
         }
-        ArenaManager.getInstance().enable(arena.get());
+        Arena a = arena.get();
+        if (a.isEnabled()) {
+            MessageUtil.send(sender, "<yellow>Arena <white>" + a.getName() + "</white> is already enabled.");
+            return;
+        }
+        if (a.getBattleSpawns().isEmpty()) {
+            MessageUtil.send(sender, com.omniarena.config.ConfigManager.getInstance().getMessage("arena-no-spawns")
+                    .replace("{arena}", a.getName()).replace("{type}", "BATTLE")
+                    + " <gray>Then retry <white>/oa enable " + a.getName() + "</white>.");
+            return;
+        }
+        if (!a.getRegion().isDefined()) {
+            MessageUtil.send(sender, "<yellow>Warning: arena <white>" + a.getName() + "</white> has no region, so block protection and regen won't work. <gray>Fix: <white>/oa wand</white> then <white>/oa region set " + a.getName() + "</white>.");
+        }
+        ArenaManager.getInstance().enable(a);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-enabled").replace("{arena}", args[0]));
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1)
-            return ArenaManager.getInstance().getAll().stream().map(Arena::getName)
-                    .filter(n -> n.startsWith(args[0])).toList();
+        if (args.length == 1) return TabUtil.arenas(args[0]);
         return List.of();
     }
 }

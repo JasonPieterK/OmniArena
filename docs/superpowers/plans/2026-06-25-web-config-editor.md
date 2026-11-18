@@ -160,3 +160,36 @@ git add src/main/resources/web/docs.md src/main/java/com/omniarena/web/DocsCatal
 git commit -m "feat: add detailed docs tab"
 ```
 
+
+---
+
+## Status / Implementation notes
+
+Implemented, with these differences from the plan as written:
+
+- Endpoints: `/`, `/styles.css`, `/app.js` (public shell) and token-protected `/api/state`,
+  `/api/apply`, `/api/create-arena`, `/api/delete-arena`, `/api/docs`, `/api/live-matches`,
+  `/api/players` and `POST /api/logout`. The UI has six tabs: Dashboard, Live Matches, Arenas
+  (including the per-arena `lives` field), Players, Config, Docs.
+- The session link is created with `/oa website` (admin permission `omniarena.admin`); there is no
+  `/oa editor` command. `/oa override killweb` revokes sessions.
+- Sessions: 24 random bytes, **sliding** lifetime `web.session-minutes` (each valid request renews
+  it), cap `web.max-sessions` (0 = unlimited), both read once at plugin enable; `POST /api/logout`
+  revokes a session. The page strips the `?token=` from the address bar and keeps the token in
+  `sessionStorage`.
+- The server binds `web.bind-address` (default `127.0.0.1`) and speaks plain HTTP. The token is sent
+  as `Authorization: Bearer` (or `X-OmniArena-Token`; the `?token=` query parameter is accepted for
+  old clients). Errors are JSON and every response carries security headers (CSP, `no-store`,
+  `X-Frame-Options`, `nosniff`, `Referrer-Policy`). Use a reverse proxy with HTTPS for remote access
+  and set `web.public-url`.
+- `/api/apply` validates all values first and applies nothing if any is invalid; all Bukkit access is
+  hopped to the main thread; request bodies are limited to 1 MiB.
+- The settings schema (`ConfigSchemaService`) flattens the live `config.yml` and `messages.yml`
+  only: no extra entries and no padding to 250 (the earlier padded/invented keys were removed).
+  The same schema backs the in-game `/oa settings` chest GUI and `/oa settings set <key> <value>`.
+- The Docs tab serves `src/main/resources/web/docs.md`, which is kept byte-identical to the
+  repository-level `DOCS.md` (`cp DOCS.md src/main/resources/web/docs.md`).
+- Icons are loaded from unpkg (Phosphor 2.1.1) without a Subresource Integrity attribute; the hash
+  command is in the README.
+- Tests: `ConfigSchemaServiceTest` (schema lists only real, unique keys) exists; no
+  `WebDashboardServerTest` was written.

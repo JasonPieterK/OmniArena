@@ -1,5 +1,6 @@
 package com.omniarena.commands.player;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -40,15 +41,13 @@ public class SpectateCommand extends SubCommand {
             return;
         }
         if (!MatchManager.getInstance().joinSpectator(player, arenaOpt.get())) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-not-allowed"));
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-not-allowed").replace("{arena}", arenaOpt.get().getName()));
         }
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1)
-            return ArenaManager.getInstance().getEnabled().stream()
-                    .map(Arena::getName).filter(n -> n.startsWith(args[0])).toList();
+        if (args.length == 1) return TabUtil.enabledArenas(args[0]);
         return List.of();
     }
 }

@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -31,7 +32,7 @@ public class TeleportArenaCommand extends SubCommand {
         Arena arena = arenaOpt.get();
         Location dest = arena.getLobbySpawn();
         if (dest == null) dest = arena.getRandomBattleSpawn();
-        if (dest == null) { MessageUtil.send(player, "<red>No spawns set for this arena yet."); return; }
+        if (dest == null) { MessageUtil.send(player, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no lobby or battle spawn to teleport to. <gray>Set one with <white>/oa spawn set " + arena.getName() + " LOBBY</white> (or BATTLE)."); return; }
 
         player.teleport(dest);
         MessageUtil.send(player, "<green>Teleported to <yellow>" + arena.getName() + "</yellow>.");
@@ -39,7 +40,7 @@ public class TeleportArenaCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[0])).toList();
+        if (args.length == 1) return TabUtil.arenas(args[0]);
         return List.of();
     }
 }

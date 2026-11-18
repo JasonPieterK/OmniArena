@@ -30,15 +30,32 @@ public class PartyManager {
 
     public static PartyManager getInstance() { return instance; }
 
+    /** Configured maximum party size (party.max-size, default 10, minimum 2). */
+    public static int maxSize() {
+        try {
+            return Math.max(2, com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("party.max-size", 10));
+        } catch (Exception e) {
+            return 10;
+        }
+    }
+
     public void start() {
         // Clean up expired invites every 30 seconds
+        stop();
         inviteCleanupTask = Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredInvites, 600L, 600L);
     }
 
     public void stop() {
         if (inviteCleanupTask != null) {
             inviteCleanupTask.cancel();
+            inviteCleanupTask = null;
         }
+    }
+
+    /** A queued party is a single queue unit: any change to its makeup removes it from the queue. */
+    private void dequeueParty(Party party, String reason) {
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null && party != null) qm.removePartyFromQueue(new ArrayList<>(party.getMembers()), reason);
     }
 
     /**
@@ -68,16 +85,19 @@ public class PartyManager {
             return false;
         }
 
+        dequeueParty(party, "the party was disbanded");
+
         // Notify all members
         for (UUID member : party.getMembers()) {
             Player p = Bukkit.getPlayer(member);
-            if (p != null && p.isOnline()) {
+            if (p != null && p.isOnline() && !member.equals(leader.getUniqueId())) {
                 MessageUtil.send(p, "<red>Your party has been disbanded.");
             }
             playerToParty.remove(member);
         }
 
         parties.remove(leader.getUniqueId());
+        pendingInvites.values().removeIf(inv -> inv.getPartyId().equals(party.getId()));
         MessageUtil.send(leader, "<green>Party disbanded.");
         return true;
     }
@@ -98,12 +118,14 @@ public class PartyManager {
         }
 
         if (isInParty(target)) {
-            MessageUtil.send(leader, "<red>That player is already in a party.");
+            MessageUtil.send(leader, party.isMember(target.getUniqueId())
+                    ? "<red>That player is already in your party."
+                    : "<red>That player is already in a party.");
             return false;
         }
 
         if (party.isFull()) {
-            MessageUtil.send(leader, "<red>Your party is full.");
+            MessageUtil.send(leader, "<red>Your party is full <gray>(max " + maxSize() + " players).");
             return false;
         }
 
@@ -115,7 +137,7 @@ public class PartyManager {
         }
 
         // Create invite (expires in 60 seconds)
-        PartyInvite invite = new PartyInvite(leader.getUniqueId(), target.getUniqueId(), party.getKitName());
+        PartyInvite invite = new PartyInvite(party.getId(), leader.getUniqueId(), target.getUniqueId(), party.getKitName());
         pendingInvites.put(target.getUniqueId(), invite);
 
         MessageUtil.send(target, "<yellow>" + leader.getName() + " <gray>has invited you to join their party.");
@@ -130,24 +152,51 @@ public class PartyManager {
      */
     public boolean acceptInvite(Player player) {
         PartyInvite invite = pendingInvites.get(player.getUniqueId());
-        if (invite == null || invite.isExpired()) {
+        if (invite == null) {
             MessageUtil.send(player, "<red>You have no pending party invites.");
             return false;
         }
+        if (invite.isExpired()) {
+            pendingInvites.remove(player.getUniqueId());
+            MessageUtil.send(player, "<red>That party invite has expired. <gray>Ask for a new one.");
+            return false;
+        }
+        if (isInParty(player)) {
+            pendingInvites.remove(player.getUniqueId());
+            MessageUtil.send(player, "<red>You are already in a party. <gray>Use <yellow>/party leave</yellow> first.");
+            return false;
+        }
+        if (plugin.getMatchManager().isInArena(player)) {
+            MessageUtil.send(player, "<red>You cannot join a party while in an arena.");
+            return false;
+        }
 
-        Player leader = Bukkit.getPlayer(invite.getLeaderUuid());
+        // Invites are keyed by party id, so they survive leadership transfers
+        Party party = findPartyById(invite.getPartyId());
+        Player leader = party != null ? Bukkit.getPlayer(party.getLeaderUuid()) : null;
+        if (party == null) {
+            MessageUtil.send(player, "<red>That party no longer exists.");
+            pendingInvites.remove(player.getUniqueId());
+            return false;
+        }
         if (leader == null || !leader.isOnline()) {
             MessageUtil.send(player, "<red>The party leader is no longer online.");
             pendingInvites.remove(player.getUniqueId());
             return false;
         }
-
-        Party party = parties.get(leader.getUniqueId());
-        if (party == null || party.isFull()) {
-            MessageUtil.send(player, "<red>The party is no longer available.");
+        if (party.isFull()) {
+            MessageUtil.send(player, "<red>That party is full.");
             pendingInvites.remove(player.getUniqueId());
             return false;
         }
+
+        // A solo queue entry would conflict with party membership: drop it
+        var qm = com.omniarena.queue.QueueManager.getInstance();
+        if (qm != null && qm.forceRemove(player.getUniqueId(), player.getName() + " joined the party")) {
+            MessageUtil.send(player, "<yellow>You were removed from the queue to join the party.");
+        }
+
+        dequeueParty(party, player.getName() + " joined the party");
 
         // Add to party
         party.addMember(player.getUniqueId(), player.getName());
@@ -155,7 +204,7 @@ public class PartyManager {
         pendingInvites.remove(player.getUniqueId());
 
         // Notify party
-        MessageUtil.send(player, "<green>You joined <yellow>" + leader.getName() + "'s</yellow> party.");
+        MessageUtil.send(player, "<green>You joined <yellow>" + party.getLeaderName() + "'s</yellow> party.");
         for (UUID member : party.getMembers()) {
             Player p = Bukkit.getPlayer(member);
             if (p != null && p.isOnline() && !p.equals(player)) {
@@ -176,7 +225,7 @@ public class PartyManager {
             return false;
         }
 
-        Player leader = Bukkit.getPlayer(invite.getLeaderUuid());
+        Player leader = Bukkit.getPlayer(invite.getInviterUuid());
         if (leader != null && leader.isOnline()) {
             MessageUtil.send(leader, "<red>" + player.getName() + " <gray>declined your party invite.");
         }
@@ -202,8 +251,10 @@ public class PartyManager {
         }
 
         if (party.isLeader(player.getUniqueId())) {
-            return disbandParty(player);
+            return leaderLeaves(party, player);
         }
+
+        dequeueParty(party, player.getName() + " left the party");
 
         // Remove from party
         party.removeMember(player.getUniqueId());
@@ -222,6 +273,48 @@ public class PartyManager {
     }
 
     /**
+     * The leader leaves: leadership passes to the longest-standing online member
+     * (members are kept in join order). The party only disbands when nobody else is left online.
+     */
+    private boolean leaderLeaves(Party party, Player leaver) {
+        UUID oldId = leaver.getUniqueId();
+        dequeueParty(party, leaver.getName() + " (the party leader) left the party");
+
+        UUID nextId = null;
+        String nextName = null;
+        for (UUID m : party.getMembers()) {
+            if (m.equals(oldId)) continue;
+            Player p = Bukkit.getPlayer(m);
+            if (p != null && p.isOnline()) { nextId = m; nextName = p.getName(); break; }
+        }
+
+        party.removeMember(oldId);
+        playerToParty.remove(oldId);
+        parties.remove(oldId);
+
+        if (nextId == null) {
+            // Nobody online to inherit the party: disband it
+            for (UUID m : party.getMembers()) playerToParty.remove(m);
+            pendingInvites.values().removeIf(inv -> inv.getPartyId().equals(party.getId()));
+            MessageUtil.send(leaver, "<green>You left the party. <gray>It was disbanded because no other member is online.");
+            return true;
+        }
+
+        party.setLeader(nextId, nextName);
+        parties.put(nextId, party);
+        for (UUID m : party.getMembers()) playerToParty.put(m, nextId);
+
+        MessageUtil.send(leaver, "<green>You left the party. <yellow>" + nextName + "</yellow> is now the leader.");
+        for (UUID m : party.getMembers()) {
+            Player p = Bukkit.getPlayer(m);
+            if (p == null || !p.isOnline()) continue;
+            if (m.equals(nextId)) MessageUtil.send(p, "<yellow>" + leaver.getName() + " <gray>left the party. <green>You are now the party leader.");
+            else MessageUtil.send(p, "<yellow>" + leaver.getName() + " <gray>left the party. <yellow>" + nextName + " <gray>is now the leader.");
+        }
+        return true;
+    }
+
+    /**
      * Kick a player from the party
      */
     public boolean kickPlayer(Player leader, Player target) {
@@ -231,10 +324,16 @@ public class PartyManager {
             return false;
         }
 
+        if (leader.getUniqueId().equals(target.getUniqueId())) {
+            MessageUtil.send(leader, "<red>You cannot kick yourself. <gray>Use <yellow>/party disband</yellow> or <yellow>/party leave</yellow>.");
+            return false;
+        }
         if (!party.isMember(target.getUniqueId())) {
             MessageUtil.send(leader, "<red>That player is not in your party.");
             return false;
         }
+
+        dequeueParty(party, target.getName() + " was kicked from the party");
 
         party.removeMember(target.getUniqueId());
         playerToParty.remove(target.getUniqueId());
@@ -260,10 +359,17 @@ public class PartyManager {
             return false;
         }
 
+        if (currentLeader.getUniqueId().equals(newLeader.getUniqueId())) {
+            MessageUtil.send(currentLeader, "<red>You are already the party leader.");
+            return false;
+        }
         if (!party.isMember(newLeader.getUniqueId())) {
             MessageUtil.send(currentLeader, "<red>That player is not in your party.");
             return false;
         }
+
+        // A queued party unit is ordered leader-first: drop it so it is re-queued under the new leader
+        dequeueParty(party, "party leadership changed");
 
         UUID oldLeader = party.getLeaderUuid();
         party.setLeader(newLeader.getUniqueId(), newLeader.getName());
@@ -271,7 +377,10 @@ public class PartyManager {
         // Update mappings
         parties.remove(oldLeader);
         parties.put(newLeader.getUniqueId(), party);
-        playerToParty.put(oldLeader, newLeader.getUniqueId());
+        // Every member maps to the leader's UUID, so remap them all
+        for (UUID member : party.getMembers()) {
+            playerToParty.put(member, newLeader.getUniqueId());
+        }
 
         MessageUtil.send(currentLeader, "<green>You transferred leadership to <yellow>" + newLeader.getName() + "</yellow>.");
         MessageUtil.send(newLeader, "<green>You are now the party leader.");
@@ -284,6 +393,15 @@ public class PartyManager {
         }
 
         return true;
+    }
+
+    /**
+     * Called when a player disconnects: leaves/disbands their party and drops invites.
+     */
+    public void handleQuit(Player player) {
+        UUID id = player.getUniqueId();
+        pendingInvites.remove(id);
+        if (isInParty(player)) leaveParty(player);
     }
 
     /**
@@ -339,14 +457,19 @@ public class PartyManager {
         return parties.size();
     }
 
+    private Party findPartyById(UUID partyId) {
+        for (Party p : parties.values()) if (p.getId().equals(partyId)) return p;
+        return null;
+    }
+
     // Inner classes
 
     public static class Party {
+        private final UUID id = UUID.randomUUID(); // stable across leader transfers
         private UUID leaderUuid;
         private String leaderName;
         private final Set<UUID> members = new LinkedHashSet<>();
         private String kitName;
-        private static final int MAX_MEMBERS = 10;
 
         public Party(UUID leaderUuid, String leaderName) {
             this.leaderUuid = leaderUuid;
@@ -354,6 +477,7 @@ public class PartyManager {
             this.members.add(leaderUuid);
         }
 
+        public UUID getId() { return id; }
         public UUID getLeaderUuid() { return leaderUuid; }
         public String getLeaderName() { return leaderName; }
         public Set<UUID> getMembers() { return members; }
@@ -362,7 +486,7 @@ public class PartyManager {
 
         public boolean isLeader(UUID uuid) { return leaderUuid.equals(uuid); }
         public boolean isMember(UUID uuid) { return members.contains(uuid); }
-        public boolean isFull() { return members.size() >= MAX_MEMBERS; }
+        public boolean isFull() { return members.size() >= maxSize(); }
 
         public void setLeader(UUID uuid, String name) {
             this.leaderUuid = uuid;
@@ -381,19 +505,22 @@ public class PartyManager {
     }
 
     public static class PartyInvite {
-        private final UUID leaderUuid;
+        private final UUID partyId;
+        private final UUID inviterUuid;
         private final UUID targetUuid;
         private final String kitName;
         private final long expireTime;
 
-        public PartyInvite(UUID leaderUuid, UUID targetUuid, String kitName) {
-            this.leaderUuid = leaderUuid;
+        public PartyInvite(UUID partyId, UUID inviterUuid, UUID targetUuid, String kitName) {
+            this.partyId = partyId;
+            this.inviterUuid = inviterUuid;
             this.targetUuid = targetUuid;
             this.kitName = kitName;
             this.expireTime = System.currentTimeMillis() + 60000; // 60 seconds
         }
 
-        public UUID getLeaderUuid() { return leaderUuid; }
+        public UUID getPartyId() { return partyId; }
+        public UUID getInviterUuid() { return inviterUuid; }
         public UUID getTargetUuid() { return targetUuid; }
         public String getKitName() { return kitName; }
         public boolean isExpired() { return System.currentTimeMillis() > expireTime; }

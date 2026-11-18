@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -42,6 +43,15 @@ public class MatchAdminCommand extends SubCommand {
             case "start" -> {
                 Optional<Match> existing = mm.getMatch(arena);
                 if (existing.isPresent()) {
+                    var st = existing.get().getState();
+                    if (st == com.omniarena.match.MatchState.RUNNING || st == com.omniarena.match.MatchState.ENDING) {
+                        MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already " + st.name().toLowerCase() + ". <gray>Use <white>/oa match stop " + arena.getName() + "</white> first if you need to restart it.");
+                        return;
+                    }
+                    if (existing.get().getPlayerCount() < 1) {
+                        MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no players, so a match can't start. <gray>Have players join with <white>/oa join " + arena.getName() + "</white>.");
+                        return;
+                    }
                     mm.startMatch(existing.get());
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-force-started").replace("{arena}", arena.getName()));
                 } else {
@@ -54,6 +64,10 @@ public class MatchAdminCommand extends SubCommand {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
                     return;
                 }
+                if (match.get().getState() == com.omniarena.match.MatchState.ENDING) {
+                    MessageUtil.send(sender, "<red>Match in <yellow>" + arena.getName() + "</yellow> is already ending. <gray>Wait for the reset to finish.");
+                    return;
+                }
                 mm.endMatch(match.get(), new com.omniarena.match.MatchResult(
                         arena.getName(), null, null, null,
                         com.omniarena.match.MatchResult.Outcome.FORFEIT,
@@ -61,13 +75,23 @@ public class MatchAdminCommand extends SubCommand {
                         new java.util.ArrayList<>(match.get().getPlayers())));
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-force-stopped").replace("{arena}", arena.getName()));
             }
+            case "reset" -> {
+                if (mm.getMatch(arena).isEmpty()) {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("match-not-running").replace("{arena}", arena.getName()));
+                    return;
+                }
+                DisableArenaCommand.kickAll(arena);
+                MessageUtil.send(sender, "<yellow>Match in <white>" + arena.getName() + "</white> reset; all players removed.");
+            }
+            default -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
         }
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("start", "stop", "reset");
-        if (args.length == 2) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("start", "stop", "reset"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
         return List.of();
     }
 }

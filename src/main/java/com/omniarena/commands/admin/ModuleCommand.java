@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -15,7 +16,7 @@ import java.util.Optional;
 public class ModuleCommand extends SubCommand {
 
     private static final List<String> KNOWN_MODULES = List.of(
-            "killstreak", "combo", "power-up", "item-spawner", "environmental", "leveling");
+            "killstreak", "combo", "power-up");
 
     public ModuleCommand(OmniArena plugin) {
         super(PermissionChecker.ADMIN_ARENA, "/oa module <enable|disable> <arena> <module>", "Toggle arena module");
@@ -35,6 +36,14 @@ public class ModuleCommand extends SubCommand {
         }
         Arena arena = arenaOpt.get();
         String module = args[2].toLowerCase();
+        if (!action.equals("enable") && !action.equals("disable")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
+        }
+        if (!KNOWN_MODULES.contains(module)) {
+            MessageUtil.send(sender, "<red>Unknown module <yellow>" + args[2] + "</yellow>. <gray>Valid modules: <white>" + String.join(", ", KNOWN_MODULES) + "</white>. Example: <white>/oa module " + action + " " + arena.getName() + " " + KNOWN_MODULES.iterator().next() + "</white>");
+            return;
+        }
 
         if (action.equals("enable")) {
             arena.enableModule(module);
@@ -51,9 +60,10 @@ public class ModuleCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("enable", "disable");
-        if (args.length == 2) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
-        if (args.length == 3) return KNOWN_MODULES.stream().filter(m -> m.startsWith(args[2])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("enable", "disable"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
+        if (args.length == 3) return TabUtil.filter(KNOWN_MODULES, cur);
         return List.of();
     }
 }

@@ -27,8 +27,25 @@ public class ReadyCommand extends SubCommand {
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("not-in-arena"));
             return;
         }
-        // Readiness tracking handled inside MatchManager countdown logic
-        MessageUtil.send(player, "<green>You are marked as ready!");
+        if (MatchManager.getInstance().isSpectating(player)) {
+            MessageUtil.send(player, "<red>Spectators cannot ready up because they are not playing. <gray>Leave spectating with <white>/oa leave</white> and join the arena with <white>/oa join <arena></white> to play.");
+            return;
+        }
+        // Matches start automatically via the arena countdown once min-players is reached.
+        var match = MatchManager.getInstance().getArenaName(player)
+                .flatMap(n -> com.omniarena.arena.ArenaManager.getInstance().get(n))
+                .flatMap(a -> MatchManager.getInstance().getMatch(a));
+        if (match.isEmpty()) {
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("not-in-arena"));
+            return;
+        }
+        var m = match.get();
+        switch (m.getState()) {
+            case WAITING -> MessageUtil.send(player, "<yellow>You are ready. Waiting for players: <white>" + m.getPlayerCount()
+                    + "/" + m.getArena().getMinPlayers() + "</white> (match starts automatically).");
+            case STARTING -> MessageUtil.send(player, "<green>You are ready. The match is starting shortly.");
+            default -> MessageUtil.send(player, "<gray>The match is already in progress.");
+        }
     }
 
     @Override

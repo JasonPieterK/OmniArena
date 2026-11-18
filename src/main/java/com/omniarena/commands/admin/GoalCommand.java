@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -32,11 +33,27 @@ public class GoalCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
-        GoalType goal = GoalType.fromString(args[2]);
-        arena.setGoalType(goal);
-        if (args.length >= 4) {
-            try { arena.setGoalValue(Integer.parseInt(args[3])); } catch (NumberFormatException ignored) {}
+        if (!args[0].equalsIgnoreCase("set")) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            return;
         }
+        GoalType goal;
+        try { goal = GoalType.valueOf(args[2].toUpperCase().replace("-", "_").replace(" ", "_")); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Unknown goal <yellow>" + args[2] + "</yellow>. <gray>Valid goals: <white>"
+                    + Arrays.stream(GoalType.values()).map(GoalType::name).collect(java.util.stream.Collectors.joining(", ")) + "</white>.");
+            return;
+        }
+        int value = -1;
+        if (args.length >= 4) {
+            try { value = Integer.parseInt(args[3]); if (value < 1) throw new NumberFormatException(); }
+            catch (NumberFormatException e) {
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", args[3]));
+                return;
+            }
+        }
+        arena.setGoalType(goal);
+        if (value > 0) arena.setGoalValue(value);
         ArenaManager.getInstance().save(arena);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("goal-set")
                 .replace("{goal}", goal.name()).replace("{arena}", arena.getName()));
@@ -44,9 +61,11 @@ public class GoalCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set");
-        if (args.length == 2) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
-        if (args.length == 3) return Arrays.stream(GoalType.values()).map(GoalType::name).filter(n -> n.startsWith(args[2].toUpperCase())).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
+        if (args.length == 3) return TabUtil.enums(GoalType.class, cur);
+        if (args.length == 4) return TabUtil.hint("<value>", cur);
         return List.of();
     }
 }

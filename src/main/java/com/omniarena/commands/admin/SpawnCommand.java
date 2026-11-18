@@ -1,5 +1,7 @@
 package com.omniarena.commands.admin;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -19,7 +21,7 @@ import java.util.Optional;
 public class SpawnCommand extends SubCommand {
 
     public SpawnCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ARENA, "/oa spawn <set|list|clear> <arena> <type>", "Manage spawns");
+        super(PermissionChecker.ADMIN_ARENA, "/oa spawn <set|list|clear> <arena> [BATTLE|LOBBY|SPECTATOR] [clear: spawn#]", "Manage spawns");
     }
 
     @Override
@@ -36,6 +38,13 @@ public class SpawnCommand extends SubCommand {
             return;
         }
         Arena arena = arenaOpt.get();
+        if (args.length >= 3 && !action.equals("list")) {
+            try { SpawnType.valueOf(args[2].toUpperCase()); }
+            catch (IllegalArgumentException e) {
+                MessageUtil.send(sender, "<red>Unknown spawn type <yellow>" + args[2] + "</yellow>. <gray>Valid types: <white>BATTLE, LOBBY, SPECTATOR</white>. Example: <white>/oa spawn " + action + " " + arena.getName() + " BATTLE</white>");
+                return;
+            }
+        }
 
         switch (action) {
             case "set" -> {
@@ -72,7 +81,7 @@ public class SpawnCommand extends SubCommand {
                         int idx = Integer.parseInt(args[3]) - 1;
                         List<Location> locs = arena.getSpawns(type);
                         if (idx < 0 || idx >= locs.size()) {
-                            MessageUtil.send(sender, "<red>No " + type.name() + " spawn #" + args[3] + ".");
+                            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> has no " + type.name() + " spawn #" + args[3] + " (it has " + locs.size() + "). <gray>List them with <white>/oa spawn list " + arena.getName() + "</white>.");
                             return;
                         }
                         locs.remove(idx);
@@ -88,14 +97,26 @@ public class SpawnCommand extends SubCommand {
                 ArenaManager.getInstance().save(arena);
                 MessageUtil.send(sender, "<yellow>Cleared all " + type.name() + " spawns for " + arena.getName() + ".");
             }
+            default -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
         }
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set", "list", "clear");
-        if (args.length == 2) return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
-        if (args.length == 3) return List.of("BATTLE", "LOBBY", "SPECTATOR");
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set", "list", "clear"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
+        String a = args[0].toLowerCase(java.util.Locale.ROOT);
+        if (args.length == 3 && (a.equals("set") || a.equals("clear"))) return TabUtil.enums(SpawnType.class, cur);
+        if (args.length == 4 && a.equals("clear")) {
+            var arena = ArenaManager.getInstance().get(args[1]);
+            if (arena.isPresent()) {
+                int n = arena.get().getSpawns(SpawnType.fromString(args[2])).size();
+                List<String> idx = new java.util.ArrayList<>();
+                for (int i = 1; i <= n; i++) idx.add(String.valueOf(i));
+                return TabUtil.filter(idx, cur);
+            }
+        }
         return List.of();
     }
 }

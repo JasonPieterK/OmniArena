@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OmniArena Control</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -25,6 +25,7 @@
     </nav>
     <div class="session"><span class="status-dot" id="statusDot"></span><span id="sessionText">Connecting…</span></div>
     <button class="btn btn-ink btn-sm" id="applyBtn" disabled><i class="ph-bold ph-check-circle"></i> Apply</button>
+    <button class="btn btn-ghost btn-sm" id="logoutBtn" title="End this dashboard session">Log out</button>
   </header>
 
   <main class="wrap">
@@ -52,7 +53,7 @@
       <div class="page-head row-between">
         <div>
           <h1>Live Matches</h1>
-          <div class="sub">Real-time match data like football broadcasts <span class="hand">— auto-refreshes every 5s</span></div>
+          <div class="sub">Matches currently running <span class="hand">— auto-refreshes every 5s</span></div>
         </div>
         <button class="btn btn-ghost btn-sm" id="liveRefreshBtn"><i class="ph-bold ph-arrow-clockwise"></i> Refresh</button>
       </div>
@@ -64,7 +65,7 @@
       <div class="page-head row-between">
         <div>
           <h1>Players</h1>
-          <div class="sub">Player statistics, ELO ratings, and match history <span class="hand">— search to find players</span></div>
+          <div class="sub">Online players with ELO and stats <span class="hand">— search to filter</span></div>
         </div>
         <div class="search-box">
           <input class="input" id="playerSearch" type="text" placeholder="Search players…">

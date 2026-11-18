@@ -10,19 +10,41 @@
     <packaging>jar</packaging>
 
     <name>OmniArena</name>
-    <description>Complete PVP Arena Plugin for Paper 26.2</description>
+    <description>Complete PVP Arena Plugin (Paper / Purpur / Spigot / Bukkit, Minecraft 1.21.9 - 26.3)</description>
 
     <properties>
-        <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+
+        <!-- Defaults = platform "paper" + "mc-26.2". Overridden by the platform / mc-* profiles below. -->
+        <platform>paper</platform>
+        <mc.version>26.2</mc.version>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <api.version>26.2</api.version>
+        <paper.api.version>26.2.build.135-stable</paper.api.version>
+        <purpur.api.version>26.2-R0.1-SNAPSHOT</purpur.api.version>
+        <spigot.api.version>26.2-R0.1-SNAPSHOT</spigot.api.version>
+
+        <!-- Adventure is only shaded on spigot/bukkit; on paper/purpur the relocation below is an inert no-op. -->
+        <adventure.version>4.26.1</adventure.version>
+        <adventure.platform.version>4.4.1</adventure.platform.version>
+        <kyori.relocate.pattern>omniarena.unused.kyori</kyori.relocate.pattern>
+        <kyori.relocate.shaded>omniarena.unused.kyori</kyori.relocate.shaded>
     </properties>
 
     <repositories>
         <repository>
             <id>papermc</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
+        </repository>
+        <repository>
+            <id>spigotmc-snapshots</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+            <releases><enabled>false</enabled></releases>
+        </repository>
+        <repository>
+            <id>purpurmc</id>
+            <url>https://repo.purpurmc.org/snapshots/</url>
         </repository>
         <repository>
             <id>essentials-releases</id>
@@ -51,13 +73,7 @@
     </repositories>
 
     <dependencies>
-        <!-- Paper API -->
-        <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
-            <version>26.2.build.31-alpha</version>
-            <scope>provided</scope>
-        </dependency>
+        <!-- Server API (paper-api / purpur-api / spigot-api) is added by the platform profiles. -->
 
         <!-- Vault (Economy/Permissions) -->
         <dependency>
@@ -133,16 +149,30 @@
     </dependencies>
 
     <build>
-        <finalName>OmniArena-${project.version}</finalName>
+        <finalName>OmniArena-${platform}-${mc.version}</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>plugin.yml</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>plugin.yml</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                    <fork>true</fork>
+                    <release>${maven.compiler.release}</release>
                     <compilerArgs>
                         <arg>-parameters</arg>
                     </compilerArgs>
@@ -179,6 +209,11 @@
                                     <pattern>com.zaxxer.hikari</pattern>
                                     <shadedPattern>com.omniarena.shaded.hikari</shadedPattern>
                                 </relocation>
+                                <!-- spigot/bukkit only: shaded Adventure (see profiles); no-op on paper/purpur -->
+                                <relocation>
+                                    <pattern>${kyori.relocate.pattern}</pattern>
+                                    <shadedPattern>${kyori.relocate.shaded}</shadedPattern>
+                                </relocation>
                             </relocations>
                             <filters>
                                 <filter>
@@ -187,6 +222,8 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <exclude>module-info.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -194,27 +231,238 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <id>copy-jar</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      tofile="C:/Users/jason/Desktop/Mega/Minecraft/Server/BETA WORLD SERVER/plugins/OmniArena.jar"
-                                      overwrite="true"/>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- ===== Platform profiles ===== -->
+        <profile>
+            <id>paper</id>
+            <!-- Paper: native Adventure, Paper events and chunk APIs (src/paper/java). -->
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <properties>
+                <platform>paper</platform>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>io.papermc.paper</groupId>
+                    <artifactId>paper-api</artifactId>
+                    <version>${paper.api.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-platform-source</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>add-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/paper/java</source></sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>purpur</id>
+            <!-- Purpur is a Paper fork: same code as paper, compiled against purpur-api (repo.purpurmc.org). -->
+            <properties>
+                <platform>purpur</platform>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.purpurmc.purpur</groupId>
+                    <artifactId>purpur-api</artifactId>
+                    <version>${purpur.api.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-platform-source</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>add-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/paper/java</source></sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>spigot</id>
+            <!-- Spigot: Spigot API only; Adventure shaded + relocated (src/spigot/java). -->
+            <properties>
+                <platform>spigot</platform>
+                <kyori.relocate.pattern>net.kyori</kyori.relocate.pattern>
+                <kyori.relocate.shaded>com.omniarena.libs.kyori</kyori.relocate.shaded>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.spigotmc</groupId>
+                    <artifactId>spigot-api</artifactId>
+                    <version>${spigot.api.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <!-- Adventure + MiniMessage + platform-bukkit: shaded, relocated to com.omniarena.libs.kyori -->
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-api</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-minimessage</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-serializer-legacy</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-serializer-plain</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-platform-bukkit</artifactId><version>${adventure.platform.version}</version><scope>compile</scope></dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-platform-source</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>add-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/spigot/java</source></sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>bukkit</id>
+            <!-- Bukkit/CraftBukkit: identical API to Spigot (spigot-api is the only published Bukkit-flavoured API); same code as spigot, only the jar name differs. -->
+            <properties>
+                <platform>bukkit</platform>
+                <kyori.relocate.pattern>net.kyori</kyori.relocate.pattern>
+                <kyori.relocate.shaded>com.omniarena.libs.kyori</kyori.relocate.shaded>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.spigotmc</groupId>
+                    <artifactId>spigot-api</artifactId>
+                    <version>${spigot.api.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+                <!-- Adventure + MiniMessage + platform-bukkit: shaded, relocated to com.omniarena.libs.kyori -->
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-api</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-minimessage</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-serializer-legacy</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-serializer-plain</artifactId><version>${adventure.version}</version><scope>compile</scope></dependency>
+                <dependency><groupId>net.kyori</groupId><artifactId>adventure-platform-bukkit</artifactId><version>${adventure.platform.version}</version><scope>compile</scope></dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-platform-source</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>add-source</goal></goals>
+                                <configuration>
+                                    <sources><source>src/spigot/java</source></sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- ===== Minecraft version profiles ===== -->
+        <profile>
+            <id>mc-26.3</id>
+            <properties>
+                <mc.version>26.3</mc.version>
+                <java.version>25</java.version>
+                <maven.compiler.release>25</maven.compiler.release>
+                <api.version>26.3</api.version>
+                <paper.api.version>26.3.build.253-stable</paper.api.version>
+                <purpur.api.version>26.3-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>26.3-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>mc-26.2</id>
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <properties>
+                <mc.version>26.2</mc.version>
+                <java.version>25</java.version>
+                <maven.compiler.release>25</maven.compiler.release>
+                <api.version>26.2</api.version>
+                <paper.api.version>26.2.build.135-stable</paper.api.version>
+                <purpur.api.version>26.2-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>26.2-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>mc-26.1</id>
+            <properties>
+                <mc.version>26.1</mc.version>
+                <java.version>25</java.version>
+                <maven.compiler.release>25</maven.compiler.release>
+                <api.version>26.1</api.version>
+                <paper.api.version>26.1.2.build.74-stable</paper.api.version>
+                <purpur.api.version>26.1.2-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>26.1-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>mc-1.21.11</id>
+            <properties>
+                <mc.version>1.21.11</mc.version>
+                <java.version>21</java.version>
+                <maven.compiler.release>21</maven.compiler.release>
+                <api.version>1.21</api.version>
+                <paper.api.version>1.21.11-R0.1-SNAPSHOT</paper.api.version>
+                <purpur.api.version>1.21.11-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>1.21.11-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>mc-1.21.10</id>
+            <properties>
+                <mc.version>1.21.10</mc.version>
+                <java.version>21</java.version>
+                <maven.compiler.release>21</maven.compiler.release>
+                <api.version>1.21</api.version>
+                <paper.api.version>1.21.10-R0.1-SNAPSHOT</paper.api.version>
+                <purpur.api.version>1.21.10-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>1.21.10-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>mc-1.21.9</id>
+            <properties>
+                <mc.version>1.21.9</mc.version>
+                <java.version>21</java.version>
+                <maven.compiler.release>21</maven.compiler.release>
+                <api.version>1.21</api.version>
+                <paper.api.version>1.21.9-R0.1-SNAPSHOT</paper.api.version>
+                <purpur.api.version>1.21.9-R0.1-SNAPSHOT</purpur.api.version>
+                <spigot.api.version>1.21.9-R0.1-SNAPSHOT</spigot.api.version>
+            </properties>
+        </profile>
+    </profiles>
 </project>

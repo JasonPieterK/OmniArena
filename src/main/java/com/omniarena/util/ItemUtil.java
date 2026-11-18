@@ -15,16 +15,22 @@ public final class ItemUtil {
 
     private ItemUtil() {}
 
+    /** Disables the default italic on item names/lore unless the component set it explicitly. */
+    public static Component noItalic(Component c) {
+        return c.decorationIfAbsent(net.kyori.adventure.text.format.TextDecoration.ITALIC,
+                net.kyori.adventure.text.format.TextDecoration.State.FALSE);
+    }
+
     public static ItemStack buildGuiItem(Material material, String name, String... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
-        meta.displayName(ColorUtil.parse(name));
+        com.omniarena.platform.Platform.get().setDisplayName(meta, noItalic(ColorUtil.parse(name)));
         if (lore.length > 0) {
             List<Component> loreComponents = Arrays.stream(lore)
-                    .map(ColorUtil::parse)
+                    .map(l -> noItalic(ColorUtil.parse(l)))
                     .toList();
-            meta.lore(loreComponents);
+            com.omniarena.platform.Platform.get().setLore(meta, loreComponents);
         }
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
                 ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
@@ -36,7 +42,7 @@ public final class ItemUtil {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.empty());
+            com.omniarena.platform.Platform.get().setDisplayName(meta, Component.empty().decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
                     ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
             item.setItemMeta(meta);
@@ -49,7 +55,7 @@ public final class ItemUtil {
         ItemStack clone = original.clone();
         ItemMeta meta = clone.getItemMeta();
         if (meta != null) {
-            meta.displayName(ColorUtil.parse(name));
+            com.omniarena.platform.Platform.get().setDisplayName(meta, noItalic(ColorUtil.parse(name)));
             clone.setItemMeta(meta);
         }
         return clone;
@@ -60,8 +66,19 @@ public final class ItemUtil {
         return switch (item.getType()) {
             case BEDROCK, COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK,
                  BARRIER, SPAWNER, STRUCTURE_BLOCK -> false;
-            default -> true;
+            default -> !isConfigBanned(item.getType());
         };
+    }
+
+    /** Extra bans from kits.power-cap.banned-items (only applied while the power cap is enabled). */
+    private static boolean isConfigBanned(Material type) {
+        var cm = com.omniarena.config.ConfigManager.getInstance();
+        if (cm == null || cm.getConfig() == null) return false;
+        if (!cm.getConfig().getBoolean("kits.power-cap.enabled", true)) return false;
+        for (String s : cm.getConfig().getStringList("kits.power-cap.banned-items")) {
+            if (s != null && s.trim().equalsIgnoreCase(type.name())) return true;
+        }
+        return false;
     }
 
     public static int getMaxEnchantLevel(ItemStack item) {

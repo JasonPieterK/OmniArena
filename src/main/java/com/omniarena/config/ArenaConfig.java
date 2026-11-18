@@ -38,7 +38,7 @@ public class ArenaConfig {
                 Arena arena = load(file);
                 if (arena != null) arenas.add(arena);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load arena from " + file.getName() + ": " + e.getMessage());
+                plugin.getLogger().warning("Failed to load arena file plugins/OmniArena/arenas/" + file.getName() + " (" + e + "). The arena was skipped. Fix: open that file and correct the YAML (indentation, quotes, valid world/enum names) or delete it, then run /oa reload; recreate with /oa create <name> if needed.");
             }
         }
         return arenas;
@@ -63,7 +63,10 @@ public class ArenaConfig {
         // Goal
         ConfigurationSection goal = cfg.getConfigurationSection("goal");
         if (goal != null) {
-            arena.setGoalType(GoalType.fromString(goal.getString("type", "KILLS")));
+            // goal.type only overrides the game mode's goal when explicitly flagged (older files always wrote it)
+            if (goal.getBoolean("type-override", false)) {
+                arena.setGoalType(GoalType.fromString(goal.getString("type", "KILLS")));
+            }
             arena.setGoalValue(goal.getInt("value", 20));
         }
 
@@ -72,8 +75,10 @@ public class ArenaConfig {
         if (respawn != null) {
             arena.setRespawnType(RespawnType.fromString(respawn.getString("type", "INSTANT")));
             arena.setRespawnDelay(respawn.getInt("delay", 3));
+            arena.setRespawnWaveInterval(respawn.getInt("wave-interval", 10));
         }
         arena.setSpawnProtection(cfg.getInt("spawn-protection", 3));
+        arena.setLives(cfg.getInt("lives", 0));
 
         // Rules
         ConfigurationSection rules = cfg.getConfigurationSection("rules");
@@ -121,7 +126,16 @@ public class ArenaConfig {
         for (String signStr : signList) {
             Location loc = LocationUtil.deserialize(signStr);
             if (loc != null) arena.getSigns().add(new ArenaSign(loc, name));
+            else {
+                arena.getUnparsedSigns().add(signStr); // preserved verbatim on save
+                com.omniarena.OmniArena.getInstance().getLogger().warning("Arena '" + name + "': sign entry '" + signStr + "' is not active (bad format or world not loaded) but is kept in the file. Fix: edit the 'signs' list in arenas/" + name + ".yml, or re-create the sign with /oa sign create " + name + ".");
+            }
         }
+
+        // Access control (whitelist/blacklist of player UUIDs)
+        arena.setWhitelistEnabled(cfg.getBoolean("access.whitelist-enabled", false));
+        loadUuids(cfg.getStringList("access.whitelist"), arena.getWhitelist(), name, "whitelist");
+        loadUuids(cfg.getStringList("access.blacklist"), arena.getBlacklist(), name, "blacklist");
 
         // End commands
         arena.getEndCommands().addAll(cfg.getStringList("end-commands"));
@@ -140,6 +154,15 @@ public class ArenaConfig {
         }
 
         return arena;
+    }
+
+    private void loadUuids(List<String> raw, java.util.Set<java.util.UUID> into, String arena, String what) {
+        for (String s : raw) {
+            try { into.add(java.util.UUID.fromString(s.trim())); }
+            catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("Arena '" + arena + "': ignoring invalid UUID '" + s + "' in access." + what + ". Fix: remove it from arenas/" + arena + ".yml or re-add the player with /oa access " + arena + " " + what + " add <player>.");
+            }
+        }
     }
 
     private void loadSpawns(FileConfiguration cfg, Arena arena, String path, SpawnType type) {
@@ -166,12 +189,15 @@ public class ArenaConfig {
         cfg.set("mid-match-join", arena.isMidMatchJoin());
         cfg.set("spectator-allowed", arena.isSpectatorAllowed());
         cfg.set("spawn-protection", arena.getSpawnProtection());
+        cfg.set("lives", arena.getLives());
 
         cfg.set("goal.type", arena.getGoalType().name());
+        if (arena.hasGoalTypeOverride()) cfg.set("goal.type-override", true);
         cfg.set("goal.value", arena.getGoalValue());
 
         cfg.set("respawn.type", arena.getRespawnType().name());
         cfg.set("respawn.delay", arena.getRespawnDelay());
+        cfg.set("respawn.wave-interval", arena.getRespawnWaveInterval());
 
         ArenaRules r = arena.getRules();
         cfg.set("rules.fall-damage", r.isFallDamage());
@@ -203,12 +229,17 @@ public class ArenaConfig {
         saveSpawnList(cfg, arena, "spawns.spectator", SpawnType.SPECTATOR);
 
         // Signs
-        List<String> signStrs = arena.getSigns().stream()
+        List<String> signStrs = new java.util.ArrayList<>(arena.getSigns().stream()
                 .map(s -> LocationUtil.serialize(s.getLocation()))
-                .toList();
+                .toList());
+        signStrs.addAll(arena.getUnparsedSigns()); // entries we could not load stay in the file
         cfg.set("signs", signStrs);
 
         cfg.set("end-commands", arena.getEndCommands());
+
+        cfg.set("access.whitelist-enabled", arena.isWhitelistEnabled());
+        cfg.set("access.whitelist", arena.getWhitelist().stream().map(java.util.UUID::toString).sorted().toList());
+        cfg.set("access.blacklist", arena.getBlacklist().stream().map(java.util.UUID::toString).sorted().toList());
 
         ArenaVisualConfig v = arena.getVisual();
         cfg.set("visual.titles", v.isTitles());

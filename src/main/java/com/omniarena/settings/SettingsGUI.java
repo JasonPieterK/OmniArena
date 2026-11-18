@@ -50,16 +50,42 @@ public final class SettingsGUI {
         return map;
     }
 
+    /** Sorted category names, matching the slot order of the category grid. */
+    public static List<String> categoryNames() {
+        List<String> names = new ArrayList<>(grouped().keySet());
+        Collections.sort(names);
+        return names;
+    }
+
+    /** The setting shown at the given slot of a group page, or null if the slot is empty/out of range. */
+    public static SettingDefinition defAt(String group, int page, int slot) {
+        if (slot < 0 || slot >= PAGE_SIZE) return null;
+        List<SettingDefinition> defs = grouped().getOrDefault(group, List.of());
+        int pages = Math.max(1, (int) Math.ceil(defs.size() / (double) PAGE_SIZE));
+        page = Math.max(0, Math.min(page, pages - 1));
+        int idx = page * PAGE_SIZE + slot;
+        return idx < defs.size() ? defs.get(idx) : null;
+    }
+
+    /** Closes every open settings menu (used on plugin disable). */
+    public static void closeAll() {
+        for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
+            if (p.getOpenInventory().getTopInventory().getHolder() instanceof SettingsHolder) p.closeInventory();
+        }
+    }
+
     // ── Category grid ──────────────────────────────────────────────────────────
     public static void openCategories(Player player) {
         try {
             LinkedHashMap<String, List<SettingDefinition>> groups = grouped();
             List<String> names = new ArrayList<>(groups.keySet());
             Collections.sort(names);
+            if (names.size() > 54) names = names.subList(0, 54);
 
             int rows = Math.min(6, Math.max(1, (int) Math.ceil(names.size() / 9.0)));
-            Inventory inv = Bukkit.createInventory(new SettingsHolder("", 0, true),
-                    rows * 9, "§8OmniArena · Settings");
+            SettingsHolder holder = new SettingsHolder("", 0, true);
+            Inventory inv = Bukkit.createInventory(holder, rows * 9, "§8OmniArena · Settings");
+            holder.setInventory(inv);
 
             int slot = 0;
             for (String g : names) {
@@ -69,9 +95,8 @@ public final class SettingsGUI {
             }
             player.openInventory(inv);
         } catch (Exception e) {
-            OmniArena.getInstance().getLogger().severe("Failed to open settings GUI: " + e.getMessage());
-            e.printStackTrace();
-            player.sendMessage("§cFailed to open settings menu. Check console for details.");
+            OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "Failed to open the settings GUI (" + e + "). Full trace below. Fix: use the chat version /oa settings, and report the trace.", e);
+            player.sendMessage("§cCould not open the settings menu. §7Use §f/oa settings§7 (chat version) instead; an admin can check the console for the cause.");
         }
     }
 
@@ -81,8 +106,10 @@ public final class SettingsGUI {
         int pages = Math.max(1, (int) Math.ceil(defs.size() / (double) PAGE_SIZE));
         page = Math.max(0, Math.min(page, pages - 1));
 
-        Inventory inv = Bukkit.createInventory(new SettingsHolder(group, page, false),
+        SettingsHolder holder = new SettingsHolder(group, page, false);
+        Inventory inv = Bukkit.createInventory(holder,
                 54, "§8Settings · §e" + group + " §8(" + (page + 1) + "/" + pages + ")");
+        holder.setInventory(inv);
 
         int from = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE && from + i < defs.size(); i++) {
@@ -138,6 +165,7 @@ public final class SettingsGUI {
         Object cur = current(def);
         if (def.type() == SettingDefinition.SettingType.INTEGER) {
             long v = (long) asDouble(cur) + (long) delta;
+            v = Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, v));
             ConfigManager.getInstance().setValue(def.key(), (int) v);
         } else {
             double v = Math.round((asDouble(cur) + delta) * 100.0) / 100.0;

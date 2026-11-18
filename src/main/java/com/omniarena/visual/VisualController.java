@@ -22,6 +22,7 @@ public class VisualController {
         this.actionBarManager  = new ActionBarManager();
         this.hologramManager   = new HologramManager(plugin);
         this.effectManager     = new EffectManager();
+        this.hologramManager.start();
     }
 
     public TitleManager getTitleManager() { return titleManager; }
@@ -33,7 +34,14 @@ public class VisualController {
     public HologramManager getHologramManager() { return hologramManager; }
     public EffectManager getEffectManager() { return effectManager; }
 
+    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa start). */
+    public void start() {
+        hologramManager.start();
+    }
+
     public void shutdown() {
         hologramManager.removeAll();
+        scoreboardManager.removeAllBoards();
+        bossBarManager.removeAll();
     }
 }

@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.arena.regen.RegenAnimationType;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -36,7 +37,7 @@ public class SettingsCommand extends SubCommand {
             tmpSettings = new ArrayList<>(tmpSchema.settings());
             tmpSettings.forEach(setting -> byKey.put(setting.key().toLowerCase(Locale.ROOT), setting));
         } catch (Exception e) {
-            com.omniarena.OmniArena.getInstance().getLogger().severe("Failed to initialize SettingsCommand: " + e.getMessage());
+            com.omniarena.OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "Failed to initialize /oa settings (" + e + "): the settings schema could not be built, so /oa settings will show no keys. Fix: check config.yml for YAML errors and run /oa reload.", e);
         }
         this.schema = tmpSchema;
         this.settings = tmpSettings;
@@ -61,7 +62,7 @@ public class SettingsCommand extends SubCommand {
             setValue(sender, args);
             return;
         }
-        MessageUtil.send(sender, "<red>Usage: <yellow>/oa settings</yellow> or <yellow>/oa settings set <key> <value></yellow>");
+        MessageUtil.send(sender, "<red>Unknown action <yellow>" + args[0] + "</yellow>. <gray>Usage: <white>/oa settings</white> (open the list) or <white>/oa settings set <key> <value></white>.");
     }
 
     private void showSettings(CommandSender sender) {
@@ -74,7 +75,7 @@ public class SettingsCommand extends SubCommand {
                 MessageUtil.send(sender, "");
                 MessageUtil.send(sender, "<aqua>" + group);
             }
-            sender.sendMessage(settingLine(entry));
+            com.omniarena.util.MessageUtil.send(sender, settingLine(entry));
         }
     }
 
@@ -120,37 +121,54 @@ public class SettingsCommand extends SubCommand {
 
     private void setValue(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa settings set <key> <value>");
+            MessageUtil.send(sender, "<red>Missing key or value. <gray>Usage: <yellow>/oa settings set <key> <value></yellow> <gray>- click a setting in <white>/oa settings</white> to pre-fill it.");
             return;
         }
         String key = args[1];
         SettingDefinition entry = byKey.get(key.toLowerCase(Locale.ROOT));
         if (entry == null) {
-            MessageUtil.send(sender, "<red>Unknown setting: <yellow>" + key);
+            MessageUtil.send(sender, "<red>Unknown setting <yellow>" + key + "</yellow>. <gray>See all keys with <white>/oa settings</white> or press TAB after <white>/oa settings set</white>.");
             return;
         }
         String raw = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
         Object value = parseValue(entry, raw, sender);
+        if (value == null) return;
         ConfigManager.getInstance().setValue(entry.key(), value);
         MessageUtil.send(sender, "<green>Set <yellow>" + entry.key() + "</yellow> to <white>" + stringifyCurrent(value) + "</white>.");
-        sender.sendMessage(settingLine(entry));
+        com.omniarena.util.MessageUtil.send(sender, settingLine(entry));
     }
 
     private Object parseValue(SettingDefinition entry, String raw, CommandSender sender) {
         try {
             return switch (entry.type()) {
-                case BOOLEAN -> raw.equalsIgnoreCase("true") || raw.equalsIgnoreCase("yes") || raw.equalsIgnoreCase("on");
-                case INTEGER -> Integer.parseInt(raw);
-                case DECIMAL -> Double.parseDouble(raw);
+                case BOOLEAN -> {
+                    String v = raw.trim().toLowerCase(Locale.ROOT);
+                    if (v.equals("true") || v.equals("yes") || v.equals("on")) yield Boolean.TRUE;
+                    if (v.equals("false") || v.equals("no") || v.equals("off")) yield Boolean.FALSE;
+                    MessageUtil.send(sender, "<red>Expected true or false for <yellow>" + entry.key() + "</yellow>, got <yellow>" + raw + "</yellow>. <gray>Use true/false (or yes/no, on/off): <white>/oa settings set " + entry.key() + " true</white>");
+                    yield null;
+                }
+                case INTEGER -> Integer.parseInt(raw.trim());
+                case DECIMAL -> Double.parseDouble(raw.trim());
                 case LIST -> Arrays.stream(raw.split("\\R|,"))
                         .map(String::trim)
                         .filter(s -> !s.isBlank())
                         .toList();
-                case COLOR, SELECT, STRING -> raw;
+                case COLOR, SELECT, STRING -> {
+                    if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
+                        RegenAnimationType parsed = RegenAnimationType.parse(raw);
+                        if (parsed != null) yield parsed.name();
+                        {
+                            MessageUtil.send(sender, "<red>Unknown regen style <yellow>" + raw + "</yellow>. <gray>Valid: <white>" + Arrays.stream(RegenAnimationType.values()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")) + "</white> (see <white>/oa help regenstyles</white>).");
+                            yield null;
+                        }
+                    }
+                    yield raw;
+                }
             };
         } catch (NumberFormatException e) {
-            MessageUtil.send(sender, "<red>Expected number for <yellow>" + entry.key() + "</yellow>.");
-            return entry.defaultValue();
+            MessageUtil.send(sender, "<red>Expected a number for <yellow>" + entry.key() + "</yellow>, got <yellow>" + raw + "</yellow>. <gray>Use digits only, e.g. <white>/oa settings set " + entry.key() + " 10</white>.");
+            return null;
         }
     }
 
@@ -172,20 +190,11 @@ public class SettingsCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set", "help").stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
-        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-            return settings.stream().map(SettingDefinition::key).filter(s -> s.startsWith(args[1])).toList();
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            SettingDefinition entry = byKey.get(args[1].toLowerCase(Locale.ROOT));
-            if (entry == null) return List.of();
-            if (entry.type() == SettingDefinition.SettingType.BOOLEAN) {
-                return List.of("true", "false").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
-            }
-            if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
-                return Arrays.stream(RegenAnimationType.values()).map(Enum::name)
-                        .filter(s -> s.startsWith(args[2].toUpperCase(Locale.ROOT))).toList();
-            }
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set", "help"), cur);
+        if (args.length >= 2 && args[0].equalsIgnoreCase("set")) {
+            if (args.length == 2) return TabUtil.filter(settings.stream().map(SettingDefinition::key).toList(), cur);
+            if (args.length == 3) return TabUtil.settingValue(byKey.get(args[1].toLowerCase(Locale.ROOT)), cur);
         }
         return List.of();
     }

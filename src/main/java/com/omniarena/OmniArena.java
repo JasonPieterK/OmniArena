@@ -43,7 +43,9 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.queue.QueueManager queueManager;
     private com.omniarena.party.PartyManager partyManager;
     private com.omniarena.betting.BettingManager bettingManager;
+    private com.omniarena.tournament.TournamentManager tournamentManager;
     private volatile boolean stopped = false;
+    private org.bukkit.scheduler.BukkitTask signUpdateTask;
 
     public static OmniArena getInstance() { return instance; }
     public boolean isStopped() { return stopped; }
@@ -67,11 +69,21 @@ public final class OmniArena extends JavaPlugin {
     public com.omniarena.queue.QueueManager getQueueManager() { return queueManager; }
     public com.omniarena.party.PartyManager getPartyManager() { return partyManager; }
     public com.omniarena.betting.BettingManager getBettingManager() { return bettingManager; }
+    public com.omniarena.tournament.TournamentManager getTournamentManager() { return tournamentManager; }
 
     @Override
     public void onEnable() {
         instance = this;
         long start = System.currentTimeMillis();
+
+        // ── Platform layer (Paper vs Spigot adapters) ─────────────
+        try {
+            com.omniarena.platform.Platform.init(this);
+        } catch (RuntimeException e) {
+            getLogger().severe(e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         // ── Config ────────────────────────────────────────────────
         configManager = new ConfigManager(this);
@@ -93,6 +105,7 @@ public final class OmniArena extends JavaPlugin {
         queueManager        = new com.omniarena.queue.QueueManager(this);
         partyManager        = new com.omniarena.party.PartyManager(this);
         bettingManager      = new com.omniarena.betting.BettingManager(this);
+        tournamentManager   = new com.omniarena.tournament.TournamentManager(this);
 
         // ── Load data ─────────────────────────────────────────────
         statsManager.loadAll();
@@ -101,6 +114,7 @@ public final class OmniArena extends JavaPlugin {
         eloManager.loadAll();
         queueManager.start();
         partyManager.start();
+        tournamentManager.start();
 
         // ── Integrations ─────────────────────────────────────────
         integrationManager = new IntegrationManager(this);
@@ -125,8 +139,9 @@ public final class OmniArena extends JavaPlugin {
         var leaveCmd = new com.omniarena.commands.standalone.StandaloneLeaveCommand(this);
         Objects.requireNonNull(getCommand("leave")).setExecutor(leaveCmd);
         Objects.requireNonNull(getCommand("leave")).setTabCompleter(leaveCmd);
-        Objects.requireNonNull(getCommand("party")).setExecutor(new com.omniarena.commands.standalone.PartyCommand(this));
-        Objects.requireNonNull(getCommand("party")).setTabCompleter(new com.omniarena.commands.standalone.PartyCommand(this));
+        var partyCmd = new com.omniarena.commands.standalone.PartyCommand(this);
+        Objects.requireNonNull(getCommand("party")).setExecutor(partyCmd);
+        Objects.requireNonNull(getCommand("party")).setTabCompleter(partyCmd);
 
         // Register player command forwarders
         var forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "spectate");
@@ -177,6 +192,18 @@ public final class OmniArena extends JavaPlugin {
         Objects.requireNonNull(getCommand("newbie")).setExecutor(forwarder);
         Objects.requireNonNull(getCommand("newbie")).setTabCompleter(forwarder);
 
+        for (String standalone : new String[]{"bet", "tournament"}) {
+            var fwd = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, standalone);
+            var pc = getCommand(standalone);
+            if (pc == null) {
+                getLogger().warning("Command '/" + standalone + "' is missing from plugin.yml, so it was not registered. "
+                        + "Fix: re-add the '" + standalone + ":' entry under 'commands:' in plugin.yml (use /oa " + standalone + " meanwhile).");
+                continue;
+            }
+            pc.setExecutor(fwd);
+            pc.setTabCompleter(fwd);
+        }
+
         // ── Listeners ─────────────────────────────────────────────
         var pm = getServer().getPluginManager();
         pm.registerEvents(new PlayerJoinListener(this),      this);
@@ -186,29 +213,43 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new EntityDamageListener(this),    this);
         pm.registerEvents(new BlockBreakListener(this),      this);
         pm.registerEvents(new BlockPlaceListener(this),      this);
+        pm.registerEvents(new com.omniarena.listener.RegenChangeListener(this), this);
         pm.registerEvents(new FoodLevelChangeListener(this), this);
+        pm.registerEvents(new PlayerDropItemListener(this), this);
         pm.registerEvents(new PlayerInteractListener(this),  this);
+        pm.registerEvents(new com.omniarena.listener.SignListener(this), this);
         pm.registerEvents(new PlayerMoveListener(this),      this);
+        pm.registerEvents(new PlayerTeleportListener(this),  this);
         pm.registerEvents(new GameModeRulesListener(this),   this);
         pm.registerEvents(new com.omniarena.combat.CombatListener(this), this);
         pm.registerEvents(new com.omniarena.settings.SettingsMenuListener(this), this);
-        pm.registerEvents(new ChatListener(this),            this);
+        com.omniarena.platform.Platform.get().registerListeners(this); // chat (+ Paper-only elytra boost)
         pm.registerEvents(new InventoryClickListener(this),  this);
 
         // ── Sign update task ──────────────────────────────────────
-        int signInterval = configManager.getConfig().getInt("signs.update-interval", 20);
-        AsyncUtil.runSyncRepeating(() ->
-            arenaManager.getAll().forEach(arena ->
-                signManager.updateAllSigns(arena)), signInterval, signInterval);
+        startSignUpdateTask();
 
         long elapsed = System.currentTimeMillis() - start;
         logStartupBanner(elapsed);
     }
 
+    /** (Re)starts the periodic sign refresh; safe to call repeatedly (e.g. after /oa start). */
+    public void startSignUpdateTask() {
+        if (signUpdateTask != null) {
+            signUpdateTask.cancel();
+            signUpdateTask = null;
+        }
+        int signInterval = Math.max(1, configManager.getConfig().getInt("signs.update-interval", 20));
+        signUpdateTask = AsyncUtil.runSyncRepeating(() -> {
+            if (stopped || arenaManager == null || signManager == null) return;
+            arenaManager.getAll().forEach(arena -> signManager.updateAllSigns(arena));
+        }, signInterval, signInterval);
+    }
+
     private void logStartupBanner(long elapsed) {
         String line = "==============================================";
         String version = getDescription().getVersion();
-        String gameVersion = getServer().getMinecraftVersion();
+        String gameVersion = getServer().getBukkitVersion().split("-")[0] /* Paper-only getMinecraftVersion avoided */;
 
         org.bukkit.command.ConsoleCommandSender console = getServer().getConsoleSender();
         console.sendMessage(org.bukkit.ChatColor.DARK_BLUE.toString() + org.bukkit.ChatColor.BOLD + line);
@@ -244,25 +285,53 @@ public final class OmniArena extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Save all data
-        if (statsManager != null) statsManager.saveAll();
-        if (arenaManager != null) arenaManager.saveAll();
-        if (bettingManager != null) bettingManager.refundAll();
+        stopped = true;
+        if (signUpdateTask != null) { signUpdateTask.cancel(); signUpdateTask = null; }
 
-        // End all active matches cleanly
-        if (matchManager != null) {
-            matchManager.getActiveMatches().forEach(match -> {
-                new java.util.ArrayList<>(match.getPlayers()).forEach(uuid -> {
-                    org.bukkit.entity.Player player = getServer().getPlayer(uuid);
-                    if (player != null) matchManager.leaveArena(player);
-                });
-            });
+        // Close every open plugin GUI so no viewer is left with a dead menu
+        try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Kit GUI close failed: " + t.getMessage()); }
+        try { com.omniarena.settings.SettingsGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Settings GUI close failed: " + t.getMessage()); }
+
+        // End all active matches cleanly first so their results are included in the saves below
+        try {
+            if (matchManager != null) {
+                new java.util.ArrayList<>(matchManager.getActiveMatches()).forEach(match ->
+                    new java.util.ArrayList<>(match.getPlayers()).forEach(uuid -> {
+                        org.bukkit.entity.Player player = getServer().getPlayer(uuid);
+                        if (player != null) {
+                            try { matchManager.leaveArena(player); }
+                            catch (Exception e) { getLogger().warning("Failed to remove " + player.getName() + " on disable: " + e.getMessage()); }
+                        }
+                    }));
+            }
+        } catch (Exception e) {
+            getLogger().severe("Error ending matches on disable (" + e + "). Players may keep match items/positions; they are restored from plugins/OmniArena/player-state on next join.");
         }
 
+        try { if (matchManager != null) matchManager.shutdownStateStore(); } catch (Exception e) { getLogger().warning("Player state flush failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+
+        // Finalize running regens/snapshots so no preview blocks are left in the world
+        try { if (blockRestoreModule != null) blockRestoreModule.cancelAll(); } catch (Exception e) { getLogger().warning("Regen shutdown failed: " + e.getMessage()); }
+
+        // Stop periodic systems
+        try { if (combatManager != null) combatManager.shutdown(); } catch (Exception e) { getLogger().warning("Combat shutdown failed: " + e.getMessage()); }
+        try { if (queueManager != null) queueManager.stop(); } catch (Exception e) { getLogger().warning("Queue stop failed: " + e.getMessage()); }
+        try { if (partyManager != null) partyManager.stop(); } catch (Exception e) { getLogger().warning("Party stop failed: " + e.getMessage()); }
+
+        // Save all data (each guarded so one failure does not skip the rest)
+        try { if (tournamentManager != null) tournamentManager.stop(); } catch (Exception e) { getLogger().severe("Tournament save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (bettingManager != null) bettingManager.refundAll(); } catch (Exception e) { getLogger().severe("Bet refund failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (statsManager != null) statsManager.saveAll(); } catch (Exception e) { getLogger().severe("Stats save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (arenaManager != null) arenaManager.saveAll(); } catch (Exception e) { getLogger().severe("Arena save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+        try { if (eloManager != null) { eloManager.shutdown(); eloManager.saveAll(); } } catch (Exception e) { getLogger().severe("Elo save failed (" + e + "). Fix: check the plugins/OmniArena folder is writable and the disk is not full, then restart the server cleanly so data is saved."); }
+
         // Shutdown visual systems
-        if (visual != null) visual.shutdown();
-        if (moduleManager != null) moduleManager.shutdown();
-        if (webDashboardServer != null) webDashboardServer.stop();
+        try { if (visual != null) visual.shutdown(); } catch (Exception e) { getLogger().warning("Visual shutdown failed: " + e.getMessage()); }
+        try { if (moduleManager != null) moduleManager.shutdown(); } catch (Exception e) { getLogger().warning("Module shutdown failed: " + e.getMessage()); }
+        try { if (webDashboardServer != null) webDashboardServer.stop(); } catch (Exception e) { getLogger().warning("Web stop failed: " + e.getMessage()); }
+        try { if (integrationManager != null) integrationManager.shutdown(); } catch (Exception e) { getLogger().warning("Integration shutdown failed: " + e.getMessage()); }
+
+        try { com.omniarena.platform.Platform.shutdown(); } catch (Throwable t) { getLogger().warning("Platform shutdown failed: " + t.getMessage()); }
 
         logShutdownBanner();
     }

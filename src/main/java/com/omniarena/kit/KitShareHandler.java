@@ -30,7 +30,7 @@ public class KitShareHandler {
 
     public boolean sendShare(Player sender, Player recipient, String kitName) {
         if (!ConfigManager.getInstance().getConfig().getBoolean("kits.sharing-enabled", true)) {
-            MessageUtil.send(sender, "<red>Kit sharing is disabled on this server.");
+            MessageUtil.send(sender, "<red>Kit sharing is disabled on this server. <gray>Admins: set <white>kits.sharing-enabled: true</white> in config.yml and run <white>/oa reload</white>.");
             return false;
         }
 
@@ -45,11 +45,11 @@ public class KitShareHandler {
         // Check recipient limit
         int recipientLimit = PermissionChecker.getKitSlotLimit(recipient);
         if (km.getPlayerKits(recipient.getUniqueId()).size() >= recipientLimit) {
-            MessageUtil.send(sender, "<red>" + recipient.getName() + "'s kit slots are full.");
+            MessageUtil.send(sender, "<red>" + recipient.getName() + "'s kit slots are full, so they cannot receive <yellow>" + kitName + "</yellow>. <gray>They must delete a kit (<white>/kit delete <name></white>) or get more slots (<white>omniarena.kit.slots.<n></white>).");
             return false;
         }
 
-        long expiryTick = plugin.getServer().getCurrentTick() + EXPIRY_TICKS;
+        long expiryTick = System.currentTimeMillis() + EXPIRY_TICKS * 50L /* ms: Server#getCurrentTick is Paper-only */;
         pendingRequests.put(recipient.getUniqueId(),
                 new ShareRequest(sender.getUniqueId(), kitName, expiryTick));
 
@@ -74,7 +74,7 @@ public class KitShareHandler {
                 .clickEvent(ClickEvent.runCommand("/kit accept " + kitName))
                 .hoverEvent(HoverEvent.showText(ColorUtil.parse("<green>Click to accept kit!")));
 
-        recipient.sendMessage(msg);
+        MessageUtil.send(recipient, msg);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-share-sent")
                 .replace("{player}", recipient.getName()));
         return true;
@@ -83,32 +83,35 @@ public class KitShareHandler {
     public boolean acceptShare(Player recipient, String kitName) {
         ShareRequest req = pendingRequests.get(recipient.getUniqueId());
         if (req == null || !req.kitName().equalsIgnoreCase(kitName)) {
-            MessageUtil.send(recipient, "<red>No pending kit share request for <yellow>" + kitName + "</yellow>.");
+            MessageUtil.send(recipient, "<red>No pending kit share request for <yellow>" + kitName + "</yellow>. <gray>It may have expired or been declined; ask the sender to run <white>/kit share " + kitName + " <player></white> again.");
             return false;
         }
 
-        if (plugin.getServer().getCurrentTick() > req.expiryTick()) {
+        if (System.currentTimeMillis() > req.expiryTick()) {
             pendingRequests.remove(recipient.getUniqueId());
-            MessageUtil.send(recipient, "<red>Kit share request expired.");
+            MessageUtil.send(recipient, "<red>That kit share request expired (requests last a limited time). <gray>Ask the sender to run <white>/kit share <name> <player></white> again.");
             return false;
         }
 
         Player sender = Bukkit.getPlayer(req.senderId());
         if (sender == null) {
             pendingRequests.remove(recipient.getUniqueId());
-            MessageUtil.send(recipient, "<red>Sender is no longer online.");
+            MessageUtil.send(recipient, "<red>The player who shared this kit is no longer online, so it can't be accepted. <gray>Ask them to share it again when they are back.");
             return false;
         }
 
         KitManager km = KitManager.getInstance();
         km.getPlayerKit(req.senderId(), kitName).ifPresent(kit -> {
             int limit = PermissionChecker.getKitSlotLimit(recipient);
-            boolean created = km.createPlayerKit(recipient.getUniqueId(), kitName,
-                    kit.getContents(), kit.getArmor(), limit);
+            boolean created = km.createPlayerKit(recipient.getUniqueId(), kit.getName(),
+                    kit.getContents(), kit.getArmor(), kit.getOffHand(), limit);
 
             if (created) {
                 MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-share-accepted")
                         .replace("{kit}", kitName));
+            } else if (km.getPlayerKit(recipient.getUniqueId(), kit.getName()).isPresent()) {
+                MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-already-exists")
+                        .replace("{kit}", kit.getName()));
             } else {
                 MessageUtil.send(recipient, ConfigManager.getInstance().getMessage("kit-slots-full")
                         .replace("{max}", String.valueOf(limit)));

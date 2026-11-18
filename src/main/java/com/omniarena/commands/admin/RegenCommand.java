@@ -1,5 +1,7 @@
 package com.omniarena.commands.admin;
 
+import java.util.Locale;
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -21,7 +23,7 @@ public class RegenCommand extends SubCommand {
 
     public RegenCommand(OmniArena plugin) {
         super(PermissionChecker.ADMIN_ARENA,
-                "/oa regen <arena|snapshot <arena>|style <type>|batch <amount>|settings>",
+                "/oa regen <arena|snapshot <arena>|style <type>|batch <amount>|auto <arena> <true|false|default>|settings>",
                 "Regenerate arena blocks");
         this.plugin = plugin;
     }
@@ -38,6 +40,7 @@ public class RegenCommand extends SubCommand {
             case "style" -> handleStyle(sender, args);
             case "batch" -> handleBatch(sender, args);
             case "settings" -> showSettings(sender);
+            case "auto" -> handleAuto(sender, args);
             case "progress", "particles", "sound" -> handleToggle(sender, args);
             default -> restoreArena(sender, args[0]);
         }
@@ -51,6 +54,11 @@ public class RegenCommand extends SubCommand {
         }
 
         Arena arena = arenaOpt.get();
+        if (restoreBusy(sender, arena)) return;
+        if (com.omniarena.match.MatchManager.getInstance().getMatch(arena).isPresent()) {
+            MessageUtil.send(sender, "<red>Cannot regenerate <yellow>" + arena.getName() + "</yellow> while a match is active. <gray>End it with <white>/oa override forceend " + arena.getName() + "</white> (or wait), then retry.");
+            return;
+        }
         BlockRestoreModule restore = plugin.getBlockRestoreModule();
         if (!restore.hasSnapshot(arena.getName())) {
             MessageUtil.send(sender, "<red>No snapshot for <yellow>" + arena.getName()
@@ -63,12 +71,24 @@ public class RegenCommand extends SubCommand {
         restore.restore(arena,
                 (done, total) -> sendProgress(sender, arena.getName(), done, total, lastPercent),
                 () -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-complete").replace("{arena}", arena.getName())),
-                () -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-failed").replace("{arena}", arena.getName())));
+                () -> {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("regen-failed").replace("{arena}", arena.getName()));
+                    String why = restore.getLastError(arena.getName());
+                    if (why != null) MessageUtil.send(sender, "<red>" + why);
+                });
+    }
+
+    private boolean restoreBusy(CommandSender sender, Arena arena) {
+        if (plugin.getBlockRestoreModule().isRegenerating(arena.getName())) {
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arena.getName() + "</yellow> is already being regenerated.");
+            return true;
+        }
+        return false;
     }
 
     private void handleSnapshot(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", "/oa regen snapshot <arena>"));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa regen snapshot").replace("{usage}", "/oa regen snapshot <arena>"));
             return;
         }
 
@@ -85,8 +105,9 @@ public class RegenCommand extends SubCommand {
         }
 
         MessageUtil.send(sender, "<yellow>Creating snapshot for <yellow>" + args[1] + "</yellow>...");
-        plugin.getBlockRestoreModule().createSnapshot(arena, () ->
-                MessageUtil.send(sender, "<green>Snapshot saved for <yellow>" + args[1] + "</yellow>."));
+        plugin.getBlockRestoreModule().createSnapshot(arena,
+                () -> MessageUtil.send(sender, "<green>Snapshot saved for <yellow>" + args[1] + "</yellow>."),
+                why -> MessageUtil.send(sender, "<red>Snapshot failed: " + why));
     }
 
     private void handleStyle(CommandSender sender, String[] args) {
@@ -95,9 +116,47 @@ public class RegenCommand extends SubCommand {
             MessageUtil.send(sender, "<gray>Default affects <yellow>/oa regen <arena></yellow>. Use <yellow>/oa regen style <type></yellow>.");
             return;
         }
-        RegenAnimationType type = RegenAnimationType.fromConfig(args[1]);
+        RegenAnimationType type = RegenAnimationType.parse(args[1]);
+        if (type == null) {
+            MessageUtil.send(sender, "<red>Unknown style <yellow>" + args[1] + "</yellow>. Valid: "
+                    + RegenAnimationType.validList());
+            return;
+        }
         ConfigManager.getInstance().setConfigValue("regen.animation.type", type.name());
         MessageUtil.send(sender, "<green>Default regen animation set to <yellow>" + type.name() + "</yellow>.");
+    }
+
+    /** /oa regen auto <arena> <true|false|default>: per-arena override of regen.auto (stored at regen.arenas.&lt;name&gt;.auto). */
+    private void handleAuto(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args")
+                    .replace("{command}", "/oa regen auto").replace("{usage}", "/oa regen auto <arena> <true|false|default>"));
+            return;
+        }
+        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[1]);
+        if (arenaOpt.isEmpty()) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[1]));
+            return;
+        }
+        Arena arena = arenaOpt.get();
+        String path = "regen.arenas." + arena.getName().toLowerCase(Locale.ROOT) + ".auto";
+        String v = args[2].toLowerCase(Locale.ROOT);
+        boolean global = ConfigManager.getInstance().getConfig().getBoolean("regen.auto", true);
+        switch (v) {
+            case "true", "yes", "on" -> {
+                ConfigManager.getInstance().setConfigValue(path, true);
+                MessageUtil.send(sender, "<green>Auto-regen for <yellow>" + arena.getName() + "</yellow> is now <yellow>on</yellow> (overrides the global setting).");
+            }
+            case "false", "no", "off" -> {
+                ConfigManager.getInstance().setConfigValue(path, false);
+                MessageUtil.send(sender, "<green>Auto-regen for <yellow>" + arena.getName() + "</yellow> is now <yellow>off</yellow> (overrides the global setting). <gray>Rebuild manually with <white>/oa regen " + arena.getName() + "</white>.");
+            }
+            case "default", "reset", "global" -> {
+                ConfigManager.getInstance().setConfigValue(path, null);
+                MessageUtil.send(sender, "<green>Auto-regen override removed for <yellow>" + arena.getName() + "</yellow>; it now follows <white>regen.auto</white> (currently <yellow>" + global + "</yellow>).");
+            }
+            default -> MessageUtil.send(sender, "<red>Invalid value <yellow>" + args[2] + "</yellow>. <gray>Use true, false or default (follow the global regen.auto).");
+        }
     }
 
     private void handleBatch(CommandSender sender, String[] args) {
@@ -117,12 +176,15 @@ public class RegenCommand extends SubCommand {
 
     private void handleToggle(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            MessageUtil.send(sender, "<red>Usage: <yellow>/oa regen " + args[0].toLowerCase() + " <true|false>");
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("not-enough-args").replace("{command}", "/oa regen " + args[0].toLowerCase()).replace("{usage}", "/oa regen " + args[0].toLowerCase() + " <true|false>"));
             return;
         }
-        boolean enabled = args[1].equalsIgnoreCase("true")
-                || args[1].equalsIgnoreCase("yes")
-                || args[1].equalsIgnoreCase("on");
+        String v = args[1].toLowerCase();
+        boolean enabled = v.equals("true") || v.equals("yes") || v.equals("on");
+        if (!enabled && !(v.equals("false") || v.equals("no") || v.equals("off"))) {
+            MessageUtil.send(sender, "<red>Invalid value <yellow>" + args[1] + "</yellow>. <gray>Use true or false (also yes/no/on/off).");
+            return;
+        }
         String key = switch (args[0].toLowerCase()) {
             case "progress" -> "regen.progress.enabled";
             case "particles" -> "regen.animation.particles";
@@ -136,11 +198,13 @@ public class RegenCommand extends SubCommand {
     private void showSettings(CommandSender sender) {
         var cfg = ConfigManager.getInstance().getConfig();
         MessageUtil.send(sender, "<gold>=== Regen Settings ===");
-        MessageUtil.send(sender, "<gray>Default style: <yellow>" + cfg.getString("regen.animation.type", "WAVE_SHUFFLE"));
+        MessageUtil.send(sender, "<gray>Default style: <yellow>" + RegenAnimationType.fromConfig(cfg.getString("regen.animation.type", "SPHERE")).name());
         MessageUtil.send(sender, "<gray>Batch size: <yellow>" + cfg.getInt("regen.batch-size", 4000) + "</yellow> blocks/tick");
         MessageUtil.send(sender, "<gray>Progress bar: <yellow>" + cfg.getBoolean("regen.progress.enabled", true));
         MessageUtil.send(sender, "<gray>Particles: <yellow>" + cfg.getBoolean("regen.animation.particles", true));
         MessageUtil.send(sender, "<gray>Sound: <yellow>" + cfg.getBoolean("regen.animation.sound", true));
+        MessageUtil.send(sender, "<gray>Auto-regen after matches: <yellow>" + cfg.getBoolean("regen.auto", true)
+                + "</yellow> <dark_gray>(per arena: /oa regen auto <arena> <true|false|default>)");
     }
 
     private void showHelp(CommandSender sender) {
@@ -149,6 +213,7 @@ public class RegenCommand extends SubCommand {
         MessageUtil.send(sender, "<yellow>/oa regen snapshot <arena></yellow> <gray>- save current arena blocks");
         MessageUtil.send(sender, "<yellow>/oa regen style <type></yellow> <gray>- set default style");
         MessageUtil.send(sender, "<yellow>/oa regen batch <amount></yellow> <gray>- set blocks restored per tick");
+        MessageUtil.send(sender, "<yellow>/oa regen auto <arena> <true|false|default></yellow> <gray>- per-arena auto-regen after matches (default = follow regen.auto)");
         MessageUtil.send(sender, "<yellow>/oa regen progress <true|false></yellow> <gray>- toggle chat progress bar");
         MessageUtil.send(sender, "<yellow>/oa regen particles <true|false></yellow> <gray>- toggle particles");
         MessageUtil.send(sender, "<yellow>/oa regen sound <true|false></yellow> <gray>- toggle sound");
@@ -169,21 +234,23 @@ public class RegenCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            List<String> options = new java.util.ArrayList<>(List.of("help", "snapshot", "style", "batch", "settings", "progress", "particles", "sound"));
-            options.addAll(ArenaManager.getInstance().getAll().stream().map(Arena::getName).toList());
-            return options.stream().filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase())).toList();
+            List<String> options = new java.util.ArrayList<>(List.of("help", "snapshot", "style", "batch", "auto", "settings", "progress", "particles", "sound"));
+            options.addAll(TabUtil.arenas(""));
+            return TabUtil.filter(options, cur);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("snapshot")) {
-            return ArenaManager.getInstance().getAll().stream().map(Arena::getName).filter(n -> n.startsWith(args[1])).toList();
+        String a = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2) {
+            return switch (a) {
+                case "snapshot", "auto" -> TabUtil.arenas(cur);
+                case "style" -> TabUtil.enums(RegenAnimationType.class, cur);
+                case "batch" -> TabUtil.hint("<amount>", cur);
+                case "progress", "particles", "sound" -> TabUtil.bools(cur);
+                default -> List.of();
+            };
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("style")) {
-            return Arrays.stream(RegenAnimationType.values()).map(Enum::name)
-                    .filter(n -> n.startsWith(args[1].toUpperCase())).toList();
-        }
-        if (args.length == 2 && List.of("progress", "particles", "sound").contains(args[0].toLowerCase())) {
-            return List.of("true", "false").stream().filter(n -> n.startsWith(args[1].toLowerCase())).toList();
-        }
+        if (args.length == 3 && a.equals("auto")) return TabUtil.filter(List.of("true", "false", "default"), cur);
         return List.of();
     }
 }

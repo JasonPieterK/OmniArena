@@ -32,9 +32,11 @@ import java.util.List;
  */
 public class CombatListener implements Listener {
 
+    private static volatile CombatListener instance;
     private final OmniArena plugin;
 
     public CombatListener(OmniArena plugin) {
+        instance = this;
         this.plugin = plugin;
     }
 
@@ -55,27 +57,57 @@ public class CombatListener implements Listener {
         if (inArena(victim) || inArena(attacker)) return;
 
         if (cm().isRespawnProtected(victim.getUniqueId()) && !cm().isOverriding(attacker)) { deny(event, attacker, "pvp-respawn-protected"); return; }
-        if (!cm().isGlobalPvp()) { deny(event, attacker, "pvp-global-off"); return; }
-        if (cm().isWorldDisabled(attacker)) { deny(event, attacker, "pvp-world-off"); return; }
-        if (cm().isNewbie(victim.getUniqueId()) && !cm().isOverriding(attacker)) { deny(event, attacker, "pvp-newbie-victim"); return; }
-        if (cm().isNewbie(attacker.getUniqueId())) {
-            if (cfg().getConfig().getBoolean("pvp.newbie.disable-on-attack", true)) cm().removeNewbie(attacker.getUniqueId());
-            else { deny(event, attacker, "pvp-newbie-self"); return; }
-        }
-        if (!cm().isOverriding(attacker)) {
+        boolean override = cm().isOverriding(attacker);
+        if (!override && !cm().isGlobalPvp()) { deny(event, attacker, "pvp-global-off"); return; }
+        if (!override && (cm().isWorldDisabled(attacker) || cm().isWorldDisabled(victim))) { deny(event, attacker, "pvp-world-off"); return; }
+        if (cm().isNewbie(victim.getUniqueId()) && !override) { deny(event, attacker, "pvp-newbie-victim"); return; }
+        boolean attackerNewbie = cm().isNewbie(attacker.getUniqueId());
+        boolean dropNewbie = cfg().getConfig().getBoolean("pvp.newbie.disable-on-attack", true);
+        if (attackerNewbie && !dropNewbie && !override) { deny(event, attacker, "pvp-newbie-self"); return; }
+        if (!override) {
             if (!cm().isPvpEnabled(victim))   { deny(event, attacker, "pvp-victim-disabled"); return; }
             if (!cm().isPvpEnabled(attacker)) { deny(event, attacker, "pvp-self-disabled"); return; }
         }
+        // Only a hit that actually lands ends the attacker's own newbie shield.
+        if (attackerNewbie && dropNewbie) cm().removeNewbie(attacker.getUniqueId());
 
         // Valid PvP hit — tag both and show blood.
-        cm().tag(victim, attacker);
-        cm().tag(attacker, victim);
+        if (cfg().getConfig().getBoolean("pvp.combat.tag-on-damage", true)) cm().tag(victim, attacker);
+        if (cfg().getConfig().getBoolean("pvp.combat.tag-on-attack", true)) cm().tag(attacker, victim);
         if (cfg().getConfig().getBoolean("pvp.blood.enabled", true)) spawnBlood(victim);
     }
 
     private Player resolveAttacker(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player p) return p;
-        if (event.getDamager() instanceof Projectile proj && proj.getShooter() instanceof Player p) return p;
+        if (event.getDamager() instanceof org.bukkit.entity.EnderCrystal crystal) {
+            java.util.UUID id = cm().getCrystalDamager(crystal.getUniqueId());
+            return id == null ? null : Bukkit.getPlayer(id);
+        }
+        return resolveSource(event.getDamager());
+    }
+
+    // ── End crystal attribution: remember who hit the crystal ───────────────────
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCrystalHit(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.EnderCrystal crystal)) return;
+        Player source = resolveSource(event.getDamager());
+        if (source != null) cm().recordCrystalDamager(crystal.getUniqueId(), source.getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onCrystalExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+        if (!(event.getEntity() instanceof org.bukkit.entity.EnderCrystal crystal)) return;
+        java.util.UUID id = crystal.getUniqueId();
+        // explosion damage may be applied after this event: clear next tick
+        Bukkit.getScheduler().runTask(plugin, () -> cm().clearCrystal(id));
+    }
+
+    /** Credits the human behind a damager: shooter, tamed-pet owner, TNT igniter, lingering-cloud thrower. */
+    public static Player resolveSource(org.bukkit.entity.Entity damager) {
+        if (damager instanceof Player p) return p;
+        if (damager instanceof Projectile proj && proj.getShooter() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.Tameable t && t.isTamed() && t.getOwner() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.TNTPrimed tnt && tnt.getSource() instanceof Player p) return p;
+        if (damager instanceof org.bukkit.entity.AreaEffectCloud c && c.getSource() instanceof Player p) return p;
         return null;
     }
 
@@ -93,25 +125,57 @@ public class CombatListener implements Listener {
     }
 
     // ── Combat-log punishment ───────────────────────────────────────────────────
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        if (!enabled() || !cm().isTagged(player)) return;
-        if (!cfg().getConfig().getBoolean("pvp.combat.punish-combat-log", true)) return;
+        boolean tagged = enabled() && cm().isTagged(player);
+        // Shutdown, plugin/admin kicks and arena players are never combat-logs.
+        boolean exempt = com.omniarena.platform.Platform.get().isServerStopping() || plugin.isStopped()
+                || com.omniarena.platform.Platform.get().wasKicked(event)
+                || inArena(player);
+        if (!tagged || exempt
+                || !cfg().getConfig().getBoolean("pvp.combat.punish-combat-log", true)) {
+            cm().handleQuit(player.getUniqueId());
+            return;
+        }
 
         String action = cfg().getConfig().getString("pvp.combat.combat-log-action", "KILL").toUpperCase();
         if (action.equals("KILL")) {
+            if (!cfg().getConfig().getBoolean("pvp.combat.drop-on-combat-log", true)) noDropDeaths.add(player.getUniqueId());
             player.setHealth(0.0); // dies on quit; drops handled by death event
+            noDropDeaths.remove(player.getUniqueId());
         } else if (action.equals("COMMAND")) {
             for (String c : cfg().getConfig().getStringList("pvp.combat.combat-log-commands")) {
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), c.replace("{player}", player.getName()));
             }
         }
         if (cfg().getConfig().getBoolean("pvp.combat.broadcast-combat-log", true)) {
-            Bukkit.broadcast(com.omniarena.util.ColorUtil.parse(
+            com.omniarena.util.MessageUtil.broadcast(com.omniarena.util.ColorUtil.parse(
                     cfg().getMessage("combat-log").replace("{player}", player.getName())));
         }
-        cm().untag(player);
+        cm().handleQuit(player.getUniqueId());
+    }
+
+    /** Combat-loggers killed on quit whose inventory must not drop (pvp.combat.drop-on-combat-log: false). */
+    private final java.util.Set<java.util.UUID> noDropDeaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onCombatLogDeath(PlayerDeathEvent event) {
+        if (!noDropDeaths.remove(event.getEntity().getUniqueId())) return;
+        event.setKeepInventory(true);
+        event.setKeepLevel(true);
+        event.getDrops().clear();
+        event.setDroppedExp(0);
+    }
+
+    // ── Newbie protection: no item pickup ────────────────────────────────────────
+    @EventHandler(ignoreCancelled = true)
+    public void onNewbiePickup(org.bukkit.event.entity.EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player p)) return;
+        if (!enabled() || inArena(p)) return;
+        if (cfg().getConfig().getBoolean("pvp.newbie.block-pickup", false) && cm().isNewbie(p.getUniqueId())) {
+            event.setCancelled(true);
+        }
     }
 
     // ── Block commands while tagged ──────────────────────────────────────────────
@@ -121,29 +185,61 @@ public class CombatListener implements Listener {
         if (!enabled() || !cm().isTagged(player)) return;
         if (!cfg().getConfig().getBoolean("pvp.combat.block-commands", true)) return;
 
-        String msg = event.getMessage().toLowerCase();
-        List<String> allowed = cfg().getConfig().getStringList("pvp.combat.allowed-commands");
-        boolean ok = allowed.stream().anyMatch(a -> msg.startsWith(a.toLowerCase()));
+        String msg = event.getMessage().trim();
+        String label = (msg.startsWith("/") ? msg.substring(1) : msg).split("\\s+", 2)[0].toLowerCase(java.util.Locale.ROOT);
+        // namespaced form (/minecraft:tp) is judged by its bare label
+        String bare = label.contains(":") ? label.substring(label.indexOf(':') + 1) : label;
+        java.util.Set<String> names = new java.util.HashSet<>(List.of(label, bare));
+        var cmd = com.omniarena.platform.Platform.get().commandMap().getCommand(bare);
+        if (cmd != null) names.add(cmd.getName().toLowerCase(java.util.Locale.ROOT));
+        boolean ok = cfg().getConfig().getStringList("pvp.combat.allowed-commands").stream()
+                .map(a -> a.trim().toLowerCase(java.util.Locale.ROOT))
+                .map(a -> a.startsWith("/") ? a.substring(1) : a)
+                .anyMatch(names::contains);
         if (!ok) {
             event.setCancelled(true);
             MessageUtil.send(player, cfg().getMessage("combat-no-command"));
         }
     }
 
-    // ── Block teleport / enderpearls while tagged ────────────────────────────────
+    // ── Block teleport / enderpearls / elytra while tagged ───────────────────────
     @EventHandler(ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         Player player = event.getPlayer();
         if (!enabled() || !cm().isTagged(player)) return;
         PlayerTeleportEvent.TeleportCause cause = event.getCause();
-        if (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
-                && !cfg().getConfig().getBoolean("pvp.combat.block-enderpearls", true)) return;
-        if (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
+        // OmniArena's own teleports (and other plugins' API teleports) are never blocked.
+        if (cause == PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+        boolean block = (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
+                    && legacyBool("pvp.combat.block-ender-pearl", "pvp.combat.block-enderpearls", false))
                 || (cause == PlayerTeleportEvent.TeleportCause.COMMAND
-                    && cfg().getConfig().getBoolean("pvp.combat.cancel-teleport", true))) {
+                    && legacyBool("pvp.combat.block-teleport", "pvp.combat.cancel-teleport", true));
+        if (block) {
             event.setCancelled(true);
-            MessageUtil.send(player, cfg().getMessage("combat-no-teleport"));
+            MessageUtil.send(player, "<red>You can't teleport while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
         }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onGlide(org.bukkit.event.entity.EntityToggleGlideEvent event) {
+        if (!(event.getEntity() instanceof Player player) || !event.isGliding()) return;
+        if (!enabled() || !cm().isTagged(player) || inArena(player)) return;
+        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return;
+        event.setCancelled(true);
+        MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
+    }
+
+    /** Shared by the Paper-only elytra boost listener (platform layer). @return true if the boost must be cancelled. */
+    public static boolean blockElytraUse(Player player) {
+        CombatListener self = instance;
+        return self != null && self.denyElytra(player);
+    }
+
+    private boolean denyElytra(Player player) {
+        if (!enabled() || !cm().isTagged(player) || inArena(player)) return false;
+        if (!cfg().getConfig().getBoolean("pvp.combat.block-elytra", true)) return false;
+        MessageUtil.send(player, "<red>You can't use an elytra while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
+        return true;
     }
 
     // ── Block placement while tagged + auto-soup ─────────────────────────────────
@@ -160,7 +256,7 @@ public class CombatListener implements Listener {
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         if (!enabled() || event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return;
-        if (!event.getAction().isRightClick()) return;
+        if (!(event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK)) return;
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item == null) return;
@@ -264,19 +360,25 @@ public class CombatListener implements Listener {
     }
 
     // Drop protection the moment the player swings — no abusing the shield to attack.
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onProtectedAttack(EntityDamageByEntityEvent event) {
-        if (!(resolveAttacker(event) instanceof Player attacker)) return;
+        Player attacker = resolveAttacker(event);
+        if (attacker == null || !(event.getEntity() instanceof Player)) return;
         if (cm().isRespawnProtected(attacker.getUniqueId())) cm().clearRespawnProtection(attacker.getUniqueId());
     }
 
     // ── Transfer drops to killer + kill-abuse check ──────────────────────────────
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         if (!enabled()) return;
         Player victim = event.getEntity();
         if (inArena(victim)) return; // arena death handled elsewhere
-        Player killer = victim.getKiller();
+        Player k = victim.getKiller();
+        if (k == null && victim.getLastDamageCause() instanceof EntityDamageByEntityEvent last) {
+            k = resolveAttacker(last);
+            if (victim.equals(k)) k = null;
+        }
+        final Player killer = k;
         cm().untag(victim);
 
         if (killer != null) {
@@ -289,5 +391,13 @@ public class CombatListener implements Listener {
                 event.getDrops().clear();
             }
         }
+    }
+
+    /** Reads a key, falling back to its pre-rename name when only the old key is set in the server's config.yml. */
+    private boolean legacyBool(String key, String legacyKey, boolean def) {
+        var c = cfg().getConfig();
+        if (c.isSet(key)) return c.getBoolean(key, def);
+        if (c.isSet(legacyKey)) return c.getBoolean(legacyKey, def);
+        return def;
     }
 }

@@ -9,17 +9,30 @@ public final class KitMenuHolder implements InventoryHolder {
 
     public enum MenuType {
         ADMIN,
-        PLAYER
+        PLAYER,
+        PREVIEW
     }
 
     private final MenuType type;
     private final List<String> kitNames;
     private Inventory inventory;
+    private int page;
+    private int totalPages = 1;
 
     public KitMenuHolder(MenuType type, List<String> kitNames) {
         this.type = type;
         this.kitNames = List.copyOf(kitNames);
     }
+
+    public KitMenuHolder(MenuType type, List<String> kitNames, int page, int totalPages) {
+        this(type, kitNames);
+        this.page = page;
+        this.totalPages = Math.max(1, totalPages);
+    }
+
+    public int getPage() { return page; }
+
+    public int getTotalPages() { return totalPages; }
 
     public MenuType getType() {
         return type;

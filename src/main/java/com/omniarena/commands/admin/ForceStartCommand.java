@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -24,19 +25,19 @@ public class ForceStartCommand extends SubCommand {
 
     @Override
     public void execute(CommandSender sender, String[] args) {
-        if (args.length < 2) {
+        if (args.length < 2 || !args[0].equalsIgnoreCase("start")) {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
             return;
         }
 
-        String arenaName = args[1];
-        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(arenaName);
+        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[1]);
         if (arenaOpt.isEmpty()) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", arenaName));
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[1]));
             return;
         }
 
         Arena arena = arenaOpt.get();
+        String arenaName = arena.getName();
         MatchManager matchManager = MatchManager.getInstance();
         Match match = matchManager.getActiveMatches().stream()
                 .filter(m -> m.getArena().getName().equals(arenaName))
@@ -44,17 +45,22 @@ public class ForceStartCommand extends SubCommand {
                 .orElse(null);
 
         if (match == null) {
-            MessageUtil.send(sender, "<red>No active match in arena <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>No match exists in arena <yellow>" + arenaName + "</yellow> yet, so there is nothing to force-start. <gray>A match is created when the first player joins: <white>/oa join " + arenaName + "</white>.");
             return;
         }
 
         if (match.getState() == MatchState.RUNNING) {
-            MessageUtil.send(sender, "<red>Match is already running in <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>The match in <yellow>" + arenaName + "</yellow> is already running. <gray>Stop it with <white>/oa match stop " + arenaName + "</white> if you want to restart.");
             return;
         }
 
         if (match.getState() == MatchState.ENDING) {
-            MessageUtil.send(sender, "<red>Match is ending in <yellow>" + arenaName + "</yellow>.");
+            MessageUtil.send(sender, "<red>The match in <yellow>" + arenaName + "</yellow> is ending right now. <gray>Wait for the arena to reset, then run <white>/oa force start " + arenaName + "</white> again.");
+            return;
+        }
+
+        if (match.getPlayerCount() < 1) {
+            MessageUtil.send(sender, "<red>Arena <yellow>" + arenaName + "</yellow> has no players, so a match can't start. <gray>At least 1 player must join first (<white>/oa join " + arenaName + "</white>).");
             return;
         }
 
@@ -66,12 +72,9 @@ public class ForceStartCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 2) {
-            return ArenaManager.getInstance().getAll().stream()
-                    .map(Arena::getName)
-                    .filter(n -> n.startsWith(args[1]))
-                    .toList();
-        }
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("start"), cur);
+        if (args.length == 2) return TabUtil.arenas(cur);
         return List.of();
     }
 }

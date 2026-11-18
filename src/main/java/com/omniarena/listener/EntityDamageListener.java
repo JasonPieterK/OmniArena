@@ -25,6 +25,7 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
+        if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
 
         MatchManager mm = MatchManager.getInstance();
@@ -37,9 +38,19 @@ public class EntityDamageListener implements Listener {
         if (arenaOpt.isEmpty()) return;
 
         Arena arena = arenaOpt.get();
+        // Spectators are untouchable
+        if (mm.isSpectating(victim)) {
+            event.setCancelled(true);
+            return;
+        }
         Optional<Match> matchOpt = mm.getMatch(arena);
         if (matchOpt.isEmpty() || matchOpt.get().getState() != MatchState.RUNNING) {
             event.setCancelled(true);
+            // Falling into the void in the lobby / end phase would otherwise loop forever
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID && arena.getLobbySpawn() != null) {
+                victim.setFallDistance(0f);
+                mm.markInternalTeleport(victim, arena.getLobbySpawn());
+            }
             return;
         }
 
@@ -73,11 +84,24 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPvP(EntityDamageByEntityEvent event) {
+        if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
-        if (!(event.getDamager() instanceof Player attacker) &&
-            !(event.getDamager() instanceof org.bukkit.entity.Projectile)) return;
 
         MatchManager mm = MatchManager.getInstance();
+        // Player, projectile shooter, pet owner, TNT igniter, potion-cloud thrower
+        Player shooter = com.omniarena.combat.CombatListener.resolveSource(event.getDamager());
+
+        // Arena fighters can't hurt outsiders, and outsiders/other matches/spectators can't hurt them
+        if (shooter != null && !shooter.equals(victim)) {
+            Optional<String> va = mm.getArenaName(victim);
+            Optional<String> sa = mm.getArenaName(shooter);
+            if (!va.equals(sa) || mm.isSpectating(shooter)) {
+                if (va.isPresent() || sa.isPresent()) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         if (!mm.isInArena(victim)) return;
 
         Optional<String> arenaName = mm.getArenaName(victim);
@@ -102,12 +126,10 @@ public class EntityDamageListener implements Listener {
 
         // Friendly fire check
         if (!arena.getRules().isFriendlyFire() && arena.getTeamConfig().isEnabled()) {
-            Player realAttacker = null;
-            if (event.getDamager() instanceof Player) realAttacker = (Player) event.getDamager();
-            else if (event.getDamager() instanceof org.bukkit.entity.Projectile proj &&
-                     proj.getShooter() instanceof Player) realAttacker = (Player) proj.getShooter();
+            Player realAttacker = shooter;
 
-            if (realAttacker != null) {
+            // Self-inflicted damage (own arrow/TNT) is never friendly fire
+            if (realAttacker != null && !realAttacker.equals(victim)) {
                 var victimTeam   = match.getTeam(victim.getUniqueId());
                 var attackerTeam = match.getTeam(realAttacker.getUniqueId());
                 if (victimTeam != null && victimTeam.equals(attackerTeam)) {

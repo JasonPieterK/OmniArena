@@ -21,5 +21,9 @@ public class SettingsHolder implements InventoryHolder {
     public int getPage()            { return page; }
     public boolean isCategoryView() { return categoryView; }
 
-    @Override public @NotNull Inventory getInventory() { return null; }
+    private Inventory inventory;
+
+    public void setInventory(Inventory inventory) { this.inventory = inventory; }
+
+    @Override public @NotNull Inventory getInventory() { return inventory; }
 }

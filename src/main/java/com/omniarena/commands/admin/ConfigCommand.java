@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
@@ -88,7 +89,18 @@ public class ConfigCommand extends SubCommand {
 
         String key = args[1];
         String value = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
-        Object parsed = parseGlobalValue(key, value);
+        boolean known = schema.settings().stream().anyMatch(d -> d.key().equalsIgnoreCase(key))
+                || ConfigManager.getInstance().getValue(key) != null;
+        if (!known) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-invalid-key").replace("{key}", key));
+            return;
+        }
+        Object parsed;
+        try { parsed = parseGlobalValue(key, value); }
+        catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Invalid value <yellow>" + value + "</yellow> for <yellow>" + key + "</yellow>: " + e.getMessage() + " <gray>See valid values by pressing TAB after the key, or <white>/oa config get " + key + "</white>.");
+            return;
+        }
         ConfigManager.getInstance().setValue(key, parsed);
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("config-set")
                 .replace("{key}", key)
@@ -97,19 +109,50 @@ public class ConfigCommand extends SubCommand {
     }
 
     private void setArenaConfig(CommandSender sender, Arena arena, String key, String value) {
+        try {
+            applyArenaConfig(sender, arena, key, value);
+        } catch (NumberFormatException e) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", value));
+        } catch (IllegalArgumentException e) {
+            MessageUtil.send(sender, "<red>Could not set <yellow>" + key + "</yellow> to <yellow>" + value + "</yellow> on arena <yellow>" + arena.getName() + "</yellow>: " + e.getMessage() + " <gray>Fix the value and run <white>/oa config set " + arena.getName() + " " + key + " <value></white> again.");
+        }
+    }
+
+    private void applyArenaConfig(CommandSender sender, Arena arena, String key, String value) {
         switch (key.toLowerCase(Locale.ROOT)) {
-            case "enabled" -> arena.setState(parseBoolean(value) ? com.omniarena.arena.ArenaState.WAITING : com.omniarena.arena.ArenaState.DISABLED);
-            case "game-mode", "gamemode" -> arena.setGameMode(GameModeType.fromString(value));
-            case "min-players" -> arena.setMinPlayers(parseInt(value, arena.getMinPlayers()));
-            case "max-players" -> arena.setMaxPlayers(parseInt(value, arena.getMaxPlayers()));
+            case "enabled" -> {
+                boolean on = parseBoolean(value);
+                if (on == arena.isEnabled()) { /* no state change: don't reset a running arena */ }
+                else if (on) arena.setState(com.omniarena.arena.ArenaState.WAITING);
+                else { DisableArenaCommand.kickAll(arena); arena.setState(com.omniarena.arena.ArenaState.DISABLED); }
+            }
+            case "game-mode", "gamemode" -> arena.setGameMode(strictEnum(GameModeType.class, value));
+            case "min-players" -> {
+                int n = parseInt(value, 0);
+                if (n < 1) throw new IllegalArgumentException("min-players must be at least 1 (you gave " + n + ").");
+                if (arena.getMaxPlayers() > 0 && n > arena.getMaxPlayers()) throw new IllegalArgumentException("min-players cannot exceed max-players (" + arena.getMaxPlayers() + "). Raise max-players first: /oa config set " + arena.getName() + " max-players <n>.");
+                arena.setMinPlayers(n);
+            }
+            case "max-players" -> {
+                int n = parseInt(value, 0);
+                if (n < 1) throw new IllegalArgumentException("max-players must be at least 1 (you gave " + n + ").");
+                if (n < arena.getMinPlayers()) throw new IllegalArgumentException("max-players cannot be below min-players (" + arena.getMinPlayers() + "). Lower min-players first: /oa config set " + arena.getName() + " min-players <n>.");
+                arena.setMaxPlayers(n);
+            }
             case "match-duration" -> arena.setMatchDuration(parseInt(value, arena.getMatchDuration()));
             case "countdown" -> arena.setCountdown(parseInt(value, arena.getCountdown()));
-            case "goal-type" -> arena.setGoalType(GoalType.fromString(value));
+            case "goal-type" -> arena.setGoalType(strictEnum(GoalType.class, value));
             case "goal-value" -> arena.setGoalValue(parseInt(value, arena.getGoalValue()));
-            case "respawn-type" -> arena.setRespawnType(RespawnType.fromString(value));
+            case "respawn-type" -> arena.setRespawnType(strictEnum(RespawnType.class, value));
             case "respawn-delay" -> arena.setRespawnDelay(parseInt(value, arena.getRespawnDelay()));
+            case "respawn-wave-interval" -> arena.setRespawnWaveInterval(parseInt(value, arena.getRespawnWaveInterval()));
             case "spawn-protection" -> arena.setSpawnProtection(parseInt(value, arena.getSpawnProtection()));
-            case "chat-mode" -> arena.setChatMode(ChatMode.fromString(value));
+            case "lives" -> {
+                int n = parseInt(value, arena.getLives());
+                if (n > 100) throw new NumberFormatException("lives must be 0-100");
+                arena.setLives(n);
+            }
+            case "chat-mode" -> arena.setChatMode(strictEnum(ChatMode.class, value));
             case "announcements" -> arena.setAnnouncements(parseBoolean(value));
             case "mid-match-join" -> arena.setMidMatchJoin(parseBoolean(value));
             case "spectator-allowed" -> arena.setSpectatorAllowed(parseBoolean(value));
@@ -163,7 +206,9 @@ public class ConfigCommand extends SubCommand {
             case "goal-value" -> arena.getGoalValue();
             case "respawn-type" -> arena.getRespawnType().name();
             case "respawn-delay" -> arena.getRespawnDelay();
+            case "respawn-wave-interval" -> arena.getRespawnWaveInterval();
             case "spawn-protection" -> arena.getSpawnProtection();
+            case "lives" -> arena.getLives();
             case "chat-mode" -> arena.getChatMode().name();
             case "announcements" -> arena.isAnnouncements();
             case "mid-match-join" -> arena.isMidMatchJoin();
@@ -229,48 +274,77 @@ public class ConfigCommand extends SubCommand {
         return value;
     }
 
+    /** Strict: throws IllegalArgumentException on anything that is not clearly true/false. */
     private boolean parseBoolean(String value) {
-        return value.equalsIgnoreCase("true")
-                || value.equalsIgnoreCase("yes")
-                || value.equalsIgnoreCase("on")
-                || value.equalsIgnoreCase("enabled");
+        String v = value.trim().toLowerCase(Locale.ROOT);
+        if (v.equals("true") || v.equals("yes") || v.equals("on") || v.equals("enabled")) return true;
+        if (v.equals("false") || v.equals("no") || v.equals("off") || v.equals("disabled")) return false;
+        throw new IllegalArgumentException("Expected true or false (also yes/no/on/off), got '" + value + "'.");
     }
 
+    /** Strict: throws NumberFormatException; negatives rejected. */
     private int parseInt(String value, int fallback) {
-        try { return Integer.parseInt(value.trim()); }
-        catch (NumberFormatException e) { return fallback; }
+        int n = Integer.parseInt(value.trim());
+        if (n < 0) throw new NumberFormatException("negative");
+        return n;
     }
 
     private double parseDouble(String value, double fallback) {
-        try { return Double.parseDouble(value.trim()); }
-        catch (NumberFormatException e) { return fallback; }
+        return Double.parseDouble(value.trim());
     }
+
+    private <E extends Enum<E>> E strictEnum(Class<E> type, String value) {
+        String v = value.trim().toUpperCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
+        for (E e : type.getEnumConstants()) if (e.name().equals(v)) return e;
+        throw new IllegalArgumentException("Unknown value '" + value + "'. Valid values: "
+                + Arrays.stream(type.getEnumConstants()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")));
+    }
+
+
+    private static final List<String> ARENA_KEYS = List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
+            "goal-type", "goal-value", "respawn-type", "respawn-delay", "respawn-wave-interval", "spawn-protection", "lives", "chat-mode",
+            "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
+            "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
+            "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+            "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z");
+    private static final java.util.Set<String> ARENA_BOOLEAN_KEYS = java.util.Set.of("enabled", "announcements", "mid-match-join",
+            "spectator-allowed", "whitelist-enabled", "team-enabled", "fall-damage", "fire-damage", "drowning", "suffocation",
+            "friendly-fire", "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms");
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) return List.of("set", "get");
-        if (args.length == 2 && args[0].equalsIgnoreCase("get")) {
-            return schema.settings().stream().map(SettingDefinition::key).filter(s -> s.startsWith(args[1])).toList();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("set", "get"), cur);
+        String a = args[0].toLowerCase(Locale.ROOT);
+        if (!a.equals("set") && !a.equals("get")) return List.of();
+        boolean arenaScoped = args.length >= 2 && ArenaManager.getInstance().get(args[1]).isPresent();
+        if (args.length == 2) {
+            List<String> opts = new java.util.ArrayList<>(TabUtil.arenas(""));
+            schema.settings().forEach(d -> opts.add(d.key()));
+            return TabUtil.filter(opts, cur);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            Optional<Arena> arena = ArenaManager.getInstance().get(args[1]);
-            if (arena.isPresent()) {
-                return List.of("enabled", "game-mode", "min-players", "max-players", "match-duration", "countdown",
-                        "goal-type", "goal-value", "respawn-type", "respawn-delay", "spawn-protection", "chat-mode",
-                        "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
-                        "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
-                        "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
-                        "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
-                        "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z")
-                        .stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
+        if (args.length == 3) {
+            if (arenaScoped) return TabUtil.filter(ARENA_KEYS, cur);
+            if (a.equals("set")) {
+                SettingDefinition def = schema.settings().stream()
+                        .filter(s -> s.key().equalsIgnoreCase(args[1])).findFirst().orElse(null);
+                return TabUtil.settingValue(def, cur);
             }
-            SettingDefinition def = schema.settings().stream()
-                    .filter(setting -> setting.key().equalsIgnoreCase(args[1]))
-                    .findFirst()
-                    .orElse(null);
-            if (def != null && def.type() == SettingDefinition.SettingType.BOOLEAN) {
-                return List.of("true", "false").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
-            }
+            return List.of();
+        }
+        if (args.length == 4 && a.equals("set") && arenaScoped) {
+            String key = args[2].toLowerCase(Locale.ROOT);
+            if (ARENA_BOOLEAN_KEYS.contains(key)) return TabUtil.bools(cur);
+            return switch (key) {
+                case "game-mode", "gamemode" -> TabUtil.enums(GameModeType.class, cur);
+                case "goal-type" -> TabUtil.enums(GoalType.class, cur);
+                case "respawn-type" -> TabUtil.enums(RespawnType.class, cur);
+                case "chat-mode" -> TabUtil.enums(ChatMode.class, cur);
+                case "region-world" -> TabUtil.worlds(cur);
+                default -> ARENA_KEYS.contains(key) ? TabUtil.hint("<number>", cur) : List.of();
+            };
         }
         return List.of();
     }

@@ -11,12 +11,15 @@ public final class PermissionChecker {
     public static final String ADMIN_KIT     = "omniarena.admin.kit";
     public static final String ADMIN_MATCH   = "omniarena.admin.match";
     public static final String ADMIN_SIGN    = "omniarena.admin.sign";
+    public static final String ADMIN_HOLOGRAM = "omniarena.admin.hologram";
     public static final String ADMIN_STATS   = "omniarena.admin.stats";
     public static final String ADMIN_RELOAD  = "omniarena.admin.reload";
     public static final String ADMIN_OVERRIDE = "omniarena.admin.override";
+    public static final String ADMIN_ACCESS  = "omniarena.admin.access";
 
     public static final String PLAYER_USE    = "omniarena.use";
     public static final String PLAYER_KIT    = "omniarena.kit.use";
+    public static final String PLAYER_QUEUE  = "omniarena.queue";
     public static final String PLAYER_SPEC   = "omniarena.spectate";
     public static final String JOIN_BYPASS   = "omniarena.join.bypass";
 

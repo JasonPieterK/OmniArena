@@ -1,5 +1,6 @@
 package com.omniarena.commands.admin;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -37,6 +38,10 @@ public class LifecycleCommand extends SubCommand {
     }
 
     private void start(CommandSender sender) {
+        if (!plugin.isStopped()) {
+            MessageUtil.send(sender, "<yellow>OmniArena is already running.");
+            return;
+        }
         plugin.setStopped(false);
         MessageUtil.send(sender, "<yellow>Starting OmniArena systems...");
         try {
@@ -50,25 +55,38 @@ public class LifecycleCommand extends SubCommand {
             plugin.getEloManager().loadAll();
             plugin.getQueueManager().start();
             plugin.getPartyManager().start();
+            plugin.getTournamentManager().start();
 
             // Restart web dashboard
             plugin.getWebDashboardServer().start();
+            plugin.getSignManager().resetPending();
+            plugin.startSignUpdateTask();
+            plugin.getCombatManager().start();
+            plugin.getVisual().start();
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "
                     + plugin.getKitManager().getAllAdminKits().size() + " kit(s)");
         } catch (Exception e) {
-            MessageUtil.send(sender, "<red>✗ Failed to start: " + e.getMessage());
-            plugin.getLogger().severe("Start failed: " + e.getMessage());
-            e.printStackTrace();
+            plugin.setStopped(true);
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to start. <gray>See the console for the full error, fix the cause (often a broken config.yml/arena file), then run <white>/oa start</white> again.");
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Start failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "). Fix the cause shown in the trace (commonly invalid YAML in plugins/OmniArena/*.yml) and run /oa start.", e);
         }
     }
 
     private void stop(CommandSender sender) {
+        if (plugin.isStopped()) {
+            MessageUtil.send(sender, "<yellow>OmniArena is already stopped.");
+            return;
+        }
         plugin.setStopped(true);
         MessageUtil.send(sender, "<yellow>Stopping OmniArena systems...");
         try {
             MatchManager mm = MatchManager.getInstance();
+
+            // Finalize running regens (places remaining blocks, removes previews) before tasks are cancelled
+            if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().cancelAll();
 
             // Cancel all plugin tasks (regen, countdowns, updates, etc)
             Bukkit.getScheduler().cancelTasks(plugin);
@@ -76,6 +94,10 @@ public class LifecycleCommand extends SubCommand {
             // End all active matches & kick players
             int kicked = 0;
             for (var match : new java.util.ArrayList<>(mm.getActiveMatches())) {
+                for (var uuid : new java.util.ArrayList<>(match.getSpectators())) {
+                    Player sp = Bukkit.getPlayer(uuid);
+                    if (sp != null) { mm.leaveSpectator(sp); kicked++; }
+                }
                 for (var uuid : new java.util.ArrayList<>(match.getPlayers())) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null) {
@@ -85,21 +107,33 @@ public class LifecycleCommand extends SubCommand {
                 }
             }
 
+            // Matches that just ended may have started arena regens: finalize those too (restores the world instantly)
+            if (plugin.getBlockRestoreModule() != null) plugin.getBlockRestoreModule().cancelAll();
+
+            // Close every open plugin GUI so no viewer keeps a dead menu
+            try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable ignored) {}
+            try { com.omniarena.settings.SettingsGUI.closeAll(); } catch (Throwable ignored) {}
+
             // Save all data
+            plugin.getEloManager().saveAll();
             plugin.getStatsManager().saveAll();
             plugin.getArenaManager().saveAll();
             plugin.getBettingManager().refundAll();
+            plugin.getTournamentManager().stop();
 
             // Stop web and visuals
             plugin.getWebDashboardServer().stop();
             plugin.getVisual().shutdown();
+            plugin.getModuleManager().shutdown();
+            plugin.getQueueManager().stop();
+            plugin.getPartyManager().stop();
 
             MessageUtil.send(sender, "<green>✓ OmniArena stopped successfully");
             MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), canceled all tasks, data saved");
         } catch (Exception e) {
-            MessageUtil.send(sender, "<red>✗ Failed to stop: " + e.getMessage());
-            plugin.getLogger().severe("Stop failed: " + e.getMessage());
-            e.printStackTrace();
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to stop cleanly. <gray>See the console for the full error; data may not be saved: run <white>/oa stop</white> again or restart the server.");
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Stop failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "). Some data may not have been saved; retry /oa stop or restart the server.", e);
         }
     }
 
@@ -107,7 +141,7 @@ public class LifecycleCommand extends SubCommand {
         MessageUtil.send(sender, "<red>Restarting OmniArena...");
         Bukkit.getScheduler().runTask(plugin, () -> {
             stop(sender);
-            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> start(sender), 20L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> start(sender), 20L);
         });
     }
 
@@ -120,11 +154,8 @@ public class LifecycleCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) {
-            return List.of("start", "stop", "restart").stream()
-                    .filter(s -> s.startsWith(args[0].toLowerCase()))
-                    .toList();
-        }
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        if (args.length == 1) return TabUtil.filter(List.of("start", "stop", "restart"), cur);
         return List.of();
     }
 }

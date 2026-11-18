@@ -1,7 +1,7 @@
 name: OmniArena
-version: '1.0.0'
+version: '${project.version}'
 main: com.omniarena.OmniArena
-api-version: '26.2'
+api-version: '${api.version}'
 description: Complete PVP Arena Plugin with 200+ features
 authors: [OmniArena Team]
 website: https://omniarena.dev
@@ -66,6 +66,14 @@ commands:
     description: Get OmniArena help
     usage: /help [guide]
     permission: omniarena.use
+  bet:
+    description: Bet on arena match outcomes (same as /oa bet)
+    usage: /bet <place|cancel|info> [arena] [player] [amount]
+    permission: omniarena.bet
+  tournament:
+    description: Create and play bracket tournaments (same as /oa tournament)
+    usage: /tournament <create|join|leave|start|status|list|delete|setprize> [args]
+    permission: omniarena.use
   pvp:
     description: Toggle PvP status
     usage: /pvp [player]
@@ -100,6 +108,14 @@ permissions:
     description: Access to /kit player commands
     default: true
 
+  omniarena.queue:
+    description: Use /oa queue (ranked matchmaking queue)
+    default: true
+
+  omniarena.bet:
+    description: Place and manage bets on arena matches
+    default: true
+
   omniarena.admin:
     description: Full OmniArena admin access
     default: op
@@ -108,8 +124,14 @@ permissions:
       omniarena.admin.kit: true
       omniarena.admin.match: true
       omniarena.admin.sign: true
+      omniarena.admin.hologram: true
       omniarena.admin.stats: true
       omniarena.admin.reload: true
+      omniarena.admin.override: true
+      omniarena.admin.access: true
+      omniarena.pvp.admin: true
+      omniarena.tournament.admin: true
+      omniarena.join.bypass: true
 
   omniarena.admin.arena:
     description: Arena create/delete/config
@@ -127,12 +149,24 @@ permissions:
     description: Create/remove arena signs
     default: op
 
+  omniarena.admin.hologram:
+    description: Create/remove/move leaderboard holograms
+    default: op
+
   omniarena.admin.stats:
     description: Reset/view all player stats
     default: op
 
+  omniarena.admin.override:
+    description: Powerful admin overrides (/oa override ...)
+    default: op
+
   omniarena.admin.reload:
     description: Reload plugin config
+    default: op
+
+  omniarena.admin.access:
+    description: Manage per-arena whitelist/blacklist (/oa access)
     default: op
 
   omniarena.kit.slots.5:
@@ -146,6 +180,14 @@ permissions:
   omniarena.spectate:
     description: Spectate arenas
     default: true
+
+  omniarena.tournament.create:
+    description: Create, join, leave and start own tournaments
+    default: true
+
+  omniarena.tournament.admin:
+    description: Manage any tournament (start, delete, setprize)
+    default: op
 
   omniarena.pvp:
     description: Use player PvP/combat commands (/oa pvp, pvpstatus, newbie...)

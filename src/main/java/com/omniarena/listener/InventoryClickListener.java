@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -35,18 +36,39 @@ public class InventoryClickListener implements Listener {
         KitMenuHolder holder = KitGUI.getKitMenuHolder(top);
         if (holder == null) return;
 
+        // Cancel every click while a menu is open (shift-click from the player inventory,
+        // number-key swaps, double-click collect, cursor placement) to prevent item theft/insertion.
+        event.setCancelled(true);
+
+        if (event.getClickedInventory() != top) return;
         if (event.getRawSlot() < 0 || event.getRawSlot() >= top.getSize()) return;
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
 
-        event.setCancelled(true);
-
-        if (holder.getType() == KitMenuHolder.MenuType.ADMIN) {
-            handleAdminKitClick(player, holder, event.getRawSlot());
+        if (holder.getType() == KitMenuHolder.MenuType.PREVIEW) {
+            if (event.getRawSlot() == 49) next(player::closeInventory);
             return;
         }
+        // Defer all actions (equip, close, reopen) out of the click handler.
+        final int rawSlot = event.getRawSlot();
+        next(() -> {
+            if (!player.isOnline()) return;
+            // Menu may have been replaced/closed before this tick runs
+            if (player.getOpenInventory().getTopInventory() != top) return;
+            if (holder.getType() == KitMenuHolder.MenuType.ADMIN) handleAdminKitClick(player, holder, rawSlot);
+            else handlePlayerKitClick(player, holder, rawSlot, clicked);
+        });
+    }
 
-        handlePlayerKitClick(player, holder, event.getRawSlot(), clicked);
+    private void next(Runnable r) {
+        if (!plugin.isEnabled()) return;
+        org.bukkit.Bukkit.getScheduler().runTask(plugin, r);
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (KitGUI.getKitMenuHolder(event.getView().getTopInventory()) == null) return;
+        event.setCancelled(true);
     }
 
     private void handleAdminKitClick(Player player, KitMenuHolder holder, int slot) {
@@ -57,13 +79,8 @@ public class InventoryClickListener implements Listener {
         if (kitOpt.isEmpty()) return;
 
         AdminKit kit = kitOpt.get();
-        if (!PermissionChecker.canUseKit(player, kit.getRequiredPermission())) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-no-permission")
-                    .replace("{kit}", kit.getName()));
-            return;
-        }
-
-        KitManager.getInstance().equipKit(player, kit);
+        if (!kit.isPublic() && !player.hasPermission("omniarena.admin")) return;
+        if (!KitManager.getInstance().tryEquip(player, kit)) return;
         player.closeInventory();
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                 .replace("{kit}", kit.getName()));
@@ -73,7 +90,16 @@ public class InventoryClickListener implements Listener {
         Material type = clicked.getType();
         if (type == Material.BLACK_STAINED_GLASS_PANE || type == Material.CYAN_STAINED_GLASS_PANE) return;
 
-        if (slot == 45 || (slot == 49 && type == Material.BOOK)) {
+        if (slot == KitGUI.PREV_SLOT && type == Material.ARROW) {
+            KitGUI.reopenCombinedKitMenu(player, holder.getPage() - 1);
+            return;
+        }
+        if (slot == KitGUI.NEXT_SLOT && type == Material.ARROW) {
+            KitGUI.reopenCombinedKitMenu(player, holder.getPage() + 1);
+            return;
+        }
+
+        if (slot == 45 || slot == 49) {
             player.closeInventory();
             MessageUtil.send(player, "<yellow>Use <white>/kit create <name></white> to save your current inventory.");
             return;
@@ -89,12 +115,8 @@ public class InventoryClickListener implements Listener {
             Optional<AdminKit> adminKitOpt = KitManager.getInstance().getAdminKit(adminName);
             if (adminKitOpt.isEmpty()) return;
             AdminKit kit = adminKitOpt.get();
-            if (!com.omniarena.permission.PermissionChecker.canUseKit(player, kit.getRequiredPermission())) {
-                MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-no-permission")
-                        .replace("{kit}", kit.getName()));
-                return;
-            }
-            KitManager.getInstance().equipKit(player, kit);
+            if (!kit.isPublic() && !player.hasPermission("omniarena.admin")) return;
+            if (!KitManager.getInstance().tryEquip(player, kit)) return;
             player.closeInventory();
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                     .replace("{kit}", kit.getName()));
@@ -104,7 +126,7 @@ public class InventoryClickListener implements Listener {
         // Personal kit
         Optional<PlayerKit> kitOpt = KitManager.getInstance().getPlayerKit(player.getUniqueId(), kitName);
         if (kitOpt.isEmpty()) return;
-        KitManager.getInstance().equipKit(player, kitOpt.get());
+        if (!KitManager.getInstance().tryEquip(player, kitOpt.get())) return;
         player.closeInventory();
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped")
                 .replace("{kit}", kitOpt.get().getName()));

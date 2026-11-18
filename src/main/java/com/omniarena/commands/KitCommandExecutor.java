@@ -32,6 +32,10 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
+        if (plugin.isStopped()) {
+            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("plugin-stopped"));
+            return true;
+        }
         return handle(sender, args);
     }
 
@@ -59,7 +63,15 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
 
         switch (sub) {
             case "create" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit create <name>"); return true; }
+                if (!ConfigManager.getInstance().getConfig().getBoolean("kits.player-kits-enabled", true)) {
+                    MessageUtil.send(player, "<red>Personal kits are disabled on this server.");
+                    return true;
+                }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit create <name>")); return true; }
+                if (!KitManager.isValidName(subArgs[0])) {
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", subArgs[0]));
+                    return true;
+                }
                 int limit = PermissionChecker.getKitSlotLimit(player);
                 boolean success = km.createPlayerKit(player.getUniqueId(), subArgs[0],
                         player.getInventory().getContents(),
@@ -91,7 +103,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
             }
             case "delete" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit delete <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit delete <name>")); return true; }
                 if (!km.deletePlayerKit(player.getUniqueId(), subArgs[0])) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
                 } else {
@@ -99,12 +111,13 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
             }
             case "equip" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit equip <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit equip <name>")); return true; }
                 // First check player kits, then check public admin kits
                 Optional<PlayerKit> kitOpt = km.getPlayerKit(player.getUniqueId(), subArgs[0]);
                 if (kitOpt.isPresent()) {
-                    km.equipKit(player, kitOpt.get());
-                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped").replace("{kit}", subArgs[0]));
+                    if (km.tryEquip(player, kitOpt.get())) {
+                        MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped").replace("{kit}", kitOpt.get().getName()));
+                    }
                     return true;
                 }
                 // Check admin/preset kits
@@ -112,18 +125,19 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 if (adminKitOpt.isPresent()) {
                     AdminKit adminKit = adminKitOpt.get();
                     if (adminKit.isPublic() || player.hasPermission("omniarena.admin")) {
-                        km.equipKit(player, adminKit);
-                        MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped").replace("{kit}", subArgs[0]));
+                        if (km.tryEquip(player, adminKit)) {
+                            MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-equipped").replace("{kit}", adminKit.getName()));
+                        }
                         return true;
                     } else {
-                        MessageUtil.send(player, "<red>That kit is not public.");
+                        MessageUtil.send(player, "<red>Kit <yellow>" + subArgs[0] + "</yellow> is not public, so you can't preview/equip it. <gray>Ask an admin to publish it with <white>/oa kit admin setpublic " + subArgs[0] + "</white>.");
                         return true;
                     }
                 }
                 MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
             }
             case "share" -> {
-                if (subArgs.length < 2) { MessageUtil.send(player, "<red>Usage: /kit share <name> <player>"); return true; }
+                if (subArgs.length < 2) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit share <name> <player>")); return true; }
                 Player target = Bukkit.getPlayer(subArgs[1]);
                 if (target == null) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", subArgs[1]));
@@ -132,28 +146,40 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 plugin.getKitShareHandler().sendShare(player, target, subArgs[0]);
             }
             case "accept" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit accept <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit accept <name>")); return true; }
                 plugin.getKitShareHandler().acceptShare(player, subArgs[0]);
             }
             case "rename" -> {
-                if (subArgs.length < 2) { MessageUtil.send(player, "<red>Usage: /kit rename <old> <new>"); return true; }
-                if (!km.renamePlayerKit(player.getUniqueId(), subArgs[0], subArgs[1])) {
+                if (subArgs.length < 2) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit rename <old> <new>")); return true; }
+                if (!KitManager.isValidName(subArgs[1])) {
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", subArgs[1]));
+                    return true;
+                }
+                if (km.getPlayerKit(player.getUniqueId(), subArgs[0]).isEmpty()) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
+                } else if (!km.renamePlayerKit(player.getUniqueId(), subArgs[0], subArgs[1])) {
+                    MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-already-exists").replace("{kit}", subArgs[1]));
                 } else {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-renamed")
                             .replace("{old}", subArgs[0]).replace("{new}", subArgs[1]));
                 }
             }
             case "preview" -> {
-                if (subArgs.length < 1) { MessageUtil.send(player, "<red>Usage: /kit preview <name>"); return true; }
+                if (subArgs.length < 1) { MessageUtil.send(player, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/kit preview <name>")); return true; }
                 Optional<PlayerKit> kitOpt = km.getPlayerKit(player.getUniqueId(), subArgs[0]);
-                if (kitOpt.isEmpty()) {
+                if (kitOpt.isPresent()) {
+                    KitGUI.openKitPreview(player, kitOpt.get());
+                    return true;
+                }
+                Optional<AdminKit> previewAdmin = km.getAdminKit(subArgs[0])
+                        .filter(k -> k.isPublic() || player.hasPermission("omniarena.admin"));
+                if (previewAdmin.isEmpty()) {
                     MessageUtil.send(player, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", subArgs[0]));
                     return true;
                 }
-                KitGUI.openKitPreview(player, kitOpt.get());
+                KitGUI.openKitPreview(player, previewAdmin.get());
             }
-            default -> MessageUtil.send(player, "<red>Unknown kit command. Use <yellow>/kit</yellow> to open kit menu.");
+            default -> MessageUtil.send(player, "<red>Unknown kit action <yellow>" + sub + "</yellow>. <gray>Valid: <white>create, list, delete, equip, share, accept, rename, preview</white>. Open the menu with <white>/kit</white>; see <white>/kit help</white>.");
         }
         return true;
     }
@@ -188,23 +214,37 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) return List.of();
+        return tabComplete(sender, args);
+    }
 
+    /** Shared by /kit and /oa kit (player side). */
+    public List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        if (!(sender instanceof Player)) return List.of();
+        String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            return List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview")
-                    .stream().filter(s -> s.startsWith(args[0])).toList();
+            return TabUtil.filter(List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview"), cur);
         }
-        if (args.length == 2 && "help".startsWith(args[1].toLowerCase())) return List.of("help");
+        String sub = args[0].toLowerCase(java.util.Locale.ROOT);
         if (args.length == 2) {
-            String sub = args[0].toLowerCase();
-            if (List.of("delete", "equip", "share", "rename", "preview").contains(sub)) {
-                return KitManager.getInstance().getPlayerKits(player.getUniqueId())
-                        .stream().map(PlayerKit::getName).filter(n -> n.startsWith(args[1])).toList();
-            }
+            return switch (sub) {
+                case "create" -> TabUtil.hint("<name>", cur);
+                case "delete", "share", "rename" -> TabUtil.playerKits(sender, cur);
+                case "equip", "preview" -> {
+                    // The executor also accepts public admin kits (or any admin kit for admins).
+                    java.util.Set<String> kits = new java.util.LinkedHashSet<>(TabUtil.playerKits(sender, ""));
+                    boolean admin = sender.hasPermission("omniarena.admin");
+                    for (AdminKit k : KitManager.getInstance().getAllAdminKits()) {
+                        if (k.isPublic() || admin) kits.add(k.getName());
+                    }
+                    yield TabUtil.filter(kits, cur);
+                }
+                case "accept" -> TabUtil.hint("<kit>", cur);
+                default -> List.of();
+            };
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("share")) {
-            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
-                    .filter(n -> n.startsWith(args[2])).toList();
+        if (args.length == 3) {
+            if (sub.equals("share")) return TabUtil.players(sender, cur);
+            if (sub.equals("rename")) return TabUtil.hint("<new-name>", cur);
         }
         return List.of();
     }

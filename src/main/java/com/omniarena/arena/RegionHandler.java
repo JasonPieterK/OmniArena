@@ -36,7 +36,7 @@ public class RegionHandler {
             Location safe = arena.getRandomBattleSpawn();
             if (safe != null) {
                 player.teleport(safe);
-                player.sendMessage(com.omniarena.util.ColorUtil.parse(
+                com.omniarena.util.MessageUtil.send(player, com.omniarena.util.ColorUtil.parse(
                         "<red>You left the arena boundary and were teleported back."));
             }
         }

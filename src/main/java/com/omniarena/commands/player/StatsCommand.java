@@ -1,5 +1,6 @@
 package com.omniarena.commands.player;
 
+import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
@@ -17,7 +18,7 @@ import java.util.List;
 public class StatsCommand extends SubCommand {
 
     public StatsCommand(OmniArena plugin) {
-        super(PermissionChecker.PLAYER_USE, "/oa stats [player]", "View arena stats");
+        super(PermissionChecker.PLAYER_USE, "/oa stats [player|global [kills|wins|kd]|reset <player>]", "View arena stats");
     }
 
     @Override
@@ -31,21 +32,37 @@ public class StatsCommand extends SubCommand {
             }
 
             // Check admin reset
-            if (args[0].equalsIgnoreCase("reset") && args.length >= 2) {
+            if (args[0].equalsIgnoreCase("reset")) {
                 if (!PermissionChecker.hasAdminStats(sender)) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("no-permission"));
                     return;
                 }
-                Player resetTarget = Bukkit.getPlayer(args[1]);
+                if (args.length < 2) {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa stats reset <player>"));
+                    return;
+                }
+                OfflinePlayer resetTarget = Bukkit.getPlayerExact(args[1]);
+                if (resetTarget == null) {
+                    OfflinePlayer off = Bukkit.getOfflinePlayer(args[1]);
+                    if (off.hasPlayedBefore()) resetTarget = off;
+                }
                 if (resetTarget == null) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[1]));
                     return;
                 }
                 StatsManager.getInstance().resetStats(resetTarget.getUniqueId());
-                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-reset").replace("{player}", resetTarget.getName()));
+                MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-reset").replace("{player}", resetTarget.getName() != null ? resetTarget.getName() : args[1]));
                 return;
             }
-            target = Bukkit.getOfflinePlayer(args[0]);
+            target = Bukkit.getPlayerExact(args[0]);
+            if (target == null) {
+                OfflinePlayer off = Bukkit.getOfflinePlayer(args[0]);
+                if (!off.hasPlayedBefore()) {
+                    MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-not-found").replace("{player}", args[0]));
+                    return;
+                }
+                target = off;
+            }
         } else {
             if (!(sender instanceof Player player)) {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only"));
@@ -54,7 +71,7 @@ public class StatsCommand extends SubCommand {
             target = player;
         }
 
-        PlayerStats stats = StatsManager.getInstance().getStats(target.getUniqueId());
+        PlayerStats stats = StatsManager.getInstance().peekStats(target.getUniqueId());
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-header").replace("{player}", target.getName() != null ? target.getName() : "Unknown"));
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-kills").replace("{kills}", String.valueOf(stats.getKills())));
         MessageUtil.send(sender, ConfigManager.getInstance().getMessage("stats-deaths").replace("{deaths}", String.valueOf(stats.getDeaths())));
@@ -101,18 +118,16 @@ public class StatsCommand extends SubCommand {
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        String cur = args.length == 0 ? "" : args[args.length - 1];
+        boolean admin = PermissionChecker.hasAdminStats(sender);
         if (args.length == 1) {
-            List<String> names = Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(n -> n.startsWith(args[0])).toList();
-            List<String> opts = new java.util.ArrayList<>(names);
+            List<String> opts = new java.util.ArrayList<>(TabUtil.players(sender, ""));
             opts.add("global");
-            if (PermissionChecker.hasAdminStats(sender)) {
-                opts.add("reset");
-            }
-            return opts.stream().filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase())).toList();
+            if (admin) opts.add("reset");
+            return TabUtil.filter(opts, cur);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("global")) {
-            return List.of("kills", "wins", "kd").stream().filter(n -> n.startsWith(args[1].toLowerCase())).toList();
-        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("global")) return TabUtil.filter(List.of("kills", "wins", "kd"), cur);
+        if (args.length == 2 && args[0].equalsIgnoreCase("reset") && admin) return TabUtil.players(sender, cur);
         return List.of();
     }
 }

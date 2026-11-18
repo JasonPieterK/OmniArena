@@ -21,13 +21,18 @@ public class Arena {
     private int countdown = 10;
 
     // Goal
-    private GoalType goalType = GoalType.KILLS;
+    /** Explicit per-arena goal type; null = use the game mode's goal type. */
+    private GoalType goalTypeOverride = null;
     private int goalValue = 20;
 
     // Respawn
     private RespawnType respawnType = RespawnType.INSTANT;
     private int respawnDelay = 3;
+    /** WAVE respawn: dead players come back together every this many seconds of match time. */
+    private int respawnWaveInterval = 10;
     private int spawnProtection = 3;
+    /** Lives per player; 0 = not configured (mode default respawn semantics apply). */
+    private int lives = 0;
 
     // Spawns
     private final List<Location> battleSpawns = new ArrayList<>();
@@ -74,7 +79,11 @@ public class Arena {
 
     public String getName() { return name; }
     public ArenaState getState() { return state; }
-    public void setState(ArenaState state) { this.state = state; }
+    public void setState(ArenaState state) {
+        this.state = state;
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null) sm.requestUpdate(this);
+    }
     public GameModeType getGameMode() { return gameMode; }
     public void setGameMode(GameModeType gameMode) { this.gameMode = gameMode; }
     public int getMinPlayers() { return minPlayers; }
@@ -85,14 +94,23 @@ public class Arena {
     public void setMatchDuration(int matchDuration) { this.matchDuration = matchDuration; }
     public int getCountdown() { return countdown; }
     public void setCountdown(int countdown) { this.countdown = countdown; }
-    public GoalType getGoalType() { return goalType; }
-    public void setGoalType(GoalType goalType) { this.goalType = goalType; }
+    /** Effective goal type: the arena override if one was set, else the game mode's own goal. */
+    public GoalType getGoalType() { return goalTypeOverride != null ? goalTypeOverride : gameMode.getGoalType(); }
+    /** Sets the goal type; choosing the game mode's own goal clears the override. */
+    public void setGoalType(GoalType goalType) {
+        this.goalTypeOverride = (goalType == null || goalType == gameMode.getGoalType()) ? null : goalType;
+    }
+    public boolean hasGoalTypeOverride() { return goalTypeOverride != null; }
     public int getGoalValue() { return goalValue; }
     public void setGoalValue(int goalValue) { this.goalValue = goalValue; }
     public RespawnType getRespawnType() { return respawnType; }
     public void setRespawnType(RespawnType respawnType) { this.respawnType = respawnType; }
     public int getRespawnDelay() { return respawnDelay; }
     public void setRespawnDelay(int respawnDelay) { this.respawnDelay = respawnDelay; }
+    public int getRespawnWaveInterval() { return respawnWaveInterval; }
+    public void setRespawnWaveInterval(int seconds) { this.respawnWaveInterval = Math.max(1, seconds); }
+    public int getLives() { return lives; }
+    public void setLives(int lives) { this.lives = Math.max(0, lives); }
     public int getSpawnProtection() { return spawnProtection; }
     public void setSpawnProtection(int spawnProtection) { this.spawnProtection = spawnProtection; }
     public List<Location> getBattleSpawns() { return battleSpawns; }
@@ -112,6 +130,9 @@ public class Arena {
     public void setAnnouncements(boolean announcements) { this.announcements = announcements; }
     public Set<String> getEnabledModules() { return enabledModules; }
     public List<ArenaSign> getSigns() { return signs; }
+    /** Sign entries that could not be parsed on load (unloaded world, bad format); written back verbatim on save. */
+    private final List<String> unparsedSigns = new ArrayList<>();
+    public List<String> getUnparsedSigns() { return unparsedSigns; }
     public boolean isMidMatchJoin() { return midMatchJoin; }
     public void setMidMatchJoin(boolean midMatchJoin) { this.midMatchJoin = midMatchJoin; }
     public boolean isSpectatorAllowed() { return spectatorAllowed; }

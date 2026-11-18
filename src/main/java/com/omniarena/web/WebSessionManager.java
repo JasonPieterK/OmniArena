@@ -29,14 +29,24 @@ public class WebSessionManager {
         return token;
     }
 
+    /** Constant-time token check; a valid session's expiry slides forward on every use. */
     public boolean isValid(String token) {
-        if (token == null || token.isBlank()) return false;
-        Session session = sessions.get(token);
+        if (token == null || token.isBlank() || token.length() > 256) return false;
+        byte[] given = token.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        long now = System.currentTimeMillis();
+        String match = null;
+        for (Map.Entry<String, Session> e : sessions.entrySet()) {
+            boolean eq = java.security.MessageDigest.isEqual(given, e.getKey().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (eq) match = e.getKey();
+        }
+        if (match == null) return false;
+        Session session = sessions.get(match);
         if (session == null) return false;
-        if (session.expiresAtMs() < System.currentTimeMillis()) {
-            sessions.remove(token);
+        if (session.expiresAtMs() < now) {
+            sessions.remove(match);
             return false;
         }
+        sessions.replace(match, session, new Session(now + ttl.toMillis()));
         return true;
     }
 

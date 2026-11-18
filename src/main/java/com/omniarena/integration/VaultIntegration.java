@@ -27,6 +27,11 @@ public class VaultIntegration {
         economy.depositPlayer(player, amount);
     }
 
+    public void depositOffline(org.bukkit.OfflinePlayer player, double amount) {
+        if (economy == null || amount <= 0 || player == null) return;
+        economy.depositPlayer(player, amount);
+    }
+
     public void withdraw(Player player, double amount) {
         if (economy == null || amount <= 0) return;
         economy.withdrawPlayer(player, amount);
