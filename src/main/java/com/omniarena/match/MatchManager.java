@@ -166,6 +166,12 @@ public class MatchManager {
 
     public boolean joinArena(Player player, Arena arena) {
         if (playerArena.containsKey(player.getUniqueId())) return false;
+        if (arena.hasMissingWorld()) {
+            // The arena keeps its locations but its world is not loaded (yet): see ArenaManager.onWorldLoad
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-world-missing")
+                    .replace("{world}", arena.getMissingWorlds().iterator().next()));
+            return false;
+        }
         if (!arena.isJoinable() && !(arena.isRunning() && arena.isMidMatchJoin())) return false;
         if (isArenaReserved(arena.getName(), player.getUniqueId())) {
             MessageUtil.send(player, "<red>That arena is reserved for a tournament match.");
@@ -187,6 +193,14 @@ public class MatchManager {
                 && existing.getState() != MatchState.STARTING) {
             return false; // queued ranked matches are closed to outsiders once underway
         }
+
+        // Public API: other plugins may veto the join (all OmniArena checks have passed at this point)
+        if (com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaPlayerJoinEvent(player, arena)).isCancelled()) {
+            ConfigManager.debugLog(() -> "join of " + player.getName() + " into " + arena.getName() + " cancelled by another plugin");
+            MessageUtil.send(player, ConfigManager.getInstance().getMessage("join-cancelled"));
+            return false;
+        }
+
         Match match = activeMatches.computeIfAbsent(arena.getName(), k -> {
             Match m = new Match(arena);
             startCountdown(m);
@@ -293,6 +307,7 @@ public class MatchManager {
 
         MessageUtil.send(player, ConfigManager.getInstance().getMessage("leave-arena")
                 .replace("{arena}", arenaName));
+        com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaPlayerLeaveEvent(player, match.getArena(), false));
 
         if (forfeit != null) {
             endMatch(match, forfeit);
@@ -368,6 +383,9 @@ public class MatchManager {
         plugin.getVisual().getScoreboardManager().removeBoard(player);
         plugin.getVisual().getBossBarManager().removePlayer(player);
         restoreState(player);
+        if (match != null) {
+            com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaPlayerLeaveEvent(player, match.getArena(), true));
+        }
     }
 
     // ── Countdown ────────────────────────────────────────────────
@@ -477,6 +495,8 @@ public class MatchManager {
         if (!tabTakeover()) plugin.getVisual().getBossBarManager().createTimer(match);
 
         startMatchTimer(match);
+        com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaMatchStartEvent(
+                arena, new ArrayList<>(match.getPlayers()), match.isRanked()));
     }
 
     private void spawnPlayer(Player player, Match match) {
@@ -645,9 +665,27 @@ public class MatchManager {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error while finishing the match in arena " + match.getArena().getName()
                     + " (" + t + "). The arena is still reset after the end delay.", t);
         }
+        fireMatchEnd(match, result);
 
         int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
         AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
+    }
+
+    /** Public API: tells other plugins the match ended (winner ids resolved from the result and the winning team). */
+    private void fireMatchEnd(Match match, MatchResult result) {
+        try {
+            Set<UUID> winners = new LinkedHashSet<>();
+            if (result.getWinnerId() != null) winners.add(result.getWinnerId());
+            if (result.getWinnerTeamName() != null) {
+                for (MatchTeam t : match.getTeams()) {
+                    if (t.getName().equals(result.getWinnerTeamName())) winners.addAll(t.getMembers());
+                }
+            }
+            com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaMatchEndEvent(
+                    match.getArena(), result, new ArrayList<>(winners)));
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Could not fire ArenaMatchEndEvent for arena " + match.getArena().getName() + " (" + t + "). The match end is unaffected.");
+        }
     }
 
     /** ELO, betting, tournament, visuals, rewards and stats for a finished match (isolated so a failure cannot strand the arena in ENDING). */

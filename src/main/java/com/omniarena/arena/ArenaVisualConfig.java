@@ -7,7 +7,6 @@ public class ArenaVisualConfig {
     private boolean scoreboard = true;
     private boolean bossBar = true;
     private boolean actionBar = true;
-    private boolean holograms = false;
 
     public boolean isTitles() { return titles; }
     public void setTitles(boolean titles) { this.titles = titles; }
@@ -21,8 +20,6 @@ public class ArenaVisualConfig {
     public void setBossBar(boolean bossBar) { this.bossBar = bossBar; }
     public boolean isActionBar() { return actionBar; }
     public void setActionBar(boolean actionBar) { this.actionBar = actionBar; }
-    public boolean isHolograms() { return holograms; }
-    public void setHolograms(boolean holograms) { this.holograms = holograms; }
 
     @Override
     public boolean equals(Object o) {
@@ -31,18 +28,18 @@ public class ArenaVisualConfig {
         ArenaVisualConfig that = (ArenaVisualConfig) o;
         return titles == that.titles && sounds == that.sounds && particles == that.particles
                 && scoreboard == that.scoreboard && bossBar == that.bossBar
-                && actionBar == that.actionBar && holograms == that.holograms;
+                && actionBar == that.actionBar;
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(titles, sounds, particles, scoreboard, bossBar, actionBar, holograms);
+        return java.util.Objects.hash(titles, sounds, particles, scoreboard, bossBar, actionBar);
     }
 
     @Override
     public String toString() {
         return "ArenaVisualConfig(titles=" + titles + ", sounds=" + sounds + ", particles=" + particles
                 + ", scoreboard=" + scoreboard + ", bossBar=" + bossBar
-                + ", actionBar=" + actionBar + ", holograms=" + holograms + ")";
+                + ", actionBar=" + actionBar + ")";
     }
 }

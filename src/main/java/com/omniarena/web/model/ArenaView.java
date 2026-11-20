@@ -50,6 +50,5 @@ public record ArenaView(
         boolean particles,
         boolean scoreboard,
         boolean bossBar,
-        boolean actionBar,
-        boolean holograms
+        boolean actionBar
 ) {}

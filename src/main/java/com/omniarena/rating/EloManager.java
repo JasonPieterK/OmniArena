@@ -226,7 +226,7 @@ public class EloManager {
     private volatile long topCacheAt;
 
     public List<EloRating> getTopPlayers(int limit) {
-        // Several holograms refresh in the same tick; share one sort (1s TTL keeps results effectively live).
+        // Several leaderboard consumers refresh in the same tick; share one sort (1s TTL keeps results effectively live).
         long now = System.currentTimeMillis();
         List<EloRating> c = topCache;
         if (c != null && topCacheLimit == limit && now - topCacheAt < 1000L) return c;

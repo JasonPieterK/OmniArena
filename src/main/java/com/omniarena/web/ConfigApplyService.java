@@ -241,7 +241,7 @@ public class ConfigApplyService {
         }
         if (obj.has("visual") && obj.get("visual").isJsonObject()) {
             JsonObject v = obj.getAsJsonObject("visual");
-            for (String k : new String[]{"titles", "sounds", "particles", "scoreboard", "bossBar", "actionBar", "holograms"})
+            for (String k : new String[]{"titles", "sounds", "particles", "scoreboard", "bossBar", "actionBar"})
                 if (present(v, k)) boolOk(v.get(k), p + "visual." + k, errors);
         }
         if (obj.has("team") && obj.get("team").isJsonObject()) {
@@ -350,7 +350,6 @@ public class ConfigApplyService {
             if (present(visual, "scoreboard")) v.setScoreboard(bool(visual.get("scoreboard")));
             if (present(visual, "bossBar")) v.setBossBar(bool(visual.get("bossBar")));
             if (present(visual, "actionBar")) v.setActionBar(bool(visual.get("actionBar")));
-            if (present(visual, "holograms")) v.setHolograms(bool(visual.get("holograms")));
         }
     }
 }

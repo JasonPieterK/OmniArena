@@ -161,7 +161,13 @@ public class ArenaConfig {
             v.setScoreboard(vis.getBoolean("scoreboard", true));
             v.setBossBar(vis.getBoolean("boss-bar", true));
             v.setActionBar(vis.getBoolean("action-bar", true));
-            v.setHolograms(vis.getBoolean("holograms", false));
+        }
+
+        // Worlds that are not loaded: keep the arena, mark it unavailable, retry on WorldLoadEvent
+        arena.recomputeMissingWorlds(w -> org.bukkit.Bukkit.getWorld(w) != null);
+        if (arena.hasMissingWorld()) {
+            plugin.getLogger().warning("Arena '" + name + "' is kept but unavailable: world(s) " + arena.getMissingWorlds()
+                    + " not loaded. It becomes available automatically when the world loads (e.g. through Multiverse); nothing was deleted.");
         }
 
         return arena;
@@ -180,7 +186,17 @@ public class ArenaConfig {
         List<String> list = cfg.getStringList(path);
         for (String s : list) {
             Location loc = LocationUtil.deserialize(s);
-            if (loc != null) arena.addSpawn(type, loc);
+            if (loc != null) {
+                arena.addSpawn(type, loc);
+                continue;
+            }
+            String world = Arena.worldOf(s);
+            if (world != null && org.bukkit.Bukkit.getWorld(world) == null) {
+                // World not loaded (yet): keep the spawn verbatim; ArenaManager resolves it on WorldLoadEvent
+                arena.getUnresolvedSpawns(type).add(s);
+            } else {
+                plugin.getLogger().warning("Arena '" + arena.getName() + "': ignoring unreadable " + type.name().toLowerCase() + " spawn '" + s + "'. Fix: set it again with /oa setup " + arena.getName() + " " + (type == SpawnType.BATTLE ? "spawn" : type.name().toLowerCase()) + ".");
+            }
         }
     }
 
@@ -259,15 +275,15 @@ public class ArenaConfig {
         cfg.set("visual.scoreboard", v.isScoreboard());
         cfg.set("visual.boss-bar", v.isBossBar());
         cfg.set("visual.action-bar", v.isActionBar());
-        cfg.set("visual.holograms", v.isHolograms());
 
         YamlUtil.save(cfg, file, plugin.getLogger());
     }
 
     private void saveSpawnList(FileConfiguration cfg, Arena arena, String path, SpawnType type) {
-        List<String> list = arena.getSpawns(type).stream()
+        List<String> list = new ArrayList<>(arena.getSpawns(type).stream()
                 .map(LocationUtil::serialize)
-                .toList();
+                .toList());
+        list.addAll(arena.getUnresolvedSpawns(type)); // spawns in worlds that are not loaded stay in the file
         cfg.set(path, list);
     }
 

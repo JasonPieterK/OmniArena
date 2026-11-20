@@ -9,7 +9,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 /**
- * Decides whether a presentation channel (titles, sounds, particles, holograms) is active.
+ * Decides whether a presentation channel (titles, sounds, particles) is active.
  * A channel is on only when BOTH the global switch (config.yml {@code visual.<key>}) and the arena's own
  * switch ({@code visual.<key>} in arenas/&lt;name&gt;.yml, /oa config &lt;arena&gt; visual-&lt;key&gt;) are on.
  * Subjects outside any arena (unknown player / location) only obey the global switch.
@@ -18,7 +18,7 @@ public final class VisualGate {
 
     private VisualGate() {}
 
-    public enum Channel { TITLES, SOUNDS, PARTICLES, HOLOGRAMS }
+    public enum Channel { TITLES, SOUNDS, PARTICLES }
 
     public static boolean titles(Match m)    { return on(m == null ? null : m.getArena(), Channel.TITLES); }
     public static boolean sounds(Match m)    { return on(m == null ? null : m.getArena(), Channel.SOUNDS); }
@@ -28,7 +28,6 @@ public final class VisualGate {
     public static boolean sounds(Player p)    { return on(arenaOf(p), Channel.SOUNDS); }
     public static boolean particles(Player p) { return on(arenaOf(p), Channel.PARTICLES); }
     public static boolean particles(Location l) { return on(arenaAt(l), Channel.PARTICLES); }
-    public static boolean holograms(Location l) { return on(arenaAt(l), Channel.HOLOGRAMS); }
 
     public static boolean on(Arena arena, Channel c) {
         ConfigManager cm = ConfigManager.getInstance();
@@ -40,7 +39,6 @@ public final class VisualGate {
             case TITLES -> v.isTitles();
             case SOUNDS -> v.isSounds();
             case PARTICLES -> v.isParticles();
-            case HOLOGRAMS -> v.isHolograms();
         };
     }
 

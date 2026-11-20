@@ -24,6 +24,8 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
 - Tests live in `src/test/java` (`RegenAnimationTypeTest`, `TournamentBracketTest`,
   `ConfigSchemaServiceTest`, `SuggestTest`; 17 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
   `ConfigSchemaServiceTest`, `health/*Test`; 25 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
+  `ConfigSchemaServiceTest`, `SuggestTest`, `MenuLayoutTest`, `FailureTrackerTest`, `LeaderboardPlaceholderTest`,
+  `NpcActionTest`, `ArenaWorldsTest`; 39 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
   Only pure logic is unit tested; code that needs a live Bukkit server is not.
 - `target/` and `dist/` are git-ignored build output; never edit them. The old antrun step that
   copied the jar to a Windows path has been removed.
@@ -100,10 +102,14 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `HologramCommand`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
 | `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (29, incl. `AccessCommand`, `DoctorCommand`), `commands.player.*` (12, incl. `EloCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
 | `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
+| `listener` | 18 listeners (incl. `WorldListener`) | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks, world load/unload). |
+| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `LeaderboardCommand` = `/oa leaderboard`, `NpcCommand` = `/oa npc`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
+| `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars). The built-in hologram system was removed: leaderboards are PlaceholderAPI placeholders plus `/oa leaderboard` (see `integration`). An old `holograms.yml` is ignored and logged once. |
 | `module` | `ModuleManager`, `KillstreakModule`, `ComboModule`, `PowerUpModule` | Optional per-arena modules (names in `Arena.getEnabledModules()`). |
 | `settings` | `SettingsGUI`, `SettingsMenuListener`, `SettingsHolder` | Chest-GUI editor over `ConfigSchemaService`. |
 | `sign` | `SignManager`, `ArenaSign` | Join signs, glowstone tracking (`sign-glowstone.yml`). |
-| `integration` | `IntegrationManager`, `VaultIntegration`, `PlaceholderAPIIntegration`, `WorldGuardIntegration`, `LuckPermsIntegration` | Soft-dependency hooks (each behind an `integrations.<name>` switch). Code that touches an optional API must stay inside these classes (or use reflection like `CombatManager` does for LibsDisguises). |
+| `integration` | `IntegrationManager` (+ `IntegrationStatus`, `FailureTracker`), `VaultIntegration`, `PlaceholderAPIIntegration`, `WorldGuardIntegration`, `LuckPermsIntegration`, reflection-only `DecentHologramsHook`/`FancyHologramsHook` (`HologramHook`), `CitizensIntegration`, `MultiverseIntegration` (`Reflect` helper), services `LeaderboardCache`/`LeaderboardManager`/`NpcManager` | Soft-dependency hooks (each behind an `integrations.<name>` switch, all isolated by `IntegrationManager.safe`, see section 16c). Code that touches an optional API must stay inside these classes; hooks without an API jar on the build path (holograms, Citizens, Multiverse) are reflection only. |
+| `api` | `OmniArenaAPI`, `api.event.*` (`ArenaMatchStartEvent`, `ArenaMatchEndEvent`, `ArenaPlayerJoinEvent` (cancellable), `ArenaPlayerLeaveEvent`, `ArenaKillEvent`, `ApiEvents`) | Public facade and events for other plugins. Events are fired on the main thread through `ApiEvents.fire` (never lets a listener problem break a match): start in `startMatch`, end in `endMatch` after the effects, join in `joinArena` after all checks and before state changes, leave in `leaveArena`/`leaveSpectator`, kill in `PlayerDeathListener` right after `recordKill`. |
 | `permission` | `PermissionChecker` | Permission node constants and `hasAdmin`. |
 | `web` | `WebDashboardServer`, `WebSessionManager`, `ConfigSchemaService`, `ConfigApplyService`, `DocsCatalog`, `web.model.*` | Embedded HTTP dashboard, schema (exactly the keys of `config.yml` + `messages.yml`) and validated apply. Static UI in `src/main/resources/web/`. |
 | `health` | `ConfigRepair`, `YamlRepair`, `SafeYaml`, `BackupUtil`, `Watchdog`, `ErrorGuard`, `ErrorTracker`, `HealthReport`, `Doctor` | Self-healing (section 16): config repair, tolerant YAML loading, runtime watchdog, error isolation, `/oa doctor`. |
@@ -128,6 +134,8 @@ completes).
 1. `Platform.init(this)` (a wrong-flavor jar disables the plugin and returns).
 2. `ConfigManager.load()` (runs `ConfigRepair` first: backfills/repairs config.yml + messages.yml).
 3. Construct: `VisualController` (starts `HologramManager`), `StatsManager`, `KitManager`,
+2. `ConfigManager.load()`.
+3. Construct: `VisualController`, `StatsManager`, `KitManager`,
    `KitShareHandler`, `SignManager`, `ModuleManager`, `BlockRestoreModule`, `ArenaManager`,
    `MatchManager`, `KitCommandExecutor`, `CombatManager` (its constructor calls `start()`),
    `EloManager`, `QueueManager`, `PartyManager`, `BettingManager` (looks up Vault economy once),
@@ -147,7 +155,7 @@ every online player in every active match (so results land in the saves below);
 `matchManager.shutdownStateStore()`; `BlockRestoreModule.cancelAll()` (finishes regens, including
 those just started by the matches that ended); `combat.shutdown()`; `queue.stop()`, `party.stop()`;
 `tournament.stop()` (save + clear); `betting.refundAll()`; `stats.saveAll()`; `arena.saveAll()`;
-`elo.shutdown(); elo.saveAll()`; `visual.shutdown()` (removes holograms); `module.shutdown()`;
+`elo.shutdown(); elo.saveAll()`; `visual.shutdown()`; `module.shutdown()`;
 `web.stop()`; `integration.shutdown()`; `Platform.shutdown()`.
 
 ### `/oa plugin stop|start|restart|version` (`LifecycleCommand`)
@@ -160,11 +168,15 @@ those just started by the matches that ended); `combat.shutdown()`; `queue.stop(
 - **start** (only if stopped): `setStopped(false)`; reload config; reload arenas, kits, stats, ELO;
   restart queue, party, tournaments (which also restarts the tournament tick task), web server,
   sign task (`resetPending`), combat tasks, `visual.start()` (holograms), `watchdog.start()`. Listeners and command
+  sign task (`resetPending`), combat tasks, `visual.start()`, `IntegrationManager.start()` (leaderboard cache refresh,
+  leaderboard holograms, NPC click handler). Listeners and command
   executors stay registered; `BettingManager` is not re-initialised.
 - **restart**: stop on the next tick, start 20 ticks later.
 - **reload** (`ReloadCommand`): reload config/messages and kits; reload arenas only when no match is
   active; `ModuleManager.reload`; restart sign task; re-run `IntegrationManager.shutdown()/load()`
   (so `integrations.*` switches apply); restart combat tasks; restart the watchdog (new interval); refresh signs. Config repair runs inside `ConfigManager.load()/reload()`.
+  (so `integrations.*` switches apply and tripped hooks are retried; `load()` calls `start()`); restart combat tasks; refresh signs.
+  `/oa plugin stop` also calls `IntegrationManager.stop()` (tasks are cancelled anyway, bindings are cleared).
 
 ### `isStopped()` gating
 
@@ -199,7 +211,7 @@ onEnable, onDisable, `/oa stop` and `/oa start`.
 5. **No blocking on the main thread**: no network, no large file reads, no `Future.get()` without a
    timeout. Large block operations must be time-sliced (see `BlockRestoreModule`:
    `SNAPSHOT_BLOCKS_PER_TICK = 30000`, per-tick batches for placement).
-6. Do not force-load chunks (sign refresh checks `isChunkLoaded`; holograms refresh from cached data).
+6. Do not force-load chunks (sign refresh checks `isChunkLoaded`; leaderboard placeholders read the `LeaderboardCache` snapshot).
    Other async writers follow the same snapshot-then-write pattern: `PlayerStateStore` (single
    writer thread), `CombatManager` (`pvp-toggles.yml`, `newbie.yml`).
 7. Player-facing text: build with MiniMessage via `MessageUtil.send` and `ConfigManager.getMessage`
@@ -258,7 +270,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - `MatchResult.isDraw()` is true for `DRAW` and `TIMEOUT`.
 - `/oa stats [player]` (ELO and rank are part of it) and `/oa stats top elo [n]` (`StatsCommand`, `omniarena.use`) show ratings through the
   read-only `peekRating`/`getPlayerRank`/`getLeaderboard` paths (never `getRating`, which creates an
-  entry). Ratings also appear in `/oa queue status`, the `elo` hologram type and the web Players tab.
+  entry). Ratings also appear in `/oa queue status`, the `%omniarena_elo%`/`%omniarena_rank%`/`top_elo` placeholders and the web Players tab.
 
 ---
 
@@ -419,7 +431,8 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
   whitelist|blacklist` (UUID strings) are persisted. `team.colors` and `classes` in the example file are not read.
 - Snapshots: format v2 palette/runs plus optional `tiles` (section 7).
 - `sign-glowstone.yml`: `locations: ["world,x,y,z"]`; only positions listed are ever cleared.
-- `holograms.yml` (`HologramManager`; unparseable entries are written back verbatim),
+- `leaderboards.yml` (`LeaderboardManager`: `boards.<id>` metric/size/hook/placeholders/position), `npcs.yml`
+  (`NpcManager`: `npcs.<citizensId>` action/arg). A pre-existing `holograms.yml` is ignored, never deleted.
   `pvp-toggles.yml` (`pvp-off` list), `newbie.yml` (uuid -> expiry millis).
 - `stats.yml`, `elo.yml`, `tournaments.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
   `kit-cooldowns.yml`, `player-states/<uuid>.yml`.
@@ -445,7 +458,7 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
    `PlayerCommandForwarder` in `OmniArena.onEnable` (and add a permission entry). `bet` and
    `tournament` are registered through the small loop at the end of that block.
 4. Declare every permission node you check in `plugin.yml` (all current nodes are declared,
-   including `omniarena.bet`, `omniarena.queue` and `omniarena.admin.hologram`).
+   including `omniarena.bet`, `omniarena.queue`, `omniarena.admin.leaderboard` and `omniarena.admin.npc`).
 5. Tab completion goes in `tabComplete`. `/oa <sub> help` is automatic (except `regen`, `kit`,
    `adminkit`).
 6. Add messages to `messages.yml` and read via `ConfigManager.getMessage(key)`.
@@ -521,7 +534,9 @@ back to the jar's bundled `messages.yml`.
 - Do not use `Thread.sleep`, blocking IO or `.join()` on the main thread.
 - Do not call Paper-only API from `src/main/java`; put it behind `PlatformAdapter` (section 1).
 - Keep optional-API imports (Vault, PlaceholderAPI, WorldGuard, LuckPerms) inside `integration/`
-  classes so the plugin loads when they are absent. `BettingManager` imports Vault types directly:
+  classes so the plugin loads when they are absent. DecentHolograms, FancyHolograms, Citizens and
+  Multiverse have no Maven dependency: use `Reflect` (no new API jars). Call every hook through
+  `IntegrationManager.safe` (section 16c). `BettingManager` imports Vault types directly:
   keep Vault registration guarded by the `Vault` plugin presence check.
 - Do not add dependencies without discussing shading/relocation.
 - Avoid adding features that are not wired to a user entry point; if infrastructure is added first,
@@ -547,8 +562,8 @@ back to the jar's bundled `messages.yml`.
 6. The engine reads `arena.getGoalType()` (override or game type), not the raw `goalType` field;
    `goal.type` in a file only counts with `goal.type-override: true`.
 7. `LifecycleCommand.start` does not recreate `BettingManager` or listeners; `stop` calls
-   `visual.shutdown()` (clears boards/boss bars/holograms) and `start` calls `visual.start()` to
-   respawn the holograms.
+   `visual.shutdown()` (clears boards/boss bars) and `IntegrationManager.stop()`; `start` calls
+   `visual.start()` and `IntegrationManager.start()`.
 8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin
    owns `/kit`.
 9. Admin preset kits are managed only through `/oa kits` (`AdminKitCommand`); `/oa` has no player `kit`
@@ -569,9 +584,35 @@ back to the jar's bundled `messages.yml`.
     `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena`
     (blacklist always; whitelist when enabled unless `omniarena.join.bypass`/OP). Do not add join
     paths that skip `joinArena`.
-16a. Visual channels: `VisualGate` combines the global `visual.titles|sounds|particles|holograms`
+16a. Visual channels: `VisualGate` combines the global `visual.titles|sounds|particles`
     key with the arena flag. New titles/sounds/particles must go through `TitleManager`,
     `SoundManager`, `ParticleManager`/`EffectManager` (which gate) or call `VisualGate` themselves.
+16c. Integration isolation (`IntegrationManager`): hooks are `vault`, `placeholderapi`, `worldguard`, `luckperms`,
+    `decentholograms`, `fancyholograms`, `citizens`, `multiverse` (switch `integrations.<name>`, default true;
+    softdepends in `plugin.yml`). `safe(name, Runnable)` / `safe(name, Supplier, fallback)` catch Throwable
+    (incl. `NoClassDefFoundError`/`LinkageError`), log the first failure once, record `lastError` and switch the hook
+    off after 3 consecutive failures (`FailureTracker`, pure and unit tested); a success resets the counter.
+    A hook is also released on `PluginDisableEvent` of its plugin and set up again on `PluginEnableEvent`;
+    `/oa reload` retries everything. `statuses()` returns `List<IntegrationStatus>(name, present, enabled, lastError)`
+    for `/oa doctor`. Convenience wrappers exist for the old call sites (`deposit`, `depositOffline`, `isPvpDenied`);
+    `getVault()`/`getWorldGuard()` return null while the hook is off. New hook code never runs outside `safe`.
+16d. Leaderboards: `LeaderboardCache` (top 10 of kills/wins/kd/elo + ELO rank map) is rebuilt on the main thread about
+    every 30 s by `IntegrationManager` and read lock-free by `PlaceholderAPIIntegration` (never creates stats/ELO
+    entries). Placeholders: `%omniarena_top_<kills|wins|kd|elo>_<1-10>_<name|value>%`, `%omniarena_elo%`,
+    `%omniarena_rank%`, `%omniarena_arena%`, `%omniarena_in_match%` (+ the older lifetime/match ones).
+    `/oa leaderboard create|remove|list` (`omniarena.admin.leaderboard`) builds the hologram in DecentHolograms
+    (preferred) or FancyHolograms with `%` placeholder lines when PlaceholderAPI is live, else static lines pushed
+    every 60 s. Hologram names are `omniarena_lb_<id>`; no hook -> a message pointing to the plugins/placeholders.
+16e. NPCs: `/oa npc create|remove|list` (`omniarena.admin.npc`, needs Citizens, `integrations.citizens`) binds a
+    Citizens NPC id to `NpcAction` (menu, join <arena>, queue [kit], spectate [arena]); a right-click runs the
+    matching `/oa ...` command as the player (all normal checks, 750 ms debounce). Citizens persists the NPC
+    entity itself; `npcs.yml` only keeps the binding.
+16f. Unloaded worlds: arenas whose region/spawn world is not loaded are kept (spawns stay as raw strings in
+    `Arena.getUnresolvedSpawns`, written back on save), `Arena.getMissingWorlds()` is non-empty and `isJoinable()` is
+    false; `joinArena` answers "Arena world 'x' is not loaded". `WorldListener` re-resolves on `WorldLoadEvent`
+    (`ArenaManager.onWorldLoad`) and demotes spawns on `WorldUnloadEvent` (arenas with a running match excepted).
+    `/oa arena tp` and `/oa setup` try `ArenaManager.ensureWorlds`, which loads the world through Multiverse
+    (v5 API, v4 API, then `mv load`) when present.
 16b. A paper/purpur jar and a spigot/bukkit jar write container snapshots differently; do not mix
     snapshot files between them.
 17. `RespawnType.WAVE`: dead players are parked in spectator mode (`MatchManager.queueWaveRespawn`,

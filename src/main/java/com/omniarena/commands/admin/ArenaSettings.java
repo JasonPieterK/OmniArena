@@ -94,7 +94,6 @@ public final class ArenaSettings {
             case "visual-scoreboard" -> arena.getVisual().setScoreboard(parseBoolean(value));
             case "visual-boss-bar" -> arena.getVisual().setBossBar(parseBoolean(value));
             case "visual-action-bar" -> arena.getVisual().setActionBar(parseBoolean(value));
-            case "visual-holograms" -> arena.getVisual().setHolograms(parseBoolean(value));
             case "region-world" -> arena.getRegion().setWorldName(value);
             case "region-min-x" -> arena.getRegion().setMinX(parseInt(value, arena.getRegion().getMinX()));
             case "region-min-y" -> arena.getRegion().setMinY(parseInt(value, arena.getRegion().getMinY()));
@@ -168,7 +167,6 @@ public final class ArenaSettings {
             case "visual-scoreboard" -> arena.getVisual().isScoreboard();
             case "visual-boss-bar" -> arena.getVisual().isBossBar();
             case "visual-action-bar" -> arena.getVisual().isActionBar();
-            case "visual-holograms" -> arena.getVisual().isHolograms();
             case "region-world" -> arena.getRegion().getWorldName();
             case "region-min-x" -> arena.getRegion().getMinX();
             case "region-min-y" -> arena.getRegion().getMinY();
@@ -218,13 +216,13 @@ public final class ArenaSettings {
             "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled", "team-enabled",
             "team-count", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire",
             "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
-            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar",
             "regen-auto", "module-killstreak", "module-combo", "module-power-up",
             "region-world", "region-min-x", "region-min-y", "region-min-z", "region-max-x", "region-max-y", "region-max-z");
     public static final java.util.Set<String> ARENA_BOOLEAN_KEYS = java.util.Set.of("enabled", "announcements", "mid-match-join",
             "spectator-allowed", "whitelist-enabled", "team-enabled", "fall-damage", "fire-damage", "drowning", "suffocation",
             "friendly-fire", "block-break", "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds",
-            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+            "visual-particles", "visual-scoreboard", "visual-boss-bar", "visual-action-bar",
             "module-killstreak", "module-combo", "module-power-up");
 
 

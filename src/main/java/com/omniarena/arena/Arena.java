@@ -150,7 +150,54 @@ public class Arena {
     }
 
     public boolean isJoinable() {
-        return state == ArenaState.WAITING || state == ArenaState.STARTING;
+        return (state == ArenaState.WAITING || state == ArenaState.STARTING) && missingWorlds.isEmpty();
+    }
+
+    // ── Worlds that are not loaded (yet) ───────────────────────
+    // An arena whose world is missing (Multiverse still loading it, world folder temporarily absent) is kept
+    // with all its data. Spawns of such worlds stay as raw "world:x:y:z:yaw:pitch" strings (written back
+    // unchanged on save) and the arena is unavailable until ArenaManager resolves them on WorldLoadEvent.
+
+    private final Map<SpawnType, List<String>> unresolvedSpawns = new EnumMap<>(SpawnType.class);
+    private final Set<String> missingWorlds = new LinkedHashSet<>();
+
+    /** Names of the worlds this arena needs (region, spawns) that are not loaded right now. */
+    public Set<String> getMissingWorlds() { return Collections.unmodifiableSet(missingWorlds); }
+
+    public boolean hasMissingWorld() { return !missingWorlds.isEmpty(); }
+
+    /** Raw serialized spawns that could not be resolved because their world is not loaded. */
+    public List<String> getUnresolvedSpawns(SpawnType type) {
+        return unresolvedSpawns.computeIfAbsent(type, t -> new ArrayList<>());
+    }
+
+    /**
+     * Recomputes {@link #getMissingWorlds()} from the region world and the unresolved spawns.
+     *
+     * @param loaded tells whether a world name is currently loaded
+     * @return true when the set of missing worlds changed
+     */
+    public boolean recomputeMissingWorlds(java.util.function.Predicate<String> loaded) {
+        Set<String> now = new LinkedHashSet<>();
+        if (region.isDefined() && !loaded.test(region.getWorldName())) now.add(region.getWorldName());
+        for (List<String> raws : unresolvedSpawns.values()) {
+            for (String raw : raws) {
+                String w = worldOf(raw);
+                if (w != null && !loaded.test(w)) now.add(w);
+            }
+        }
+        if (now.equals(missingWorlds)) return false;
+        missingWorlds.clear();
+        missingWorlds.addAll(now);
+        return true;
+    }
+
+    /** World name of a serialized location ("world:x:y:z:yaw:pitch"), or null when blank. */
+    public static String worldOf(String serialized) {
+        if (serialized == null) return null;
+        int i = serialized.indexOf(':');
+        String w = i < 0 ? serialized : serialized.substring(0, i);
+        return w.isBlank() ? null : w;
     }
 
     public boolean isRunning() {
@@ -221,5 +268,12 @@ public class Arena {
 
     public void clearSpawns(SpawnType type) {
         getSpawns(type).clear();
+        List<String> raw = unresolvedSpawns.get(type);
+        if (raw != null && !raw.isEmpty()) {
+            raw.clear(); // an explicit clear also drops spawns that were waiting for their world
+            recomputeMissingWorlds(w -> {
+                try { return org.bukkit.Bukkit.getWorld(w) != null; } catch (Throwable t) { return true; }
+            });
+        }
     }
 }

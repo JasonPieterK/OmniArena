@@ -78,6 +78,7 @@ public class PlayerDeathListener implements Listener {
         // Record kill
         if (killer != null && !killer.equals(victim) && match.hasPlayer(killer.getUniqueId())) {
             match.recordKill(killer.getUniqueId(), victim.getUniqueId());
+            com.omniarena.api.event.ApiEvents.fire(new com.omniarena.api.event.ArenaKillEvent(killer, victim, arena));
 
             // First blood
             if (!match.isFirstBloodDealt()) {

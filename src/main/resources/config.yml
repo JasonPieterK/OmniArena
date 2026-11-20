@@ -134,9 +134,6 @@ signs:
   glow-effect: true  # place glowstone behind arena signs
   update-interval: 20  # ticks between sign refreshes
 
-holograms:
-  refresh-seconds: 30  # how often leaderboard holograms update their text in place
-
 visual:
   titles: true
   sounds: true
@@ -144,7 +141,6 @@ visual:
   scoreboard: true
   boss-bar: true
   action-bar: true
-  holograms: true
   killstreak-titles: true
   kill-announcements: true
   victory-fireworks: true
@@ -176,6 +172,16 @@ integrations:
   placeholderapi: true
   worldguard: true
   luckperms: true
+  # Leaderboard placeholders for any hologram plugin (needs PlaceholderAPI): %omniarena_top_<kills|wins|kd|elo>_<1-10>_name%
+  # and ..._value%, plus %omniarena_elo%, %omniarena_rank%, %omniarena_arena%, %omniarena_in_match%.
+  # DecentHolograms: /oa leaderboard create <id> [kills|wins|kd|elo] [size] makes a hologram there. Needs the plugin installed.
+  decentholograms: true
+  # FancyHolograms: same command; used when DecentHolograms is not installed.
+  fancyholograms: true
+  # Citizens: /oa npc create <menu|join|queue|spectate> binds NPC right-clicks to menus, joining, queueing, spectating.
+  citizens: true
+  # Multiverse-Core: lets /oa arena tp and /oa setup load an arena's world on demand when it is not loaded.
+  multiverse: true
   tab:
     # TAB (https://modrinth.com/plugin/tab-was-taken) compatibility.
     # When takeover is true, OmniArena stops drawing its own sidebar + bossbar

@@ -379,15 +379,15 @@ public class TournamentManager {
 
     private void pay(Tournament t, UUID uuid, double amount, String place) {
         if (uuid == null || amount <= 0) return;
-        var vault = plugin.getIntegrationManager() != null ? plugin.getIntegrationManager().getVault() : null;
-        if (vault == null) {
-            plugin.getLogger().warning("Tournament '" + t.getName() + "': no economy provider, so the " + place + " prize was not paid. Fix: install Vault + an economy plugin, or set the prize to 0 with /tournament setprize " + t.getName() + " <1st|2nd|3rd> 0.");
+        var im = plugin.getIntegrationManager();
+        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+        String paid = im != null ? im.depositOffline(op, amount) : null;
+        if (paid == null) {
+            plugin.getLogger().warning("Tournament '" + t.getName() + "': no working economy provider, so the " + place + " prize was not paid. Fix: install Vault + an economy plugin, or set the prize to 0 with /tournament setprize " + t.getName() + " <1st|2nd|3rd> 0.");
             return;
         }
-        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
-        vault.depositOffline(op, amount);
         Player online = op.getPlayer();
-        if (online != null) MessageUtil.send(online, "<green>You received <yellow>" + vault.format(amount)
+        if (online != null) MessageUtil.send(online, "<green>You received <yellow>" + paid
                 + " <green>for " + place + " place in tournament " + t.getName() + "!");
     }
 
