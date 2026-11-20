@@ -23,6 +23,8 @@ import java.util.Optional;
  */
 public class KitCommandExecutor implements CommandExecutor, TabCompleter {
 
+    private static final List<String> ACTIONS = List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview");
+
     private final OmniArena plugin;
 
     public KitCommandExecutor(OmniArena plugin) {
@@ -130,7 +132,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                         }
                         return true;
                     } else {
-                        MessageUtil.send(player, "<red>Kit <yellow>" + subArgs[0] + "</yellow> is not public, so you can't preview/equip it. <gray>Ask an admin to publish it with <white>/oa kit admin setpublic " + subArgs[0] + "</white>.");
+                        MessageUtil.send(player, "<red>Kit <yellow>" + subArgs[0] + "</yellow> is not public, so you can't preview/equip it. <gray>Ask an admin to publish it with <white>/oa kits setpublic " + subArgs[0] + "</white>.");
                         return true;
                     }
                 }
@@ -179,7 +181,7 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
                 }
                 KitGUI.openKitPreview(player, previewAdmin.get());
             }
-            default -> MessageUtil.send(player, "<red>Unknown kit action <yellow>" + sub + "</yellow>. <gray>Valid: <white>create, list, delete, equip, share, accept, rename, preview</white>. Open the menu with <white>/kit</white>; see <white>/kit help</white>.");
+            default -> SmartErrors.unknownSubcommand(player, "/kit", args[0], ACTIONS);
         }
         return true;
     }
@@ -217,12 +219,12 @@ public class KitCommandExecutor implements CommandExecutor, TabCompleter {
         return tabComplete(sender, args);
     }
 
-    /** Shared by /kit and /oa kit (player side). */
+    /** Tab completion for /kit. */
     public List<String> tabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
         if (!(sender instanceof Player)) return List.of();
         String cur = args.length == 0 ? "" : args[args.length - 1];
         if (args.length == 1) {
-            return TabUtil.filter(List.of("help", "create", "list", "delete", "equip", "share", "accept", "rename", "preview"), cur);
+            return TabUtil.filter(ACTIONS, cur);
         }
         String sub = args[0].toLowerCase(java.util.Locale.ROOT);
         if (args.length == 2) {

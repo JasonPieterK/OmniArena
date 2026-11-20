@@ -129,12 +129,4 @@ public final class TabUtil {
             default -> hint("<text>", cur);
         };
     }
-
-    /** Online players plus the team names of the arena's running match. */
-    public static List<String> forceWinTargets(CommandSender sender, String arenaName, String cur) {
-        List<String> opts = new ArrayList<>(players(sender, ""));
-        ArenaManager.getInstance().get(arenaName).flatMap(a -> com.omniarena.match.MatchManager.getInstance().getMatch(a))
-                .ifPresent(m -> m.getTeams().forEach(t -> opts.add(t.getName())));
-        return filter(opts, cur);
-    }
 }

@@ -57,8 +57,6 @@ pvp:
     allowed-commands:
       - /oa
       - /pvp
-      - /pvpstatus
-      - /pvptag
       - /msg
       - /r
       - /helpop

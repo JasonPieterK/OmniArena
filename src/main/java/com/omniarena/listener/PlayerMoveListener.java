@@ -46,11 +46,6 @@ public class PlayerMoveListener implements Listener {
         Arena arena = arenaOpt.get();
         if (!arena.isRunning() || !arena.getRegion().isDefined()) return;
 
-        if (mm.isArenaFrozen(arena.getName())) {
-            event.setTo(event.getFrom());
-            return;
-        }
-
         if (!arena.getRegion().contains(event.getTo())) {
             regionHandler.enforceRegion(player, arena);
         }

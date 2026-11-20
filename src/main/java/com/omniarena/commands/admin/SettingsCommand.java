@@ -127,7 +127,9 @@ public class SettingsCommand extends SubCommand {
         String key = args[1];
         SettingDefinition entry = byKey.get(key.toLowerCase(Locale.ROOT));
         if (entry == null) {
-            MessageUtil.send(sender, "<red>Unknown setting <yellow>" + key + "</yellow>. <gray>See all keys with <white>/oa settings</white> or press TAB after <white>/oa settings set</white>.");
+            String hint = com.omniarena.util.Suggest.closest(key, byKey.keySet())
+                    .map(k -> " <gray>Did you mean " + com.omniarena.util.Suggest.click("/oa settings set " + k + " ") + "<gray>?").orElse("");
+            MessageUtil.send(sender, "<red>Unknown setting <yellow>" + com.omniarena.util.Suggest.escape(key) + "</yellow>." + hint + " <gray>See all keys with <white>/oa settings</white> or press TAB after <white>/oa settings set</white>.");
             return;
         }
         String raw = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
@@ -159,7 +161,7 @@ public class SettingsCommand extends SubCommand {
                         RegenAnimationType parsed = RegenAnimationType.parse(raw);
                         if (parsed != null) yield parsed.name();
                         {
-                            MessageUtil.send(sender, "<red>Unknown regen style <yellow>" + raw + "</yellow>. <gray>Valid: <white>" + Arrays.stream(RegenAnimationType.values()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")) + "</white> (see <white>/oa help regenstyles</white>).");
+                            MessageUtil.send(sender, "<red>Unknown regen style <yellow>" + raw + "</yellow>. <gray>Valid: <white>" + Arrays.stream(RegenAnimationType.values()).map(Enum::name).collect(java.util.stream.Collectors.joining(", ")) + "</white>.");
                             yield null;
                         }
                     }

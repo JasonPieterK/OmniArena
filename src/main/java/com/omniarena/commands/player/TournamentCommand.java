@@ -4,6 +4,7 @@ import java.util.Locale;
 import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
+import com.omniarena.commands.SmartErrors;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.permission.PermissionChecker;
@@ -16,6 +17,8 @@ import org.bukkit.entity.Player;
 import java.util.List;
 
 public class TournamentCommand extends SubCommand {
+
+    private static final List<String> ACTIONS = List.of("create", "join", "leave", "start", "status", "list", "delete", "setprize");
 
     private static final String PERM_CREATE = "omniarena.tournament.create";
     private static final String PERM_ADMIN = "omniarena.tournament.admin";
@@ -43,7 +46,7 @@ public class TournamentCommand extends SubCommand {
     public void execute(CommandSender sender, String[] args) {
         TournamentManager tm = plugin.getTournamentManager();
         if (args.length == 0) {
-            MessageUtil.send(sender, msg("tournament-usage", "usage", USAGE));
+            SmartErrors.wrongArgs(sender, "/tournament <create|join|leave|start|status|list|delete|setprize>", "/tournament list");
             return;
         }
         String action = args[0].toLowerCase();
@@ -68,7 +71,8 @@ public class TournamentCommand extends SubCommand {
                 if (!sender.hasPermission(PERM_CREATE) && !isAdmin(sender)) {
                     MessageUtil.send(sender, msg("no-permission")); return;
                 }
-                if (args.length < 4) { MessageUtil.send(sender, msg("tournament-usage", "usage", "/oa tournament create <name> <arena> <maxPlayers>")); return; }
+                if (args.length < 4) { SmartErrors.wrongArgs(sender, "/tournament create <name> <arena> <maxPlayers>", "/tournament create cup duel_1 8"); return; }
+                if (SmartErrors.arena(sender, args[2], "/tournament create " + args[1] + " ").isEmpty()) return;
                 int max;
                 try { max = Integer.parseInt(args[3]); }
                 catch (NumberFormatException e) { MessageUtil.send(sender, msg("invalid-number", "input", args[3])); return; }
@@ -76,12 +80,12 @@ public class TournamentCommand extends SubCommand {
             }
             case "join" -> {
                 if (!isPlayer) { MessageUtil.send(sender, msg("tournament-players-only")); return; }
-                if (args.length < 2) { MessageUtil.send(sender, msg("tournament-usage", "usage", "/oa tournament join <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/tournament join <name>", "/tournament join <name>"); return; }
                 tm.joinTournament((Player) sender, args[1]);
             }
             case "leave" -> {
                 if (!isPlayer) { MessageUtil.send(sender, msg("tournament-players-only")); return; }
-                if (args.length < 2) { MessageUtil.send(sender, msg("tournament-usage", "usage", "/oa tournament leave <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/tournament leave <name>", "/tournament leave <name>"); return; }
                 tm.leaveTournament((Player) sender, args[1]);
             }
             case "start" -> {
@@ -98,9 +102,9 @@ public class TournamentCommand extends SubCommand {
             }
             case "setprize" -> {
                 if (!isAdmin(sender)) { MessageUtil.send(sender, msg("no-permission")); return; }
-                if (args.length < 4) { MessageUtil.send(sender, msg("tournament-usage", "usage", "/oa tournament setprize <name> <1st|2nd|3rd> <amount>")); return; }
+                if (args.length < 4) { SmartErrors.wrongArgs(sender, "/tournament setprize <name> <1st|2nd|3rd> <amount>", "/tournament setprize <name> 1st 500"); return; }
                 Tournament t = tm.getTournament(args[1]);
-                if (t == null) { MessageUtil.send(sender, msg("tournament-not-found", "name", args[1])); return; }
+                if (t == null) { tournamentNotFound(sender, tm, args[1], "setprize"); return; }
                 double amount;
                 try { amount = Double.parseDouble(args[3]); }
                 catch (NumberFormatException e) { amount = -1; }
@@ -114,15 +118,23 @@ public class TournamentCommand extends SubCommand {
                 tm.saveAll();
                 MessageUtil.send(sender, msg("tournament-prize-set", "place", args[2], "amount", String.valueOf(amount), "name", t.getName()));
             }
-            default -> MessageUtil.send(sender, msg("tournament-usage", "usage", USAGE));
+            default -> SmartErrors.unknownSubcommand(sender, "/tournament", args[0], ACTIONS);
         }
     }
 
     private Tournament need(CommandSender sender, TournamentManager tm, String[] args) {
-        if (args.length < 2) { MessageUtil.send(sender, msg("tournament-usage", "usage", "/oa tournament " + args[0] + " <name>")); return null; }
+        if (args.length < 2) { SmartErrors.wrongArgs(sender, "/tournament " + args[0] + " <name>", "/tournament " + args[0] + " <name>"); return null; }
         Tournament t = tm.getTournament(args[1]);
-        if (t == null) MessageUtil.send(sender, msg("tournament-not-found", "name", args[1]));
+        if (t == null) tournamentNotFound(sender, tm, args[1], args[0]);
         return t;
+    }
+
+    private void tournamentNotFound(CommandSender sender, TournamentManager tm, String input, String action) {
+        List<String> names = new java.util.ArrayList<>();
+        for (Tournament x : tm.getAll()) names.add(x.getName());
+        String hint = com.omniarena.util.Suggest.closest(input, names)
+                .map(n -> " <gray>Did you mean " + com.omniarena.util.Suggest.click("/tournament " + action + " " + n) + "<gray>?").orElse("");
+        MessageUtil.send(sender, msg("tournament-not-found", "name", com.omniarena.util.Suggest.escape(input)) + hint);
     }
 
     private boolean canManage(CommandSender sender, Tournament t) {
@@ -134,9 +146,9 @@ public class TournamentCommand extends SubCommand {
         String cur = args.length == 0 ? "" : args[args.length - 1];
         boolean admin = isAdmin(sender);
         if (args.length == 1) {
-            List<String> opts = new java.util.ArrayList<>(List.of("join", "leave", "start", "status", "list", "info"));
+            List<String> opts = new java.util.ArrayList<>(List.of("join", "leave", "start", "status", "list"));
             if (admin || sender.hasPermission(PERM_CREATE)) opts.add("create");
-            if (admin) opts.addAll(List.of("delete", "cancel", "setprize"));
+            if (admin) opts.addAll(List.of("delete", "setprize"));
             return TabUtil.filter(opts, cur);
         }
         String a = args[0].toLowerCase(java.util.Locale.ROOT);

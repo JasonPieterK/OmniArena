@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  // Token comes from the /oa website link (?token=...). Keep it in sessionStorage and strip it
+  // Token comes from the /oa web link (?token=...). Keep it in sessionStorage and strip it
   // from the address bar so it does not linger in history / screenshots.
   function initToken() {
     let t = new URLSearchParams(location.search).get('token') || '';
@@ -45,7 +45,7 @@
         cache: 'no-store',
       });
     } catch (e) {
-      throw new Error('Cannot connect to server. Make sure the web dashboard is running (/oa start).');
+      throw new Error('Cannot connect to server. Make sure the web dashboard is running (/oa plugin start).');
     }
     const txt = await res.text();
     if (!res.ok) {
@@ -66,7 +66,7 @@
     stopLivePolling();
     setStatus(false, 'Session expired');
     $('applyBtn').disabled = true;
-    toast('Session expired or logged out. Run /oa website in-game for a new link.', 'error');
+    toast('Session expired or logged out. Run /oa web in-game for a new link.', 'error');
   }
 
   // ── Toast + confetti ───────────────────────────────────────────────────
@@ -138,7 +138,7 @@
 
   // ── Load ─────────────────────────────────────────────────────────────
   async function load() {
-    if (!S.token) { setStatus(false, 'No token - run /oa website'); $('statGrid').innerHTML = ''; $('arenaGrid').innerHTML = emptyState('ph-key', 'Not logged in', 'Run /oa website in-game and open the link it prints.'); return; }
+    if (!S.token) { setStatus(false, 'No token - run /oa web'); $('statGrid').innerHTML = ''; $('arenaGrid').innerHTML = emptyState('ph-key', 'Not logged in', 'Run /oa web in-game and open the link it prints.'); return; }
     if (S.expired) return;
     setStatus(false, 'Loading…');
     $('arenaGrid').innerHTML = $('arenaGrid').innerHTML || '<div class="empty"><i class="ph-bold ph-circle-notch"></i><p>Loading…</p></div>';
@@ -574,7 +574,7 @@
     S.token = ''; S.expired = true; stopLivePolling();
     setStatus(false, 'Logged out');
     $('applyBtn').disabled = true;
-    toast('Logged out. Run /oa website for a new link.');
+    toast('Logged out. Run /oa web for a new link.');
   }
 
   // ── Arena draft helpers (matches Java ArenaView json) ──────────────────

@@ -15,16 +15,26 @@ import java.util.List;
 
 public class LifecycleCommand extends SubCommand {
 
+    private static final List<String> ACTIONS = List.of("start", "stop", "restart", "version");
+
     private final OmniArena plugin;
 
     public LifecycleCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ALL, "/oa <start|stop|restart>", "Plugin lifecycle control");
+        super(PermissionChecker.ADMIN_ALL, "/oa plugin <start|stop|restart|version>", "Start, stop, restart or show the plugin version");
         this.plugin = plugin;
     }
 
     @Override
     public void execute(CommandSender sender, String[] args) {
-        String action = args.length > 0 ? args[0].toLowerCase() : "help";
+        if (args.length == 0) {
+            com.omniarena.commands.SmartErrors.wrongArgs(sender, getUsage(), "/oa plugin version");
+            return;
+        }
+        String action = args[0].toLowerCase();
+        if (!ACTIONS.contains(action)) {
+            com.omniarena.commands.SmartErrors.unknownSubcommand(sender, "/oa plugin", args[0], ACTIONS);
+            return;
+        }
         executeAction(sender, action);
     }
 
@@ -33,6 +43,8 @@ public class LifecycleCommand extends SubCommand {
             case "start" -> start(sender);
             case "stop" -> stop(sender);
             case "restart" -> restart(sender);
+            case "version" -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("plugin-version")
+                    .replace("{version}", plugin.getDescription().getVersion()));
             default -> showHelp(sender);
         }
     }
@@ -69,9 +81,9 @@ public class LifecycleCommand extends SubCommand {
                     + plugin.getKitManager().getAllAdminKits().size() + " kit(s)");
         } catch (Exception e) {
             plugin.setStopped(true);
-            MessageUtil.send(sender, "<red>✗ OmniArena failed to start. <gray>See the console for the full error, fix the cause (often a broken config.yml/arena file), then run <white>/oa start</white> again.");
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to start. <gray>See the console for the full error, fix the cause (often a broken config.yml/arena file), then run <white>/oa plugin start</white> again.");
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Start failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
-                    + "). Fix the cause shown in the trace (commonly invalid YAML in plugins/OmniArena/*.yml) and run /oa start.", e);
+                    + "). Fix the cause shown in the trace (commonly invalid YAML in plugins/OmniArena/*.yml) and run /oa plugin start.", e);
         }
     }
 
@@ -131,9 +143,9 @@ public class LifecycleCommand extends SubCommand {
             MessageUtil.send(sender, "<green>✓ OmniArena stopped successfully");
             MessageUtil.send(sender, "<gray>Kicked <yellow>" + kicked + "</yellow> player(s), canceled all tasks, data saved");
         } catch (Exception e) {
-            MessageUtil.send(sender, "<red>✗ OmniArena failed to stop cleanly. <gray>See the console for the full error; data may not be saved: run <white>/oa stop</white> again or restart the server.");
+            MessageUtil.send(sender, "<red>✗ OmniArena failed to stop cleanly. <gray>See the console for the full error; data may not be saved: run <white>/oa plugin stop</white> again or restart the server.");
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Stop failed (" + e.getClass().getSimpleName() + ": " + e.getMessage()
-                    + "). Some data may not have been saved; retry /oa stop or restart the server.", e);
+                    + "). Some data may not have been saved; retry /oa plugin stop or restart the server.", e);
         }
     }
 
@@ -147,15 +159,15 @@ public class LifecycleCommand extends SubCommand {
 
     private void showHelp(CommandSender sender) {
         MessageUtil.send(sender, "<gold>=== OmniArena Lifecycle ===");
-        MessageUtil.send(sender, "<yellow>/oa start</yellow> <gray>- initialize all systems");
-        MessageUtil.send(sender, "<yellow>/oa stop</yellow> <gray>- end matches, save data, shutdown");
-        MessageUtil.send(sender, "<yellow>/oa restart</yellow> <gray>- full system restart");
+        MessageUtil.send(sender, "<yellow>/oa plugin start</yellow> <gray>- initialize all systems");
+        MessageUtil.send(sender, "<yellow>/oa plugin stop</yellow> <gray>- end matches, save data, shutdown");
+        MessageUtil.send(sender, "<yellow>/oa plugin restart</yellow> <gray>- full system restart");
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
         String cur = args.length == 0 ? "" : args[args.length - 1];
-        if (args.length == 1) return TabUtil.filter(List.of("start", "stop", "restart"), cur);
+        if (args.length == 1) return TabUtil.filter(ACTIONS, cur);
         return List.of();
     }
 }

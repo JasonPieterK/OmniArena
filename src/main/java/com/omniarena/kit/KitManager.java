@@ -56,7 +56,7 @@ public class KitManager {
                 AdminKit kit = loadAdminKitFile(f);
                 adminKits.put(kit.getName().toLowerCase(), kit);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load admin kit file plugins/OmniArena/admin-kits/" + f.getName() + " (" + e + "). The kit was skipped. Fix: repair the YAML in that file (item/material names must be valid) or delete it and re-create the kit with /oa kit admin create <name>.");
+                plugin.getLogger().warning("Failed to load admin kit file plugins/OmniArena/admin-kits/" + f.getName() + " (" + e + "). The kit was skipped. Fix: repair the YAML in that file (item/material names must be valid) or delete it and re-create the kit with /oa kits create <name>.");
             }
         }
     }
@@ -70,7 +70,7 @@ public class KitManager {
             // Copy directly from the plugin jar's resource stream into admin-kits/
             try (java.io.InputStream in = plugin.getResource("kits/" + name + ".yml")) {
                 if (in == null) {
-                    plugin.getLogger().warning("Bundled default kit '" + name + "' is missing from the plugin jar (kits/" + name + ".yml), so it was not installed. Fix: re-download OmniArena.jar, or create the kit yourself with /oa kit admin create " + name + ".");
+                    plugin.getLogger().warning("Bundled default kit '" + name + "' is missing from the plugin jar (kits/" + name + ".yml), so it was not installed. Fix: re-download OmniArena.jar, or create the kit yourself with /oa kits create " + name + ".");
                     continue;
                 }
                 java.nio.file.Files.copy(in, target.toPath(),

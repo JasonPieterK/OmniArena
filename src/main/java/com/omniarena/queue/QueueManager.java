@@ -276,7 +276,6 @@ public class QueueManager {
      */
     private void processMatchmaking() {
         if (queues.isEmpty()) return;
-        if (plugin.getMatchManager().isLockdown()) return;
         long now = System.currentTimeMillis();
         var mm = plugin.getMatchManager();
 

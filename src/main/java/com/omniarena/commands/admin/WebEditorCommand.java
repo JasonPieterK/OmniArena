@@ -14,13 +14,20 @@ public class WebEditorCommand extends SubCommand {
     private final OmniArena plugin;
 
     public WebEditorCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_ALL, "/oa website", "Open the web dashboard");
+        super(PermissionChecker.ADMIN_ALL, "/oa web [kill]", "Open the web dashboard (kill = revoke all sessions)");
         this.plugin = plugin;
     }
 
     @Override
     public void execute(CommandSender sender, String[] args) {
         WebDashboardServer web = plugin.getWebDashboardServer();
+        if (args.length > 0 && args[0].equalsIgnoreCase("kill")) {
+            if (web == null) { MessageUtil.send(sender, "<red>The web dashboard is not running, so there are no sessions to kill."); return; }
+            int before = web.activeSessionCount();
+            web.killAllSessions();
+            MessageUtil.send(sender, "<green>Killed <yellow>" + before + "</yellow> active web session(s).");
+            return;
+        }
         if (web == null) {
             MessageUtil.send(sender, "<red>The web dashboard is disabled or failed to start. <gray>Set <white>web.enabled: true</white> in config.yml, run <white>/oa reload</white> (or restart), and check the console for port/bind errors.");
             return;
@@ -31,7 +38,7 @@ public class WebEditorCommand extends SubCommand {
             int active = web.activeSessionCount();
             int max = web.getSessions().getMaxSessions();
             MessageUtil.send(sender, "<red>Session limit reached (<yellow>" + active + "/" + max + "</yellow> active), so no new editor link can be created. <gray>Raise the limit in <white>web.max-sessions</white> in config.yml, or wait for sessions to expire.");
-            MessageUtil.send(sender, "<gray>Kill existing sessions first: <yellow>/oa override killweb");
+            MessageUtil.send(sender, "<gray>Kill existing sessions first: <yellow>/oa web kill");
             return;
         }
 
@@ -44,11 +51,12 @@ public class WebEditorCommand extends SubCommand {
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
                     net.kyori.adventure.text.Component.text("Click to open in browser")));
         MessageUtil.send(sender, linkComponent);
-        MessageUtil.send(sender, "<dark_gray>Kill session: <yellow>/oa override killweb");
+        MessageUtil.send(sender, "<dark_gray>Revoke all sessions: <yellow>/oa web kill");
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (args.length == 1) return com.omniarena.commands.TabUtil.filter(List.of("kill"), args[0]);
         return List.of();
     }
 }

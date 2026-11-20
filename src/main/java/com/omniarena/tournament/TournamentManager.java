@@ -279,7 +279,7 @@ public class TournamentManager {
             if (pm.isStarted() && checkLive(t, arena, pm)) return;
         }
 
-        boolean busy = mm.getMatch(arena).isPresent() || mm.isLockdown() || !arena.isJoinable();
+        boolean busy = mm.getMatch(arena).isPresent() || !arena.isJoinable();
         long graceMs = ConfigManager.getInstance().getConfig().getInt("tournament.walkover-grace-seconds", 60) * 1000L;
         boolean launched = false;
 

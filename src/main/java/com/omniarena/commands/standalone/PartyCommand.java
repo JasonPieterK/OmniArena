@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 
 public class PartyCommand implements CommandExecutor, TabCompleter {
 
+    private static final List<String> ACTIONS = List.of("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info");
+
     private final OmniArena plugin;
     private final PartyManager partyManager;
 
@@ -51,7 +53,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "invite" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party invite <player></yellow> <gray>(the player must be online; use tab-complete).");
+                    com.omniarena.commands.SmartErrors.wrongArgs(player, "/party invite <player>", "/party invite <player>");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
@@ -72,7 +74,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "kick" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party kick <player></yellow> <gray>(the player must be online; use tab-complete).");
+                    com.omniarena.commands.SmartErrors.wrongArgs(player, "/party kick <player>", "/party kick <player>");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
@@ -84,7 +86,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
             }
             case "leader" -> {
                 if (args.length < 2) {
-                    MessageUtil.send(player, "<red>Missing player name. <gray>Usage: <yellow>/party leader <player></yellow> <gray>(the player must be online; use tab-complete).");
+                    com.omniarena.commands.SmartErrors.wrongArgs(player, "/party leader <player>", "/party leader <player>");
                     return true;
                 }
                 Player target = plugin.getServer().getPlayer(args[1]);
@@ -104,7 +106,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
                     MessageUtil.send(player, "<gray>Members: <yellow>" + party.getSize());
                 }
             }
-            default -> showHelp(player);
+            default -> com.omniarena.commands.SmartErrors.unknownSubcommand(player, "/party", args[0], ACTIONS);
         }
 
         return true;
@@ -128,8 +130,7 @@ public class PartyCommand implements CommandExecutor, TabCompleter {
         String cur = args.length == 0 ? "" : args[args.length - 1];
         if (!(sender instanceof Player player)) return List.of();
         if (args.length == 1) {
-            return com.omniarena.commands.TabUtil.filter(
-                    List.of("create", "disband", "invite", "accept", "decline", "leave", "kick", "leader", "info"), cur);
+            return com.omniarena.commands.TabUtil.filter(ACTIONS, cur);
         }
         if (args.length == 2) {
             String a = args[0].toLowerCase(java.util.Locale.ROOT);
