@@ -571,6 +571,7 @@ them with `/oa edit`).
 
 | Key | Default | Meaning |
 |-----|---------|---------|
+| `general.startup-banner` | `full` | `full`, `compact` or `off`: the console banner shown when the plugin enables. `full` is the animated neubrutalist banner (about 2 seconds, drawn on its own thread); it only animates on a real interactive terminal. Plain consoles (no terminal, `TERM=dumb`, a hosting panel such as Pterodactyl) get the finished banner as one static frame, and `NO_COLOR` removes the colours. `compact` is an 8 line static version, `off` prints nothing. Every mode except `off` also logs a one-line plain summary, so log files stay readable. A short static banner is also printed on shutdown |
 | `general.debug` | `false` | verbose console diagnostics |
 | `general.wand-material` | `WOODEN_HOE` | any item name: the region selection wand |
 

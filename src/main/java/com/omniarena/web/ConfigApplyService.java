@@ -104,6 +104,14 @@ public class ConfigApplyService {
     private Object convertAndValidate(com.omniarena.web.model.SettingDefinition def, JsonElement value, List<String> errors) {
         String key = def.key();
         if (value == null || value.isJsonNull()) { errors.add(key + ": value is required"); return null; }
+        if ("general.startup-banner".equals(key)) {
+            String s = value.isJsonPrimitive() ? value.getAsString().trim().toLowerCase(java.util.Locale.ROOT) : "";
+            if (!s.equals("full") && !s.equals("compact") && !s.equals("off")) {
+                errors.add(key + ": must be full, compact or off");
+                return null;
+            }
+            return s;
+        }
         switch (def.type()) {
             case BOOLEAN -> {
                 if (value.isJsonPrimitive()) {

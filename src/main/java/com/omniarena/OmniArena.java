@@ -45,6 +45,7 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.betting.BettingManager bettingManager;
     private com.omniarena.tournament.TournamentManager tournamentManager;
     private com.omniarena.health.Watchdog watchdog;
+    private com.omniarena.banner.BannerService banner;
     private volatile boolean stopped = false;
     private org.bukkit.scheduler.BukkitTask signUpdateTask;
 
@@ -90,6 +91,7 @@ public final class OmniArena extends JavaPlugin {
         // ── Config ────────────────────────────────────────────────
         configManager = new ConfigManager(this);
         configManager.load();
+        banner = new com.omniarena.banner.BannerService(this);
 
         // ── Core systems ──────────────────────────────────────────
         visual              = new VisualController(this);
@@ -196,7 +198,7 @@ public final class OmniArena extends JavaPlugin {
         watchdog.start();
 
         long elapsed = System.currentTimeMillis() - start;
-        logStartupBanner(elapsed);
+        try { banner.showStartup(elapsed); } catch (Throwable t) { getLogger().warning("Startup banner failed: " + t); }
     }
 
     /** (Re)starts the periodic sign refresh; safe to call repeatedly (e.g. after /oa plugin start). */
@@ -216,46 +218,10 @@ public final class OmniArena extends JavaPlugin {
         return signUpdateTask != null && !signUpdateTask.isCancelled();
     }
 
-    private void logStartupBanner(long elapsed) {
-        String line = "==============================================";
-        String version = getDescription().getVersion();
-        String gameVersion = getServer().getBukkitVersion().split("-")[0] /* Paper-only getMinecraftVersion avoided */;
-
-        org.bukkit.command.ConsoleCommandSender console = getServer().getConsoleSender();
-        console.sendMessage(org.bukkit.ChatColor.DARK_BLUE.toString() + org.bukkit.ChatColor.BOLD + line);
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "   OOO   M   M  N   N  III");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  O   O  MM MM  NN  N   I ");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  O   O  M M M  N N N   I ");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  O   O  M   M  N  NN   I ");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "   OOO   M   M  N   N  III");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + " ");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "   AAA   RRRR   EEEEE  N   N   AAA ");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  A   A  R   R  E      NN  N  A   A");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  AAAAA  RRRR   EEEE   N N N  AAAAA");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  A   A  R  R   E      N  NN  A   A");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "  A   A  R   R  EEEEE  N   N  A   A");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + " ");
-        console.sendMessage(org.bukkit.ChatColor.LIGHT_PURPLE.toString() + org.bukkit.ChatColor.BOLD + "-- GAME VERSION: " + org.bukkit.ChatColor.AQUA + gameVersion.toUpperCase(java.util.Locale.ROOT) + org.bukkit.ChatColor.LIGHT_PURPLE + " --");
-        console.sendMessage(org.bukkit.ChatColor.YELLOW.toString() + org.bukkit.ChatColor.BOLD + "-- PLUGIN VERSION: " + org.bukkit.ChatColor.GREEN + version.toUpperCase(java.util.Locale.ROOT) + org.bukkit.ChatColor.YELLOW + " --");
-        console.sendMessage(org.bukkit.ChatColor.AQUA.toString() + org.bukkit.ChatColor.BOLD + "-- MADE BY " + org.bukkit.ChatColor.GOLD + "JASON P" + org.bukkit.ChatColor.AQUA + " --");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "-- LOADED " + arenaManager.getAll().size() + " ARENA(S), " + kitManager.getAllAdminKits().size() + " ADMIN KIT(S) --");
-        console.sendMessage(org.bukkit.ChatColor.BLUE.toString() + org.bukkit.ChatColor.BOLD + "-- ENABLED IN " + elapsed + "MS --");
-        console.sendMessage(org.bukkit.ChatColor.DARK_BLUE.toString() + org.bukkit.ChatColor.BOLD + line);
-    }
-
-    private void logShutdownBanner() {
-        String line = "==============================================";
-        getLogger().info(line);
-        getLogger().info("  OMNIARENA SHUTDOWN");
-        getLogger().info("  All active match sessions terminated.");
-        getLogger().info("  All player stats and arena configurations saved.");
-        getLogger().info("  OmniArena disabled cleanly.");
-        getLogger().info(line);
-    }
-
     @Override
     public void onDisable() {
         stopped = true;
+        if (banner != null) banner.cancel();
         if (watchdog != null) watchdog.stop();
         if (signUpdateTask != null) { signUpdateTask.cancel(); signUpdateTask = null; }
 
@@ -305,6 +271,6 @@ public final class OmniArena extends JavaPlugin {
 
         try { com.omniarena.platform.Platform.shutdown(); } catch (Throwable t) { getLogger().warning("Platform shutdown failed: " + t.getMessage()); }
 
-        logShutdownBanner();
+        try { if (banner != null) banner.showShutdown(); } catch (Throwable t) { getLogger().warning("Shutdown banner failed: " + t); }
     }
 }

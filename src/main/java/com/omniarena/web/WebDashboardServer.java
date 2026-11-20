@@ -202,11 +202,20 @@ public class WebDashboardServer {
     }
 
     private String dashboardUrl(String token) {
+        return configuredBaseUrl() + "/?token=" + token;
+    }
+
+    private String configuredBaseUrl() {
         String base = plugin.getConfigManager().getConfig().getString("web.public-url", "").trim();
         if (base.isBlank()) {
             base = "http://127.0.0.1:" + plugin.getConfigManager().getConfig().getInt("web.port", 8123);
         }
-        return base.replaceAll("/+$", "") + "/?token=" + token;
+        return base.replaceAll("/+$", "");
+    }
+
+    /** Dashboard URL without any token (for the startup banner), or null while the server is not running. */
+    public String baseUrl() {
+        return server == null ? null : configuredBaseUrl();
     }
 
     private void handleRoot(HttpExchange exchange) throws IOException {

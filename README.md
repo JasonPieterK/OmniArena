@@ -26,6 +26,7 @@ Developer and AI-agent notes: [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md).
   and TAB support.
 - **Self-healing.** Config repair with backups, automatic migration of old configs, a watchdog for stuck arenas and
   tasks, and `/oa doctor`.
+- **Animated console banner** on startup (`general.startup-banner: full | compact | off`; plain consoles and panels get a static frame).
 - **In-game guide books** (`/oa guide`), a **web dashboard**, and an **event API** for other plugins.
 
 ---

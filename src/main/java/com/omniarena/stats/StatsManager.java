@@ -30,6 +30,9 @@ public class StatsManager {
 
     public static StatsManager getInstance() { return instance; }
 
+    /** Number of players with lifetime stats currently loaded (read-only, creates nothing). */
+    public int loadedCount() { return statsCache.size(); }
+
     public void loadAll() {
         if (!statsFile.exists()) return;
         try {

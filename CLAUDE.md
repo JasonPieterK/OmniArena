@@ -21,11 +21,11 @@ mvn -q -Ppaper,mc-26.2 -Dtest=TournamentBracketTest test
 scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HOME / JAVA21_HOME)
 ```
 
-- Tests live in `src/test/java`: `arena` (`ArenaWorldsTest`, `regen/RegenAnimationTypeTest`), `config`
+- Tests live in `src/test/java`: `banner` (`BannerRendererTest`, `BannerTerminalTest`), `arena` (`ArenaWorldsTest`, `regen/RegenAnimationTypeTest`), `config`
   (`ConfigMigrationTest`), `gui` (`MenuLayoutTest`), `guide` (`GuidePaginatorTest`, `GuideBooksTest`), `health`
   (`YamlRepairTest`, `BackupAndSafeYamlTest`, `ErrorTrackerTest`), `integration` (`FailureTrackerTest`,
   `LeaderboardPlaceholderTest`, `NpcActionTest`), `tournament` (`TournamentBracketTest`), `util` (`SuggestTest`),
-  `web` (`ConfigSchemaServiceTest`). 79 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`.
+  `web` (`ConfigSchemaServiceTest`). 92 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`.
   Only pure logic is unit tested; code that needs a live Bukkit server is not.
 - `target/` and `dist/` are git-ignored build output; never edit them.
 - Repositories needed: PaperMC, Spigot snapshots, PurpurMC, EssentialsX, PlaceholderAPI, EngineHub,
@@ -109,6 +109,7 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `permission` | `PermissionChecker` | Permission node constants and `hasAdmin`. |
 | `health` | `ConfigRepair`, `YamlRepair`, `SafeYaml`, `BackupUtil`, `Watchdog`, `ErrorGuard`, `ErrorTracker`, `HealthReport`, `Doctor` | Self-healing, section 16. |
 | `web` | `WebDashboardServer`, `WebSessionManager`, `ConfigSchemaService`, `ConfigApplyService`, `DocsCatalog`, `web.model.*` | Embedded HTTP dashboard, schema (exactly the keys of `config.yml` + `messages.yml`) and validated apply. Static UI in `src/main/resources/web/`. |
+| `banner` | `BannerService`, `BannerRenderer`, `BannerData`, `BannerTerminal`, `Canvas`, `Tone`, `ColorMode` | Neubrutalist startup/shutdown console banner (`general.startup-banner` full\|compact\|off). `BannerRenderer` is pure (frames as `List<String>`, tested); `BannerTerminal.decide` picks animated/static/compact/off from env (TTY, `TERM=dumb`, `NO_COLOR`, panel vars like `P_SERVER_UUID`). `BannerService` gathers data on the main thread, animates on a daemon thread writing to raw fd 1 (not `System.out`, which the server logger wraps), holds a lock, caps at ~2.5 s, and is cancelled by `onDisable`. Always also logs a plain one-line summary. |
 | `util` | `AsyncUtil`, `YamlUtil`, `MessageUtil`, `ColorUtil`, `ItemUtil`, `LocationUtil`, `KitYamlLoader`, `Suggest` | Scheduling helpers, YAML IO, MiniMessage helpers, pure did-you-mean (`Suggest.closest`, `click`, `run`). |
 
 Resources: `plugin.yml` (filtered), `config.yml` (layout v2), `messages.yml`, `guides.yml`, `arenas/example.yml` (template,
@@ -140,16 +141,16 @@ completes).
 6. Commands (`oa`, `kit`, `join`, `leave`, `party`, forwarders for the rest including `bet`,
    `tournament`, `spectate`, `pvp`; `CommandManager` also installs `guides.yml` through `GuideCommand`), then
    listeners (plus `MenuListener` and `Platform.get().registerListeners`), then `startSignUpdateTask()`,
-   then `new Watchdog(this).start()`.
+   then `new Watchdog(this).start()`, then `BannerService.showStartup` (the animated variant starts on the first server tick, after the "Done" line).
 
 ### onDisable (order matters; each step is wrapped so one failure cannot skip the rest)
 
-`stopped = true`; `watchdog.stop()`; cancel sign task; close open GUIs; `leaveArena` for every online player in
+`stopped = true`; `banner.cancel()`; `watchdog.stop()`; cancel sign task; close open GUIs; `leaveArena` for every online player in
 every active match (so results land in the saves below); `matchManager.shutdownStateStore()`;
 `BlockRestoreModule.cancelAll()` (finishes regens, including those just started by the matches that ended);
 `combat.shutdown()`; `queue.stop()`, `party.stop()`; `tournament.stop()` (save + clear); `betting.refundAll()`;
 `stats.saveAll()`; `arena.saveAll()`; `elo.shutdown(); elo.saveAll()`; `visual.shutdown()`; `module.shutdown()`;
-`web.stop()`; `integration.shutdown()`; `Platform.shutdown()`.
+`web.stop()`; `integration.shutdown()`; `Platform.shutdown()`; `banner.showShutdown()` (static shutdown banner).
 
 ### `/oa plugin stop|start|restart|version` (`LifecycleCommand`)
 

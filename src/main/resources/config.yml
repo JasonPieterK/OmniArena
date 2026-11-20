@@ -8,6 +8,7 @@ config-version: 2  # internal, do not edit
 
 # ── General ──────────────────────────────────────────────────────────────────
 general:
+  startup-banner: full         # full | compact | off (default full): console banner; full animates on a real terminal, plain consoles get one static frame
   debug: false                 # true/false (default false): verbose console diagnostics
   wand-material: WOODEN_HOE    # any item name (default WOODEN_HOE): the region selection wand
 
