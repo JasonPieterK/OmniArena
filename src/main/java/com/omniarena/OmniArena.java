@@ -182,9 +182,8 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new PlayerTeleportListener(this),  this);
         pm.registerEvents(new GameModeRulesListener(this),   this);
         pm.registerEvents(new com.omniarena.combat.CombatListener(this), this);
-        pm.registerEvents(new com.omniarena.settings.SettingsMenuListener(this), this);
+        pm.registerEvents(new com.omniarena.gui.MenuListener(this), this);
         com.omniarena.platform.Platform.get().registerListeners(this); // chat (+ Paper-only elytra boost)
-        pm.registerEvents(new InventoryClickListener(this),  this);
 
         // ── Sign update task ──────────────────────────────────────
         startSignUpdateTask();
@@ -251,6 +250,7 @@ public final class OmniArena extends JavaPlugin {
         // Close every open plugin GUI so no viewer is left with a dead menu
         try { com.omniarena.kit.KitGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Kit GUI close failed: " + t.getMessage()); }
         try { com.omniarena.settings.SettingsGUI.closeAll(); } catch (Throwable t) { getLogger().warning("Settings GUI close failed: " + t.getMessage()); }
+        try { com.omniarena.gui.MenuListener.closeAll(); } catch (Throwable t) { getLogger().warning("Menu close failed: " + t.getMessage()); }
 
         // End all active matches cleanly first so their results are included in the saves below
         try {
