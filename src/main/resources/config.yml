@@ -187,6 +187,14 @@ integrations:
     #   %omniarena_time_left%, %omniarena_team%, %omniarena_team_color% (+ lifetime stats)
     takeover: false
 
+# Self-healing: config repair, watchdog and /oa doctor
+health:
+  enabled: true              # master switch for the runtime watchdog (config repair at startup always runs)
+  watchdog-seconds: 30       # how often the watchdog checks arenas, matches, players and background tasks
+  stuck-arena-seconds: 180   # an arena in ENDING/RESETTING (no regen running) longer than this is force-cleaned
+  notify-admins: true        # tell admins on join "OmniArena fixed N problems - /oa doctor" after a repair
+  backups-to-keep: 10        # config.yml/messages.yml backups kept per file in plugins/OmniArena/backups/
+
 web:
   enabled: true
   # Interface the dashboard listens on. 127.0.0.1 = local only (safe default).

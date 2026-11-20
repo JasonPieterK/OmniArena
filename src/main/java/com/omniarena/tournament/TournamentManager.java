@@ -33,17 +33,26 @@ public class TournamentManager {
 
     public void start() {
         loadAll();
+        scheduleTick();
+    }
+
+    public boolean isRunning() {
+        return tickTask != null && !tickTask.isCancelled();
+    }
+
+    /** (Re)creates only the periodic tick (no data reload); used by start() and the watchdog. */
+    public void scheduleTick() {
         if (tickTask != null) tickTask.cancel();
         // Periodic safety net: launches matches that had to wait (arena busy, player busy/offline)
         // and recovers matches that were cancelled without producing a result.
-        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, com.omniarena.health.ErrorGuard.wrap("tournament", () -> {
             if (plugin.isStopped() || tournaments.isEmpty()) return;
             for (Tournament t : new ArrayList<>(tournaments.values())) {
                 if (t.getState() != TournamentState.IN_PROGRESS || t.getBracket() == null) continue;
                 try { launchPendingMatches(t); }
                 catch (Exception e) { plugin.getLogger().warning("Tournament tick failed for '" + t.getName() + "' (" + e + "). The tournament keeps running; if this repeats, delete it with /tournament delete " + t.getName() + " and recreate it."); }
             }
-        }, 100L, 100L);
+        }), 100L, 100L);
     }
 
     // ── Create / Join / Leave / Delete ────────────────────────────
@@ -409,7 +418,7 @@ public class TournamentManager {
 
     public void loadAll() {
         if (!dataFile.exists()) return;
-        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(dataFile);
+        YamlConfiguration cfg = com.omniarena.health.SafeYaml.loadData(dataFile);
         var section = cfg.getConfigurationSection("tournaments");
         if (section == null) return;
 

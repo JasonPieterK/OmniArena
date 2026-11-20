@@ -32,7 +32,12 @@ public class QueueManager {
 
     public void start() {
         stop();
-        matchmakingTask = Bukkit.getScheduler().runTaskTimer(plugin, this::processMatchmaking, 20L, 20L);
+        matchmakingTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                com.omniarena.health.ErrorGuard.wrap("queue", this::processMatchmaking), 20L, 20L);
+    }
+
+    public boolean isRunning() {
+        return matchmakingTask != null && !matchmakingTask.isCancelled();
     }
 
     public void stop() {

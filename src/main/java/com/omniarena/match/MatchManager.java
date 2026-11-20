@@ -413,7 +413,7 @@ public class MatchManager {
         final int[] waitedSeconds = {0}; // seconds spent below the minimum player count (arena.lobby-timeout)
         match.setCountdownSeconds(secondsLeft[0]);
 
-        BukkitTask task = AsyncUtil.runSyncRepeating(() -> {
+        BukkitTask task = AsyncUtil.runSyncRepeating(com.omniarena.health.ErrorGuard.wrap("match-countdown", () -> {
             if (match.getState() != MatchState.WAITING && match.getState() != MatchState.STARTING) return;
             if (match.getPlayerCount() < effectiveMin(match)) {
                 match.setState(MatchState.WAITING);
@@ -476,7 +476,7 @@ public class MatchManager {
                 plugin.getVisual().getBossBarManager().updateTimer(match);
                 plugin.getVisual().getScoreboardManager().updateAll(match);
             }
-        }, 20L, 20L);
+        }), 20L, 20L);
         match.setCountdownTask(task);
     }
 
@@ -648,7 +648,7 @@ public class MatchManager {
     }
 
     private void startMatchTimer(Match match) {
-        BukkitTask task = AsyncUtil.runSyncRepeating(() -> {
+        BukkitTask task = AsyncUtil.runSyncRepeating(com.omniarena.health.ErrorGuard.wrap("match-timer", () -> {
             if (match.getState() != MatchState.RUNNING) return;
 
             match.tick();
@@ -660,7 +660,7 @@ public class MatchManager {
             if (match.getTimeRemaining() <= 0) {
                 endMatch(match, buildTimeoutResult(match));
             }
-        }, 20L, 20L);
+        }), 20L, 20L);
         match.setMatchTimerTask(task);
     }
 
@@ -888,6 +888,64 @@ public class MatchManager {
         cleanupMatch(match);
     }
 
+    /**
+     * Self-healing entry point (watchdog / /oa doctor fix): tears down a match that is stuck or whose arena vanished.
+     * Players and spectators leave through the normal paths (their state is restored); the arena is released
+     * and, if it still exists and has a snapshot, regenerated like after any finished match.
+     */
+    public void forceCleanup(Match match) {
+        match.cancelTasks();
+        match.setState(MatchState.RESETTING);
+        for (UUID uuid : new ArrayList<>(match.getPlayers())) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) leaveArena(p); else { playerArena.remove(uuid); match.removePlayer(uuid); }
+        }
+        for (UUID uuid : new ArrayList<>(match.getSpectators())) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) leaveSpectator(p); else playerArena.remove(uuid);
+        }
+        match.getSpectators().clear();
+        try {
+            plugin.getVisual().getScoreboardManager().removeAllBoards(match);
+            plugin.getVisual().getBossBarManager().removeAll(match);
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("Forced cleanup of arena " + match.getArena().getName() + ": visual cleanup failed (" + e + ").");
+        }
+        cleanupMatch(match);
+    }
+
+    /**
+     * Fixes players mapped to a match that no longer exists (or no longer lists them): online players get their
+     * pre-arena state back through the stale-mapping paths of leaveArena/leaveSpectator, offline ones are unmapped
+     * (their state file restores them on next join).
+     * @return how many players were healed
+     */
+    public int healOrphanedPlayers() {
+        int healed = 0;
+        for (UUID id : findOrphanedPlayers()) {
+            String mapped = playerArena.get(id);
+            if (mapped == null) continue; // already released by an earlier heal in this pass
+            boolean spectator = mapped.endsWith(":spectator");
+            Player p = Bukkit.getPlayer(id);
+            if (p == null) playerArena.remove(id);
+            else if (spectator) leaveSpectator(p);
+            else leaveArena(p);
+            healed++;
+        }
+        return healed;
+    }
+
+    /** Players whose arena mapping points to a match that is gone or no longer lists them (read-only). */
+    public List<UUID> findOrphanedPlayers() {
+        List<UUID> out = new ArrayList<>();
+        for (Map.Entry<UUID, String> e : playerArena.entrySet()) {
+            boolean spectator = e.getValue().endsWith(":spectator");
+            Match m = activeMatches.get(e.getValue().replace(":spectator", ""));
+            if (m == null || !(spectator ? m.isSpectator(e.getKey()) : m.hasPlayer(e.getKey()))) out.add(e.getKey());
+        }
+        return out;
+    }
+
     private void cleanupMatch(Match match) {
         match.cancelTasks();
         // Only release the arena if this match still owns it: the delayed resetMatch()
@@ -919,6 +977,8 @@ public class MatchManager {
         if (match.getState() != MatchState.RESETTING || !plugin.isEnabled()) return false;
         var restore = plugin.getBlockRestoreModule();
         if (restore == null || !arena.getRegion().isDefined()) return false;
+        // The arena was deleted (or replaced) while the match ran: nothing to restore
+        if (plugin.getArenaManager() == null || plugin.getArenaManager().get(arena.getName()).orElse(null) != arena) return false;
         var cfg = ConfigManager.getInstance().getConfig();
         String path = "regen.arenas." + arena.getName().toLowerCase() + ".auto";
         boolean auto = cfg.isSet(path) ? cfg.getBoolean(path) : cfg.getBoolean("regen.auto", true);

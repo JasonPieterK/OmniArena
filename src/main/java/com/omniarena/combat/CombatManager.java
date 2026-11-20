@@ -414,7 +414,7 @@ public class CombatManager {
     /** (Re)starts the tag-expiry loop; idempotent (cancels any previous task first). */
     public synchronized void start() {
         if (tagExpiryTask != null) { tagExpiryTask.cancel(); tagExpiryTask = null; }
-        tagExpiryTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        tagExpiryTask = Bukkit.getScheduler().runTaskTimer(plugin, com.omniarena.health.ErrorGuard.wrap("combat", () -> {
             if (combatTags.isEmpty()) return; // idle: nothing to expire
             long now = System.currentTimeMillis();
             combatTags.entrySet().removeIf(e -> {
@@ -424,7 +424,11 @@ public class CombatManager {
                 lastAttacker.remove(e.getKey());
                 return true;
             });
-        }, 20L, 20L);
+        }), 20L, 20L);
+    }
+
+    public boolean isRunning() {
+        return tagExpiryTask != null && !tagExpiryTask.isCancelled();
     }
 
     public synchronized void stop() {

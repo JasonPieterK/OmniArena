@@ -33,7 +33,7 @@ public class StatsManager {
     public void loadAll() {
         if (!statsFile.exists()) return;
         try {
-            FileConfiguration cfg = YamlConfiguration.loadConfiguration(statsFile);
+            FileConfiguration cfg = com.omniarena.health.SafeYaml.loadData(statsFile);
             if (!cfg.contains("stats")) return;
             for (String uuidStr : cfg.getConfigurationSection("stats").getKeys(false)) {
                 try {

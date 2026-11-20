@@ -53,6 +53,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "announcements", new AnnouncementsCommand(plugin));
         reg(adminCommands, "chat",          new ChatModeCommand(plugin));
         reg(adminCommands, "access",        new AccessCommand(plugin));
+        reg(adminCommands, "doctor",        new DoctorCommand(plugin));
         reg(adminCommands, "override",      new OverrideCommand(plugin));
         reg(adminCommands, "reload",        new ReloadCommand(plugin));
         reg(adminCommands, "version",       new VersionCommand(plugin));

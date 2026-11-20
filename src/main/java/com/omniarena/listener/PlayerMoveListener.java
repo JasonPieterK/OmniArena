@@ -25,6 +25,10 @@ public class PlayerMoveListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
+        com.omniarena.health.ErrorGuard.run("listener-move", () -> onMoveGuarded(event));
+    }
+
+    private void onMoveGuarded(PlayerMoveEvent event) {
         if (plugin.isStopped()) return;
         // Only act on full block movements (skip look-only events)
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()

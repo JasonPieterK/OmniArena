@@ -96,7 +96,8 @@ public class KitManager {
         return playerKits.computeIfAbsent(playerId, id -> {
             File file = new File(playerKitsDir, id + ".yml");
             if (!file.exists()) return new ArrayList<>();
-            FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+            FileConfiguration cfg = com.omniarena.health.SafeYaml.load(file,
+                    new File(plugin.getDataFolder(), "broken"), plugin.getLogger());
             List<PlayerKit> kits = new ArrayList<>();
             if (cfg.contains("kits")) {
                 for (String name : cfg.getConfigurationSection("kits").getKeys(false)) {

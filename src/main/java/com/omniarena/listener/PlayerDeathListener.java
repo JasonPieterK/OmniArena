@@ -29,6 +29,10 @@ public class PlayerDeathListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onDeath(PlayerDeathEvent event) {
+        com.omniarena.health.ErrorGuard.run("listener-death", () -> onDeathGuarded(event));
+    }
+
+    private void onDeathGuarded(PlayerDeathEvent event) {
         if (plugin.isStopped()) return;
         Player victim = event.getEntity();
         if (victim == null) return;
@@ -168,6 +172,10 @@ public class PlayerDeathListener implements Listener {
     /** Dead players in an arena respawn inside it: lobby when not fighting, spectator spot when eliminated. */
     @EventHandler(priority = EventPriority.HIGH)
     public void onRespawn(org.bukkit.event.player.PlayerRespawnEvent event) {
+        com.omniarena.health.ErrorGuard.run("listener-respawn", () -> onRespawnGuarded(event));
+    }
+
+    private void onRespawnGuarded(org.bukkit.event.player.PlayerRespawnEvent event) {
         if (plugin.isStopped()) return;
         Player p = event.getPlayer();
         MatchManager mm = MatchManager.getInstance();

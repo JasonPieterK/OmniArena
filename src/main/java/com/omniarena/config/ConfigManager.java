@@ -29,23 +29,26 @@ public class ConfigManager {
 
     public void load() {
         plugin.saveDefaultConfig();
-        plugin.reloadConfig();
-        config = plugin.getConfig();
-
         messagesFile = new File(plugin.getDataFolder(), "messages.yml");
         if (!messagesFile.exists()) plugin.saveResource("messages.yml", false);
-        messages = YamlConfiguration.loadConfiguration(messagesFile);
-        applyMessageDefaults();
-
         configFile = new File(plugin.getDataFolder(), "config.yml");
+
+        // Self-healing: back-fill missing keys, fix wrong types, regenerate unparseable files (with backups)
+        com.omniarena.health.ConfigRepair.run(plugin);
+        readFiles();
     }
 
     public void reload() {
+        com.omniarena.health.ConfigRepair.run(plugin);
+        readFiles();
+        plugin.getLogger().info("Configuration reloaded.");
+    }
+
+    private void readFiles() {
         plugin.reloadConfig();
         config = plugin.getConfig();
         messages = YamlConfiguration.loadConfiguration(messagesFile);
         applyMessageDefaults();
-        plugin.getLogger().info("Configuration reloaded.");
     }
 
     public String getMessage(String key) {

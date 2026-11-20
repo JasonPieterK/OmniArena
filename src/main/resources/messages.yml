@@ -231,3 +231,17 @@ negative-number: "<red><yellow>{input}</yellow> must be 0 or higher. <gray>Use a
 world-not-found: "<red>World <yellow>{world}</yellow> does not exist or is not loaded. <gray>Check the name with <white>/mvlist</white> or your world folder names (case-sensitive)."
 economy-missing: "<red>Betting is unavailable because no economy plugin is connected. <gray>Admins: install <white>Vault</white> plus an economy plugin (e.g. EssentialsX), set <white>betting.enabled: true</white> in config.yml, then restart the server."
 bet-player-not-in-arena: "<red><yellow>{player}</yellow> is not playing in arena <yellow>{arena}</yellow>, so you cannot bet on them. <gray>Pick someone who is in the match (<white>/oa info {arena}</white> lists players)."
+
+# Self-healing (/oa doctor). Placeholders: {title} {text} {command} {count}
+doctor-header: "<gold><bold>=== OmniArena Doctor ==="
+doctor-section: "<yellow>{title}"
+doctor-ok: "  <green>\u2713 {text}"
+doctor-problem: "  <red>\u2717 <white>{text}"
+doctor-info: "  <gray>{text}"
+doctor-fix: " <click:run_command:'{command}'><hover:show_text:'<gray>Click to run <white>{command}'><aqua>[fix]</aqua></hover></click>"
+doctor-footer-ok: "<green>No problems found."
+doctor-footer-problems: "<red>{count} problem(s) found. <click:run_command:'{command}'><hover:show_text:'<gray>Run the watchdog fixes now'><aqua>[/oa doctor fix]</aqua></hover></click>"
+doctor-fix-none: "<green>Nothing needed fixing."
+doctor-fix-done: "<green>Fixed {count} problem(s):"
+doctor-stopped: "<red>OmniArena is stopped, so the watchdog cannot fix anything. <gray>Use <yellow>/oa start</yellow> first."
+health-admin-notice: "<yellow>OmniArena fixed {count} problem(s) since the last restart. <click:run_command:'/oa doctor'><hover:show_text:'<gray>Open the health report'><aqua>[/oa doctor]</aqua></hover></click>"

@@ -63,6 +63,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.startSignUpdateTask();
             plugin.getCombatManager().start();
             plugin.getVisual().start();
+            if (plugin.getWatchdog() != null) plugin.getWatchdog().start();
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "
@@ -81,6 +82,7 @@ public class LifecycleCommand extends SubCommand {
             return;
         }
         plugin.setStopped(true);
+        if (plugin.getWatchdog() != null) plugin.getWatchdog().stop();
         MessageUtil.send(sender, "<yellow>Stopping OmniArena systems...");
         try {
             MatchManager mm = MatchManager.getInstance();

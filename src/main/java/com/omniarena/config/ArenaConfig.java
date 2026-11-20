@@ -34,18 +34,29 @@ public class ArenaConfig {
         File[] files = arenasFolder.listFiles((dir, name) -> name.endsWith(".yml") && !name.equals("example.yml"));
         if (files == null) return arenas;
         for (File file : files) {
+            File brokenDir = new File(arenasFolder, "broken");
             try {
-                Arena arena = load(file);
+                // Strict parse first: a corrupt file is quarantined instead of silently loading as an empty arena
+                FileConfiguration cfg = com.omniarena.health.SafeYaml.load(file, brokenDir, plugin.getLogger());
+                if (!file.exists()) continue; // moved to arenas/broken/
+                Arena arena = load(file, cfg);
                 if (arena != null) arenas.add(arena);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load arena file plugins/OmniArena/arenas/" + file.getName() + " (" + e + "). The arena was skipped. Fix: open that file and correct the YAML (indentation, quotes, valid world/enum names) or delete it, then run /oa reload; recreate with /oa create <name> if needed.");
+                File moved = com.omniarena.health.BackupUtil.moveAside(file, brokenDir);
+                String msg = "Arena file " + file.getName() + " could not be loaded (" + e + "); "
+                        + (moved != null ? "moved to arenas/broken/" + moved.getName() : "left in place") + " and skipped";
+                plugin.getLogger().warning(msg + ". Fix: correct the YAML (indentation, quotes, valid world/enum names) in the moved file, copy it back into arenas/ and run /oa reload; or recreate with /oa create <name>.");
+                com.omniarena.health.HealthReport.get().recordRepair("broken-file", msg);
             }
         }
         return arenas;
     }
 
     public Arena load(File file) {
-        FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+        return load(file, YamlConfiguration.loadConfiguration(file));
+    }
+
+    private Arena load(File file, FileConfiguration cfg) {
         String name = cfg.getString("name", file.getName().replace(".yml", ""));
         Arena arena = new Arena(name);
 

@@ -129,6 +129,7 @@ permissions:
       omniarena.admin.reload: true
       omniarena.admin.override: true
       omniarena.admin.access: true
+      omniarena.admin.doctor: true
       omniarena.pvp.admin: true
       omniarena.tournament.admin: true
       omniarena.join.bypass: true
@@ -167,6 +168,10 @@ permissions:
 
   omniarena.admin.access:
     description: Manage per-arena whitelist/blacklist (/oa access)
+    default: op
+
+  omniarena.admin.doctor:
+    description: Health report and self-healing (/oa doctor)
     default: op
 
   omniarena.kit.slots.5:

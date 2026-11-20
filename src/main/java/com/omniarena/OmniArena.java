@@ -44,6 +44,7 @@ public final class OmniArena extends JavaPlugin {
     private com.omniarena.party.PartyManager partyManager;
     private com.omniarena.betting.BettingManager bettingManager;
     private com.omniarena.tournament.TournamentManager tournamentManager;
+    private com.omniarena.health.Watchdog watchdog;
     private volatile boolean stopped = false;
     private org.bukkit.scheduler.BukkitTask signUpdateTask;
 
@@ -70,6 +71,7 @@ public final class OmniArena extends JavaPlugin {
     public com.omniarena.party.PartyManager getPartyManager() { return partyManager; }
     public com.omniarena.betting.BettingManager getBettingManager() { return bettingManager; }
     public com.omniarena.tournament.TournamentManager getTournamentManager() { return tournamentManager; }
+    public com.omniarena.health.Watchdog getWatchdog() { return watchdog; }
 
     @Override
     public void onEnable() {
@@ -229,6 +231,10 @@ public final class OmniArena extends JavaPlugin {
         // ── Sign update task ──────────────────────────────────────
         startSignUpdateTask();
 
+        // ── Self-healing watchdog ─────────────────────────────────
+        watchdog = new com.omniarena.health.Watchdog(this);
+        watchdog.start();
+
         long elapsed = System.currentTimeMillis() - start;
         logStartupBanner(elapsed);
     }
@@ -240,10 +246,14 @@ public final class OmniArena extends JavaPlugin {
             signUpdateTask = null;
         }
         int signInterval = Math.max(1, configManager.getConfig().getInt("signs.update-interval", 20));
-        signUpdateTask = AsyncUtil.runSyncRepeating(() -> {
+        signUpdateTask = AsyncUtil.runSyncRepeating(com.omniarena.health.ErrorGuard.wrap("signs", () -> {
             if (stopped || arenaManager == null || signManager == null) return;
             arenaManager.getAll().forEach(arena -> signManager.updateAllSigns(arena));
-        }, signInterval, signInterval);
+        }), signInterval, signInterval);
+    }
+
+    public boolean isSignTaskRunning() {
+        return signUpdateTask != null && !signUpdateTask.isCancelled();
     }
 
     private void logStartupBanner(long elapsed) {
@@ -286,6 +296,7 @@ public final class OmniArena extends JavaPlugin {
     @Override
     public void onDisable() {
         stopped = true;
+        if (watchdog != null) watchdog.stop();
         if (signUpdateTask != null) { signUpdateTask.cancel(); signUpdateTask = null; }
 
         // Close every open plugin GUI so no viewer is left with a dead menu

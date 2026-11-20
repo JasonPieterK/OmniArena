@@ -32,7 +32,7 @@ public class EloManager {
     public void loadAll() {
         if (!eloFile.exists()) return;
         try {
-            FileConfiguration cfg = YamlConfiguration.loadConfiguration(eloFile);
+            FileConfiguration cfg = com.omniarena.health.SafeYaml.loadData(eloFile);
             if (!cfg.contains("ratings")) return;
             
             for (String uuidStr : cfg.getConfigurationSection("ratings").getKeys(false)) {
