@@ -103,10 +103,6 @@ public final class MainMenu {
             MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance().getMessage("no-permission"));
             return;
         }
-        if (plugin.getMatchManager().isLockdown()) {
-            MessageUtil.send(player, "<red>Arenas are currently locked down by an administrator.");
-            return;
-        }
         qm.joinQueue(player, QUEUE);
     }
 
