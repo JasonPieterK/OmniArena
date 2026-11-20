@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Runtime self-healing. Every {@code health.watchdog-seconds} it looks for arenas stuck in ENDING/RESETTING,
+ * Runtime self-healing. Every {@code advanced.health.watchdog-seconds} it looks for arenas stuck in ENDING/RESETTING,
  * matches whose arena vanished, players mapped to a vanished match and core periodic tasks that stopped, and fixes
  * them. Every fix is recorded in the {@link HealthReport}. Start/stop are idempotent; it is gated by isStopped().
  */
@@ -46,7 +46,7 @@ public final class Watchdog {
     public synchronized void start() {
         stop();
         if (!enabled()) return;
-        long ticks = Math.max(5, ConfigManager.getInstance().getConfig().getInt("health.watchdog-seconds", 30)) * 20L;
+        long ticks = Math.max(5, ConfigManager.getInstance().getConfig().getInt("advanced.health.watchdog-seconds", 30)) * 20L;
         task = AsyncUtil.runSyncRepeating(ErrorGuard.wrap("watchdog", this::tick), ticks, ticks);
     }
 
@@ -72,7 +72,7 @@ public final class Watchdog {
     }
 
     public int stuckThresholdSeconds() {
-        return Math.max(10, ConfigManager.getInstance().getConfig().getInt("health.stuck-arena-seconds", 180));
+        return Math.max(10, ConfigManager.getInstance().getConfig().getInt("advanced.health.stuck-arena-seconds", 180));
     }
 
     /** Arenas currently in ENDING/RESETTING longer than the threshold without an active regen. */

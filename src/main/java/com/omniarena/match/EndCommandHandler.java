@@ -57,7 +57,7 @@ public class EndCommandHandler {
     private List<String> getCommands(Match match) {
         List<String> arenaCommands = match.getArena().getEndCommands();
         if (!arenaCommands.isEmpty()) return arenaCommands;
-        return ConfigManager.getInstance().getConfig().getStringList("match.end-commands");
+        return ConfigManager.getInstance().getConfig().getStringList("matches.end-commands");
     }
 
     private String resolveWinnerName(MatchResult result) {

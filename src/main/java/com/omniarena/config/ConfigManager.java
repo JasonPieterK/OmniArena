@@ -33,12 +33,16 @@ public class ConfigManager {
         if (!messagesFile.exists()) plugin.saveResource("messages.yml", false);
         configFile = new File(plugin.getDataFolder(), "config.yml");
 
+        // Layout migration (old keys -> config-version 2) must run before the health back-fill
+        migrateLayout();
         // Self-healing: back-fill missing keys, fix wrong types, regenerate unparseable files (with backups)
         com.omniarena.health.ConfigRepair.run(plugin);
         readFiles();
     }
 
     public void reload() {
+        configFile = new File(plugin.getDataFolder(), "config.yml");
+        migrateLayout();
         com.omniarena.health.ConfigRepair.run(plugin);
         readFiles();
         plugin.getLogger().info("Configuration reloaded.");
@@ -47,8 +51,53 @@ public class ConfigManager {
     private void readFiles() {
         plugin.reloadConfig();
         config = plugin.getConfig();
+        // Single place that still knows the old key names: if the file could not be rewritten, old keys keep working in memory
+        ConfigMigration.applyFallback(config);
         messages = YamlConfiguration.loadConfiguration(messagesFile);
         applyMessageDefaults();
+    }
+
+    /**
+     * Upgrades an old-layout config.yml to {@link ConfigMigration#CURRENT_VERSION}: backs the file up, moves every old key
+     * to its new path, writes the result on top of the bundled commented default file. Never touches an unparseable
+     * file (ConfigRepair handles that) and gives up without writing if the backup cannot be made.
+     */
+    private void migrateLayout() {
+        try {
+            if (configFile == null || !configFile.isFile()) return;
+            YamlConfiguration old = new YamlConfiguration();
+            try {
+                old.load(configFile);
+            } catch (java.io.IOException | org.bukkit.configuration.InvalidConfigurationException | RuntimeException e) {
+                return;
+            }
+            if (!ConfigMigration.needsMigration(old)) return;
+
+            int keep = Math.max(1, old.getInt("health.backups-to-keep", 10));
+            File backup = com.omniarena.health.BackupUtil.backup(configFile, new File(plugin.getDataFolder(), "backups"), keep);
+            if (backup == null) {
+                plugin.getLogger().warning("config.yml uses the old layout but a backup could not be made, so it was NOT migrated "
+                        + "(old keys still work for now). Fix: make plugins/OmniArena/backups writable, then /oa reload.");
+                return;
+            }
+            ConfigMigration.Result r = ConfigMigration.migrate(old);
+            YamlConfiguration template = new YamlConfiguration();
+            try (java.io.InputStream in = plugin.getResource("config.yml")) {
+                if (in != null) {
+                    template = YamlConfiguration.loadConfiguration(
+                            new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+            ConfigMigration.overlay(template, old);
+            template.save(configFile);
+            String msg = "config.yml was upgraded to the new layout (config-version " + ConfigMigration.CURRENT_VERSION + "): "
+                    + r.moved().size() + " setting(s) moved. Your original is saved as backups/" + backup.getName() + ".";
+            plugin.getLogger().warning(msg);
+            com.omniarena.health.HealthReport.get().recordRepair("config", msg);
+        } catch (Exception e) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING, "Config migration failed (" + e
+                    + "). The file is used as it is; old keys still work. Fix: check plugins/OmniArena is writable.", e);
+        }
     }
 
     public String getMessage(String key) {
@@ -84,10 +133,10 @@ public class ConfigManager {
     }
 
     public boolean isDebug() {
-        return config.getBoolean("plugin.debug", false);
+        return config.getBoolean("general.debug", false);
     }
 
-    /** Logs {@code [debug] msg} to the console only when {@code plugin.debug: true}. Cheap no-op otherwise. */
+    /** Logs {@code [debug] msg} to the console only when {@code general.debug: true}. Cheap no-op otherwise. */
     public void debug(String message) {
         if (isDebug()) plugin.getLogger().info("[debug] " + message);
     }

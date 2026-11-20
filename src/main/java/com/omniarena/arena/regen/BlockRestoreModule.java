@@ -358,7 +358,7 @@ public class BlockRestoreModule {
         lastErrors.remove(key);
         final long restoreT0 = System.nanoTime();
         ConfigManager.debugLog(() -> "regen: restore of arena " + name + " started (style " + getAnimationType() + ", batch-size "
-                + ConfigManager.getInstance().getConfig().getInt("regen.batch-size", 4000) + ")");
+                + ConfigManager.getInstance().getConfig().getInt("advanced.regen.batch-size", 4000) + ")");
         final java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean(false);
         final Runnable fComplete = () -> {
             if (!finished.compareAndSet(false, true)) return;
@@ -512,9 +512,9 @@ public class BlockRestoreModule {
         final int total = (int) Math.min(Integer.MAX_VALUE, plan.totalBlocks);
 
         int configBatch = Math.max(1, ConfigManager.getInstance().getConfig()
-                .getInt("regen.batch-size", DEFAULT_BATCH_SIZE));
+                .getInt("advanced.regen.batch-size", DEFAULT_BATCH_SIZE));
         final int batchSize = instant ? configBatch : Math.min(configBatch, ANIM_BATCH_SIZE);
-        final boolean sfx = ConfigManager.getInstance().getConfig().getBoolean("regen.animation.sound", true);
+        final boolean sfx = ConfigManager.getInstance().getConfig().getBoolean("regen.sound", true);
 
         // Progress callback is monotonic: never reports a smaller value than before
         final int[] lastProgress = {-1};
@@ -992,7 +992,7 @@ public class BlockRestoreModule {
                              double progress, int tick, boolean sfx, int pass) {
         List<org.bukkit.entity.Player> v = viewers(world, b);
         if (v.isEmpty() && !sfx) return;
-        boolean particlesOn = ConfigManager.getInstance().getConfig().getBoolean("regen.animation.particles", true);
+        boolean particlesOn = ConfigManager.getInstance().getConfig().getBoolean("regen.particles", true);
         particleBudget = v.isEmpty() || !particlesOn ? 0 : PARTICLE_EMITS_PER_TICK;
         double[] c = regionCenter(b);
         BlockEntry first = batch.get(0), last = batch.get(batch.size() - 1);
@@ -1369,7 +1369,7 @@ public class BlockRestoreModule {
 
     private RegenAnimationType getAnimationType() {
         String v = ConfigManager.getInstance().getConfig()
-                .getString("regen.animation.type", "SPHERE");
+                .getString("regen.style", "SPHERE");
         return RegenAnimationType.fromConfig(v);
     }
 

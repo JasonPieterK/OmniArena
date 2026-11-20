@@ -380,15 +380,14 @@
       (byGroup[def.group || 'General'] ||= []).push(def);
     });
 
-    const groups = Object.keys(byGroup).sort();
+    const groups = Object.keys(byGroup); // config.yml order (General first, Advanced last)
     if (!groups.length) { container.innerHTML = `<div class="card">${emptyState('ph-magnifying-glass','No matches','Try a different search.')}</div>`; return; }
 
     const ICONS = {
-      Config:'ph-gear', Arena:'ph-flag', Match:'ph-timer', Regen:'ph-arrows-clockwise',
-      Web:'ph-globe', Modules:'ph-puzzle-piece', Integrations:'ph-plugs', Kits:'ph-sword',
-      Visual:'ph-sparkle', Performance:'ph-gauge', Database:'ph-database', Rewards:'ph-coins',
-      Killstreak:'ph-fire', Signs:'ph-sign-posts', Quality:'ph-heart', Plugin:'ph-cube',
-      'Boss Bar':'ph-minus-square', Scoreboard:'ph-list-numbers',
+      General:'ph-gear', Arenas:'ph-flag', Matches:'ph-timer', Regen:'ph-arrows-clockwise',
+      Ranked:'ph-ranking', Kits:'ph-sword', Rewards:'ph-coins', Betting:'ph-coin',
+      Tournaments:'ph-trophy', Pvp:'ph-sword', Visuals:'ph-sparkle', Integrations:'ph-plugs',
+      Web:'ph-globe', Health:'ph-heartbeat', Advanced:'ph-sliders',
     };
 
     container.innerHTML = groups.map((g, idx) => {

@@ -10,7 +10,7 @@ import org.bukkit.entity.Player;
 
 /**
  * Decides whether a presentation channel (titles, sounds, particles) is active.
- * A channel is on only when BOTH the global switch (config.yml {@code visual.<key>}) and the arena's own
+ * A channel is on only when BOTH the global switch (config.yml {@code visuals.<key>}) and the arena's own
  * switch ({@code visual.<key>} in arenas/&lt;name&gt;.yml, /oa config &lt;arena&gt; visual-&lt;key&gt;) are on.
  * Subjects outside any arena (unknown player / location) only obey the global switch.
  */
@@ -31,7 +31,7 @@ public final class VisualGate {
 
     public static boolean on(Arena arena, Channel c) {
         ConfigManager cm = ConfigManager.getInstance();
-        String key = "visual." + c.name().toLowerCase(java.util.Locale.ROOT);
+        String key = "visuals." + c.name().toLowerCase(java.util.Locale.ROOT);
         if (cm != null && !cm.getConfig().getBoolean(key, true)) return false;
         if (arena == null) return true;
         var v = arena.getVisual();

@@ -52,8 +52,8 @@ public class MatchManager {
     }
 
     private void saveState(Player p) {
-        boolean inv = ConfigManager.getInstance().getConfig().getBoolean("arena.inventory-restore", true);
-        if (ConfigManager.getInstance().getConfig().getBoolean("arena.persist-player-state", true)) {
+        boolean inv = ConfigManager.getInstance().getConfig().getBoolean("matches.inventory-restore", true);
+        if (ConfigManager.getInstance().getConfig().getBoolean("advanced.persist-player-state", true)) {
             getStateStore().save(p, inv);
         }
         savedStates.put(p.getUniqueId(), new PlayerState(p.getLocation().clone(), p.getGameMode(), p.getHealth(),
@@ -360,7 +360,7 @@ public class MatchManager {
         if (spec != null) player.teleport(spec);
 
         player.setGameMode(GameMode.SPECTATOR);
-        player.setInvisible(ConfigManager.getInstance().getConfig().getBoolean("visual.spectator-invisibility", true));
+        player.setInvisible(ConfigManager.getInstance().getConfig().getBoolean("visuals.spectator-invisibility", true));
         if (!tabTakeover()) {
             plugin.getVisual().getScoreboardManager().createBoard(player, match);
             plugin.getVisual().getBossBarManager().addPlayer(player, match);
@@ -393,7 +393,7 @@ public class MatchManager {
     private void startCountdown(Match match) {
         match.setState(MatchState.WAITING);
         final int[] secondsLeft = {match.getArena().getCountdown()};
-        final int[] waitedSeconds = {0}; // seconds spent below the minimum player count (arena.lobby-timeout)
+        final int[] waitedSeconds = {0}; // seconds spent below the minimum player count (matches.lobby-timeout)
         match.setCountdownSeconds(secondsLeft[0]);
 
         BukkitTask task = AsyncUtil.runSyncRepeating(com.omniarena.health.ErrorGuard.wrap("match-countdown", () -> {
@@ -401,7 +401,7 @@ public class MatchManager {
             if (match.getPlayerCount() < effectiveMin(match)) {
                 match.setState(MatchState.WAITING);
 
-                int lobbyTimeout = ConfigManager.getInstance().getConfig().getInt("arena.lobby-timeout", 0);
+                int lobbyTimeout = ConfigManager.getInstance().getConfig().getInt("matches.lobby-timeout", 0);
                 if (lobbyTimeout > 0 && ++waitedSeconds[0] >= lobbyTimeout) {
                     broadcastArena(match, "<yellow>Not enough players joined in time - the lobby was closed.");
                     resetMatch(match);
@@ -449,7 +449,7 @@ public class MatchManager {
                 broadcastArena(match, ConfigManager.getInstance().getMessage("match-starting")
                         .replace("{seconds}", String.valueOf(secondsLeft[0])));
                 plugin.getVisual().getTitleManager().sendCountdownTitle(match, secondsLeft[0]);
-                if (ConfigManager.getInstance().getConfig().getBoolean("visual.countdown-sounds", true)) {
+                if (ConfigManager.getInstance().getConfig().getBoolean("visuals.countdown-sounds", true)) {
                     plugin.getVisual().getSoundManager().playCountdown(match, secondsLeft[0]);
                 }
             }
@@ -667,7 +667,7 @@ public class MatchManager {
         }
         fireMatchEnd(match, result);
 
-        int endDelay = ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) * 20;
+        int endDelay = ConfigManager.getInstance().getConfig().getInt("matches.end-delay", 5) * 20;
         AsyncUtil.runSyncLater(() -> resetMatch(match), endDelay);
     }
 
@@ -727,7 +727,7 @@ public class MatchManager {
 
         plugin.getVisual().getTitleManager().sendMatchEndTitle(match, result);
         plugin.getVisual().getSoundManager().playMatchEnd(match, result);
-        if (ConfigManager.getInstance().getConfig().getBoolean("visual.victory-fireworks", true)) {
+        if (ConfigManager.getInstance().getConfig().getBoolean("visuals.victory-fireworks", true)) {
             plugin.getVisual().getEffectManager().playVictoryFireworks(match, result);
         }
         plugin.getVisual().getBossBarManager().removeAll(match);
@@ -737,13 +737,13 @@ public class MatchManager {
         StatsManager.getInstance().recordResult(match, result);
 
         if (match.getArena().isAnnouncements()
-                && ConfigManager.getInstance().getConfig().getBoolean("match.announce-arena", true)) {
+                && ConfigManager.getInstance().getConfig().getBoolean("matches.announce-arena", true)) {
             broadcastArena(match, ConfigManager.getInstance().getMessage("match-ended")
                     .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
                             (result.getWinnerId() != null ? String.valueOf(Bukkit.getOfflinePlayer(result.getWinnerId()).getName()) : String.valueOf(result.getWinnerTeamName()))));
         }
 
-        if (ConfigManager.getInstance().getConfig().getBoolean("match.announce-global")) {
+        if (ConfigManager.getInstance().getConfig().getBoolean("matches.announce-global")) {
             String msg = ConfigManager.getInstance().getMessage("match-ended")
                     .replace("{result}", result.isDraw() ? "Draw" : "Winner: " +
                             (result.getWinnerId() != null ? Bukkit.getOfflinePlayer(result.getWinnerId()).getName() : result.getWinnerTeamName()));

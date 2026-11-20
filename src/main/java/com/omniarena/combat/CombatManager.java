@@ -45,7 +45,7 @@ public class CombatManager {
     public CombatManager(OmniArena plugin) {
         this.plugin = plugin;
         instance = this;
-        this.globalPvp = cfg().getConfig().getBoolean("pvp.global.pvp-enabled", true);
+        this.globalPvp = cfg().getConfig().getBoolean("pvp.server-pvp", true);
         loadNewbies();
         loadToggles();
         start();
@@ -265,7 +265,7 @@ public class CombatManager {
     public boolean isGlobalPvp() { return globalPvp; }
     public void setGlobalPvp(boolean on) {
         this.globalPvp = on;
-        cfg().setValue("pvp.global.pvp-enabled", on);
+        cfg().setValue("pvp.server-pvp", on);
     }
 
     // ── World check ───────────────────────────────────────────────────────────

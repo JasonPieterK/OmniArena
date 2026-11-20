@@ -12,7 +12,7 @@ public class ActionBarManager {
 
     private boolean enabled(Match match) {
         return match.getArena().getVisual().isActionBar()
-                && ConfigManager.getInstance().getConfig().getBoolean("visual.action-bar", true);
+                && ConfigManager.getInstance().getConfig().getBoolean("visuals.action-bar", true);
     }
 
     /** Called once per second by the match timer (content is per-second); rankings computed once. */

@@ -67,23 +67,23 @@ public class ArenaManager {
         var cm = com.omniarena.config.ConfigManager.getInstance();
         if (cm == null || cm.getConfig() == null) return;
         var c = cm.getConfig();
-        arena.setMinPlayers(Math.max(1, c.getInt("arena.default-min-players", arena.getMinPlayers())));
-        arena.setMaxPlayers(Math.max(arena.getMinPlayers(), c.getInt("arena.default-max-players", arena.getMaxPlayers())));
-        arena.setCountdown(Math.max(0, c.getInt("arena.default-countdown", arena.getCountdown())));
-        arena.setMatchDuration(Math.max(1, c.getInt("arena.default-match-duration", arena.getMatchDuration())));
+        arena.setMinPlayers(Math.max(1, c.getInt("arenas.min-players", arena.getMinPlayers())));
+        arena.setMaxPlayers(Math.max(arena.getMinPlayers(), c.getInt("arenas.max-players", arena.getMaxPlayers())));
+        arena.setCountdown(Math.max(0, c.getInt("arenas.countdown", arena.getCountdown())));
+        arena.setMatchDuration(Math.max(1, c.getInt("arenas.match-duration", arena.getMatchDuration())));
         arena.setGameMode(com.omniarena.gamemode.GameModeType.fromString(
-                c.getString("arena.default-game-mode", arena.getGameMode().name())));
-        arena.setSpectatorAllowed(c.getBoolean("arena.spectator-allowed", arena.isSpectatorAllowed()));
-        arena.setMidMatchJoin(c.getBoolean("arena.mid-match-join", arena.isMidMatchJoin()));
-        arena.setRespawnDelay(Math.max(0, c.getInt("arena.respawn-delay", arena.getRespawnDelay())));
-        arena.setSpawnProtection(Math.max(0, c.getInt("arena.spawn-protection", arena.getSpawnProtection())));
+                c.getString("arenas.game-mode", arena.getGameMode().name())));
+        arena.setSpectatorAllowed(c.getBoolean("arenas.spectator-allowed", arena.isSpectatorAllowed()));
+        arena.setMidMatchJoin(c.getBoolean("arenas.mid-match-join", arena.isMidMatchJoin()));
+        arena.setRespawnDelay(Math.max(0, c.getInt("arenas.respawn-delay", arena.getRespawnDelay())));
+        arena.setSpawnProtection(Math.max(0, c.getInt("arenas.spawn-protection", arena.getSpawnProtection())));
         var v = arena.getVisual();
-        v.setTitles(c.getBoolean("visual.titles", v.isTitles()));
-        v.setSounds(c.getBoolean("visual.sounds", v.isSounds()));
-        v.setParticles(c.getBoolean("visual.particles", v.isParticles()));
-        v.setScoreboard(c.getBoolean("visual.scoreboard", v.isScoreboard()));
-        v.setBossBar(c.getBoolean("visual.boss-bar", v.isBossBar()));
-        v.setActionBar(c.getBoolean("visual.action-bar", v.isActionBar()));
+        v.setTitles(c.getBoolean("visuals.titles", v.isTitles()));
+        v.setSounds(c.getBoolean("visuals.sounds", v.isSounds()));
+        v.setParticles(c.getBoolean("visuals.particles", v.isParticles()));
+        v.setScoreboard(c.getBoolean("visuals.scoreboard", v.isScoreboard()));
+        v.setBossBar(c.getBoolean("visuals.boss-bar", v.isBossBar()));
+        v.setActionBar(c.getBoolean("visuals.action-bar", v.isActionBar()));
     }
 
     public boolean delete(String name) {

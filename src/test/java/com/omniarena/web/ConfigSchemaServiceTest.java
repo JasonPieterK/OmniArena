@@ -21,6 +21,7 @@ class ConfigSchemaServiceTest {
             assertFalse(def.key().startsWith("web.remote."), "fake key " + def.key());
             assertFalse(def.key().startsWith("qol."), "fake key " + def.key());
         }
-        assertTrue(seen.contains("plugin.debug"));
+        assertTrue(seen.contains("general.debug"));
+        assertFalse(seen.contains("config-version"), "internal key must not be editable");
     }
 }

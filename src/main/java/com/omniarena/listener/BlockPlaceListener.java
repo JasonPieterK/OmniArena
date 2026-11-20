@@ -28,7 +28,7 @@ public class BlockPlaceListener implements Listener {
         Arena arena = arenaOpt.get();
         if (player.isOp()) return;
         if (!arena.getRules().isBlockPlace() && arena.getState() != ArenaState.RUNNING
-                && com.omniarena.config.ConfigManager.getInstance().getConfig().getBoolean("arena.region-protection", true)
+                && com.omniarena.config.ConfigManager.getInstance().getConfig().getBoolean("arenas.region-protection", true)
                 && !com.omniarena.permission.PermissionChecker.hasAdminArena(player)) {
             event.setCancelled(true);
             return;

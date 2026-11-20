@@ -187,7 +187,7 @@ public final class ArenaEditMenu {
     }
 
     private static MenuBuilder.Button regenStyleButton(Arena arena) {
-        String cur = RegenAnimationType.fromConfig(ConfigManager.getInstance().getConfig().getString("regen.animation.type", "SPHERE")).name();
+        String cur = RegenAnimationType.fromConfig(ConfigManager.getInstance().getConfig().getString("regen.style", "SPHERE")).name();
         RegenAnimationType[] all = RegenAnimationType.values();
         return MenuBuilder.button(MenuBuilder.item(Material.BRICKS, "<gold><bold>Regen style",
                 "<gray>Animation used to rebuild arenas.", "<dark_gray>Global setting, same for every arena.", "",
@@ -195,7 +195,7 @@ public final class ArenaEditMenu {
                 (p, t) -> {
                     int idx = RegenAnimationType.fromConfig(cur).ordinal();
                     idx = (idx + (t.isRightClick() ? all.length - 1 : 1)) % all.length;
-                    ConfigManager.getInstance().setConfigValue("regen.animation.type", all[idx].name());
+                    ConfigManager.getInstance().setConfigValue("regen.style", all[idx].name());
                     open(p, arena);
                 });
     }

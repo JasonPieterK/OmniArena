@@ -8,6 +8,7 @@ import com.omniarena.arena.ArenaRules;
 import com.omniarena.arena.ArenaTeamConfig;
 import com.omniarena.arena.ArenaVisualConfig;
 import com.omniarena.config.ConfigManager;
+import com.omniarena.config.ConfigMigration;
 import com.omniarena.match.GoalType;
 import com.omniarena.match.RespawnType;
 import com.omniarena.gamemode.GameModeType;
@@ -131,6 +132,7 @@ public class ConfigSchemaService {
         Set<String> keys = new LinkedHashSet<>();
         flattenSection(source, "", keys);
         for (String key : keys) {
+            if (!messages && ConfigMigration.VERSION_KEY.equals(key)) continue; // internal, not editable
             Object value = source.get(key);
             String group = groupForKey(key, messages);
             String label = labelForKey(key, messages);

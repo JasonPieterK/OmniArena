@@ -211,9 +211,9 @@ public class CombatListener implements Listener {
         // OmniArena's own teleports (and other plugins' API teleports) are never blocked.
         if (cause == PlayerTeleportEvent.TeleportCause.PLUGIN) return;
         boolean block = (cause == PlayerTeleportEvent.TeleportCause.ENDER_PEARL
-                    && legacyBool("pvp.combat.block-ender-pearl", "pvp.combat.block-enderpearls", false))
+                    && cfg().getConfig().getBoolean("pvp.combat.block-ender-pearl", false))
                 || (cause == PlayerTeleportEvent.TeleportCause.COMMAND
-                    && legacyBool("pvp.combat.block-teleport", "pvp.combat.cancel-teleport", true));
+                    && cfg().getConfig().getBoolean("pvp.combat.block-teleport", true));
         if (block) {
             event.setCancelled(true);
             MessageUtil.send(player, "<red>You can't teleport while in combat. <gray>(" + cm().getTagSeconds(player.getUniqueId()) + "s left)");
@@ -391,13 +391,5 @@ public class CombatListener implements Listener {
                 event.getDrops().clear();
             }
         }
-    }
-
-    /** Reads a key, falling back to its pre-rename name when only the old key is set in the server's config.yml. */
-    private boolean legacyBool(String key, String legacyKey, boolean def) {
-        var c = cfg().getConfig();
-        if (c.isSet(key)) return c.getBoolean(key, def);
-        if (c.isSet(legacyKey)) return c.getBoolean(legacyKey, def);
-        return def;
     }
 }

@@ -205,7 +205,7 @@ public final class OmniArena extends JavaPlugin {
             signUpdateTask.cancel();
             signUpdateTask = null;
         }
-        int signInterval = Math.max(1, configManager.getConfig().getInt("signs.update-interval", 20));
+        int signInterval = Math.max(1, configManager.getConfig().getInt("advanced.signs.update-interval", 20));
         signUpdateTask = AsyncUtil.runSyncRepeating(com.omniarena.health.ErrorGuard.wrap("signs", () -> {
             if (stopped || arenaManager == null || signManager == null) return;
             arenaManager.getAll().forEach(arena -> signManager.updateAllSigns(arena));

@@ -30,10 +30,10 @@ public class PartyManager {
 
     public static PartyManager getInstance() { return instance; }
 
-    /** Configured maximum party size (party.max-size, default 10, minimum 2). */
+    /** Configured maximum party size (ranked.party-max-size, default 10, minimum 2). */
     public static int maxSize() {
         try {
-            return Math.max(2, com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("party.max-size", 10));
+            return Math.max(2, com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("ranked.party-max-size", 10));
         } catch (Exception e) {
             return 10;
         }

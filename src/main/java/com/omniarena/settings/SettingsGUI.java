@@ -28,16 +28,16 @@ public final class SettingsGUI {
 
     private static final int PAGE_SIZE = 45; // rows 0-44, nav on bottom row
 
+    /** One entry per top-level section of config.yml (the category name is the section name, title-cased). */
     private static final Map<String, Material> GROUP_ICON = Map.ofEntries(
-            Map.entry("Config", Material.COMPARATOR), Map.entry("Arena", Material.IRON_SWORD),
-            Map.entry("Match", Material.CLOCK), Map.entry("Regen", Material.BRICKS),
-            Map.entry("Pvp", Material.DIAMOND_SWORD), Map.entry("Web", Material.COMPASS),
-            Map.entry("Modules", Material.COMMAND_BLOCK), Map.entry("Integrations", Material.REDSTONE),
-            Map.entry("Kits", Material.CHEST), Map.entry("Visual", Material.GLOWSTONE_DUST),
-            Map.entry("Performance", Material.REPEATER), Map.entry("Database", Material.BARREL),
-            Map.entry("Rewards", Material.GOLD_INGOT), Map.entry("Killstreak", Material.BLAZE_POWDER),
-            Map.entry("Signs", Material.OAK_SIGN), Map.entry("Quality", Material.NETHER_STAR),
-            Map.entry("Plugin", Material.BOOK));
+            Map.entry("General", Material.COMPARATOR), Map.entry("Arenas", Material.IRON_SWORD),
+            Map.entry("Matches", Material.CLOCK), Map.entry("Regen", Material.BRICKS),
+            Map.entry("Ranked", Material.NETHER_STAR), Map.entry("Kits", Material.CHEST),
+            Map.entry("Rewards", Material.GOLD_INGOT), Map.entry("Betting", Material.EMERALD),
+            Map.entry("Tournaments", Material.GOLDEN_HELMET), Map.entry("Pvp", Material.DIAMOND_SWORD),
+            Map.entry("Visuals", Material.GLOWSTONE_DUST), Map.entry("Integrations", Material.REDSTONE),
+            Map.entry("Web", Material.COMPASS), Map.entry("Health", Material.GOLDEN_APPLE),
+            Map.entry("Advanced", Material.REPEATER));
 
     private static ConfigSchemaService schema() {
         return new ConfigSchemaService(OmniArena.getInstance());
@@ -53,11 +53,9 @@ public final class SettingsGUI {
         return map;
     }
 
-    /** Sorted category names, matching the slot order of the category grid. */
+    /** Category names in config.yml order, matching the slot order of the category grid. */
     public static List<String> categoryNames() {
-        List<String> names = new ArrayList<>(grouped().keySet());
-        Collections.sort(names);
-        return names;
+        return new ArrayList<>(grouped().keySet()); // config.yml order
     }
 
     /** The setting shown at the given slot of a group page, or null if the slot is empty/out of range. */
@@ -88,8 +86,7 @@ public final class SettingsGUI {
         try {
             if (!allowed(player)) return;
             LinkedHashMap<String, List<SettingDefinition>> groups = grouped();
-            List<String> names = new ArrayList<>(groups.keySet());
-            Collections.sort(names);
+            List<String> names = new ArrayList<>(groups.keySet()); // config.yml order
             if (names.size() > 45) names = names.subList(0, 45);
 
             int rows = Math.min(6, MenuLayout.rowsFor(names.size()) + 1);

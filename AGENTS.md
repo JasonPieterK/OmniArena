@@ -101,7 +101,7 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
 **Tournaments**
 - `/oa tournament create|join|leave|start|status|list|delete|setprize`. Auto-start when full; byes
   for non power-of-two fields (top seeds); one live match per arena; offline player = walkover after
-  `tournament.walkover-grace-seconds`; a safety tick every 5 s relaunches stalled matches.
+  `tournaments.walkover-grace-seconds`; a safety tick every 5 s relaunches stalled matches.
 - Draw/timeout without a winner: player still in arena, else higher health, else random.
 - Prizes (Vault): 1st = champion, 2nd = final loser, 3rd = split evenly among semifinal losers (no
   third-place match), each rounded down to cents. Skipped when 0 or no economy.
@@ -121,10 +121,10 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
 - User-facing text goes through `messages.yml` (`ConfigManager.getMessage` adds the prefix) where
   practical; formatting is MiniMessage. Never put player-typed text into a MiniMessage string:
   build `Component.text(...)` (see `ChatListener.safeText`) or escape it.
-- `plugin.debug` gates verbose logging through `ConfigManager.debugLog(() -> ...)`; never log tokens.
+- `general.debug` gates verbose logging through `ConfigManager.debugLog(() -> ...)`; never log tokens.
 - Per-arena access lists (`/oa access`, `omniarena.admin.access`) are enforced in
   `MatchManager.joinArena`; per-arena `visual-titles|sounds|particles|holograms` are combined with the
-  global `visual.*` keys by `visual/VisualGate`.
+  global `visuals.*` keys by `visual/VisualGate`.
 - Declare every permission in `plugin.yml`. Player subcommands are checked by the dispatcher against
   their constructor permission for non-OP players; admin subcommands via `PermissionChecker.hasAdmin`
   (console, OP, `omniarena.admin`, or the node). All nodes in use are declared in `plugin.yml`
@@ -132,7 +132,7 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
 
 **Web dashboard**
 - Default bind `127.0.0.1`; token (`Authorization: Bearer`, `X-OmniArena-Token`, legacy `?token=`) on
-  every `/api/*` call; sessions slide on use, are capped (`web.max-sessions`) and revocable
+  every `/api/*` call; sessions slide on use, are capped (`advanced.web.max-sessions`) and revocable
   (`POST /api/logout`); JSON errors and security headers on every response; body limit 1 MiB; all-or-nothing validation in `ConfigApplyService`;
   arena names `[A-Za-z0-9_-]{1,32}`. Static assets are public: never embed secrets. Do not add
   endpoints that run commands or touch arbitrary paths. Phosphor icon CSS is loaded from unpkg without
@@ -181,7 +181,7 @@ persisted keys without a migration or fallback read.
 - `regen.arenas.<name>.auto` is not in the settings schema (no GUI/dashboard entry); use
   `/oa regen auto` or edit the file. `RespawnType.WAVE` waves are driven by the match timer
   (`MatchManager.tickWave`) and `respawn.wave-interval` is editable via `/oa config` and the dashboard.
-- `web.session-minutes` / `web.max-sessions` are read once at plugin enable.
+- `advanced.web.session-minutes` / `advanced.web.max-sessions` are read once at plugin enable.
 - The Docs tab serves `src/main/resources/web/docs.md`, which must be byte-identical to `DOCS.md`
   (`cp DOCS.md src/main/resources/web/docs.md`).
 - `/oa stop` cancels every scheduler task; auto regens that the stop starts are finished

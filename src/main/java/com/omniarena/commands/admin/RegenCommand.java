@@ -97,9 +97,9 @@ public class RegenCommand extends SubCommand {
     }
 
     private void sendProgress(CommandSender sender, String arenaName, int done, int total, int[] lastPercent) {
-        if (!ConfigManager.getInstance().getConfig().getBoolean("regen.progress.enabled", true)) return;
+        if (!ConfigManager.getInstance().getConfig().getBoolean("regen.progress-messages", true)) return;
         int percent = total <= 0 ? 100 : (int) Math.floor(done * 100.0 / total);
-        int interval = Math.max(1, ConfigManager.getInstance().getConfig().getInt("regen.progress.interval-percent", 10));
+        int interval = Math.max(1, ConfigManager.getInstance().getConfig().getInt("advanced.regen.progress-interval-percent", 10));
         if (percent < 100 && percent / interval == lastPercent[0] / interval) return;
         lastPercent[0] = percent;
         int bars = Math.min(20, Math.max(0, percent / 5));

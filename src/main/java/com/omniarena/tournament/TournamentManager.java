@@ -215,7 +215,7 @@ public class TournamentManager {
 
     /** Launch next match after the arena has finished resetting. */
     private void scheduleLaunch(Tournament t) {
-        long delay = (com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("match.end-delay", 5) + 2) * 20L;
+        long delay = (com.omniarena.config.ConfigManager.getInstance().getConfig().getInt("matches.end-delay", 5) + 2) * 20L;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!plugin.isStopped() && tournaments.get(t.getName().toLowerCase()) == t
                     && t.getState() == TournamentState.IN_PROGRESS) { launchPendingMatches(t); saveAll(); }
@@ -289,7 +289,7 @@ public class TournamentManager {
         }
 
         boolean busy = mm.getMatch(arena).isPresent() || !arena.isJoinable();
-        long graceMs = ConfigManager.getInstance().getConfig().getInt("tournament.walkover-grace-seconds", 60) * 1000L;
+        long graceMs = ConfigManager.getInstance().getConfig().getInt("tournaments.walkover-grace-seconds", 60) * 1000L;
         boolean launched = false;
 
         for (TournamentMatch tm : t.getBracket().getPendingMatches()) {

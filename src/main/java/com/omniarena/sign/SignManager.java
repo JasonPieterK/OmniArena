@@ -209,7 +209,7 @@ public class SignManager {
     }
 
     private void placeGlowstone(Block block) {
-        if (!plugin.getConfig().getBoolean("signs.glow-effect", true)) return;
+        if (!plugin.getConfig().getBoolean("arenas.sign-glow", true)) return;
         org.bukkit.block.BlockFace face = getOppositeDirection(block);
         if (face == null) return; // only wall signs get a backing glowstone
         Block behind = block.getRelative(face);

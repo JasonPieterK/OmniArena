@@ -1,123 +1,67 @@
-# OmniArena Global Configuration
-# Changes take effect on /oa reload (no restart required)
+# ============================================================================
+# OmniArena configuration
+# Edit, then run /oa reload (no restart needed, except the web and advanced.web keys).
+# Every key lists its default and allowed values. Missing keys are filled in automatically.
+# Old (pre-2.0 layout) files are migrated automatically; a backup goes to plugins/OmniArena/backups/.
+# ============================================================================
+config-version: 2  # internal, do not edit
 
-plugin:
-  debug: false
+# ── General ──────────────────────────────────────────────────────────────────
+general:
+  debug: false                 # true/false (default false): verbose console diagnostics
+  wand-material: WOODEN_HOE    # any item name (default WOODEN_HOE): the region selection wand
 
-tools:
-  wand-material: WOODEN_HOE  # item used as the region selection wand
+# ── Arenas: defaults for NEWLY created arenas (existing arenas keep their own values) ──
+arenas:
+  min-players: 2               # whole number >= 1 (default 2)
+  max-players: 16              # whole number >= min-players (default 16)
+  countdown: 10                # seconds, 0+ (default 10): lobby countdown before a match
+  match-duration: 600          # seconds, 1+ (default 600)
+  game-mode: DEATHMATCH        # a game type name, see /oa help (default DEATHMATCH)
+  spectator-allowed: true      # true/false (default true)
+  mid-match-join: false        # true/false (default false): allow joining a running match
+  respawn-delay: 3             # seconds, 0+ (default 3)
+  spawn-protection: 3          # seconds of invulnerability after spawning, 0+ (default 3)
+  # Applies to ALL arenas (not just new ones):
+  region-protection: true      # true/false (default true): block break/place in arena regions between matches (admins bypass)
+  sign-glow: true              # true/false (default true): put glowstone behind arena join signs
 
-arena:
-  # default-* and the options below seed NEW arenas (per-arena files override them)
-  default-min-players: 2
-  default-max-players: 16
-  default-countdown: 10
-  default-match-duration: 600  # seconds
-  default-game-mode: DEATHMATCH
-  lobby-timeout: 120  # seconds below min players before the lobby is closed (0 = never)
-  spectator-allowed: true
-  mid-match-join: false
-  respawn-delay: 3  # seconds
-  spawn-protection: 3  # seconds of invulnerability on spawn
-  inventory-restore: true  # restore player gear on leave
-  persist-player-state: true  # also write each player's pre-arena state to plugins/OmniArena/player-states/<uuid>.yml (async) so a crash cannot lose inventories; restored + deleted on next join
-  region-protection: true  # block break/place inside arena regions while no match is running (admins bypass)
+# ── Matches (all arenas) ─────────────────────────────────────────────────────
+matches:
+  end-delay: 5                 # seconds, 0+ (default 5): pause between match end and reset
+  lobby-timeout: 120           # seconds, 0+ (default 120; 0 = never): lobby closes after this long below the minimum players
+  inventory-restore: true      # true/false (default true): give players their own gear back when they leave
+  announce-arena: true         # true/false (default true): announce the result inside the arena
+  announce-global: false       # true/false (default false): announce the result to the whole server
+  # Console commands run when a match ends. Placeholders: {winner} {loser} {arena} {mode}
+  # Example: ["give {winner} diamond 1", "broadcast {winner} won in {arena}!"]
+  end-commands: []
 
-match:
-  end-commands: []  # Commands run on match end. Use {winner}, {loser}, {arena}, {mode}
-  # Example:
-  # - "give {winner} diamond 1"
-  # - "broadcast {winner} won in {arena}!"
-  end-delay: 5  # seconds before match resets after end
-  announce-global: false  # broadcast match results to whole server
-  announce-arena: true
-
+# ── Regeneration (arena rebuild after each match) ────────────────────────────
 regen:
-  auto: true  # rebuild the arena from its snapshot after every match (per arena: regen.arenas.<name>.auto)
-  batch-size: 4000  # blocks restored per tick; higher = faster, lower = smoother
-  progress:
-    enabled: true
-    interval-percent: 10  # chat progress updates every N percent
-  animation:
-    type: SPHERE  # INSTANT, SPHERE, RISE, FALL, SWEEP, TIME_REWIND, GALAXY, HOLOGRAM_SCAN, METEOR_SHOWER, OVERGROWTH (old names are mapped)
-    particles: true
-    sound: true
+  auto: true                   # true/false (default true): rebuild from the snapshot after every match
+  style: SPHERE                # INSTANT, SPHERE, RISE, FALL, SWEEP, TIME_REWIND, GALAXY, HOLOGRAM_SCAN, METEOR_SHOWER, OVERGROWTH (default SPHERE)
+  particles: true              # true/false (default true): particle effects during the rebuild
+  sound: true                  # true/false (default true): sound effects during the rebuild
+  progress-messages: true      # true/false (default true): chat progress updates during a manual /oa regen
+  # Per-arena override (managed by /oa regen auto <arena> <true|false|default>):
+  # arenas:
+  #   <arena-name-lowercase>:
+  #     auto: false
 
-# ── PvP / Combat management (PvPManager-style, server-wide) ──
-pvp:
-  enabled: true
-  combat:
-    tag-duration: 15          # seconds you stay "in combat" after a hit
-    tag-on-damage: true
-    tag-on-attack: true
-    block-teleport: true      # block non-plugin teleports (/tpa, /tp, /home...) while tagged; OmniArena's own are allowed
-    block-elytra: true        # no elytra gliding / firework boost while tagged
-    block-ender-pearl: false  # block ender pearl teleports while tagged
-    block-commands: true      # block commands while tagged (except allowed list)
-    allowed-commands:
-      - /oa
-      - /pvp
-      - /msg
-      - /r
-      - /helpop
-    block-block-place: true
-    disable-fly: true         # drop flight the moment combat starts
-    disable-gamemode: true    # force survival on combat
-    disable-invisibility: true # strip invisibility potion on combat
-    disable-disguise: true    # undisguise (LibsDisguises) on combat
-    punish-combat-log: true
-    combat-log-action: KILL   # KILL, COMMAND, or NOTHING
-    combat-log-commands: []   # used when action is COMMAND; {player} replaced
-    drop-on-combat-log: true
-    broadcast-combat-log: true
-  toggle:
-    enabled: true
-    cooldown: 5               # seconds between /pvp toggles
-    default-state: true       # PvP on by default for new players
-  global:
-    pvp-enabled: true         # server-wide master PvP switch
-  newbie:
-    enabled: true
-    duration: 300             # seconds of protection for new players
-    disable-on-attack: true   # protection drops if a newbie attacks someone
-    block-pickup: false
-  killabuse:
-    enabled: true
-    max-kills: 3              # kills on the same victim before it stops counting
-    time-window: 300         # seconds the kill window spans
-  respawn-protection:
-    enabled: true
-    duration: 5              # seconds of invulnerability after respawn
-  border-hopping:
-    prevent: true            # tagged players can't flee into safe zones
-  auto-soup:
-    enabled: false
-    heal-amount: 3.5         # half-hearts healed per soup
-    soup-material: MUSHROOM_STEW
-  blood:
-    enabled: true
-    block: REDSTONE_BLOCK    # block-break particle used for the blood splash
-  transfer-drops: false      # send a victim's drops straight to their killer
-  block-lava-fire-near-disabled: true
-  lava-fire-radius: 5.0      # block lava/fire placement within this many blocks of a protected player
-  disabled-worlds: []        # worlds where PvP is fully off
+# ── Ranked play: queue and parties ───────────────────────────────────────────
+ranked:
+  party-max-size: 10           # whole number >= 2 (default 10): players per party
 
-rewards:
-  enabled: false  # money needs Vault (integrations.vault)
-  kill-money: 10.0
-  win-money: 50.0
-  kill-xp: 5
-  win-xp: 20
-  win-commands: []   # console commands run for each winner; {player}, {arena}
-  kill-commands: []  # console commands run per kill; {player}, {victim}, {arena}
-
+# ── Kits ─────────────────────────────────────────────────────────────────────
 kits:
-  player-kits-enabled: true
-  default-slot-limit: 3  # personal kit slots per player
+  player-kits-enabled: true    # true/false (default true): players may save personal kits
+  default-slot-limit: 3        # whole number (default 3): personal kit slots per player
+  sharing-enabled: true        # true/false (default true): players may share kits
   power-cap:
-    enabled: true
-    max-enchant-level: 5
-    banned-items:
+    enabled: true              # true/false (default true): sanitise kits (enchant cap, banned items)
+    max-enchant-level: 5       # whole number (default 5)
+    banned-items:              # item names that can never be in a kit
       - BEDROCK
       - COMMAND_BLOCK
       - BARRIER
@@ -125,98 +69,159 @@ kits:
       - CHAIN_COMMAND_BLOCK
       - REPEATING_COMMAND_BLOCK
       - STRUCTURE_BLOCK
-  sharing-enabled: true
 
-party:
-  max-size: 10  # maximum players in one party (minimum 2)
+# ── Rewards (money needs Vault, see integrations.vault) ──────────────────────
+rewards:
+  enabled: false               # true/false (default false)
+  kill-money: 10.0             # number >= 0 (default 10.0)
+  win-money: 50.0              # number >= 0 (default 50.0)
+  kill-xp: 5                   # whole number (default 5)
+  win-xp: 20                   # whole number (default 20)
+  win-commands: []             # console commands per winner; {player} {arena}
+  kill-commands: []            # console commands per kill; {player} {victim} {arena}
 
-signs:
-  glow-effect: true  # place glowstone behind arena signs
-  update-interval: 20  # ticks between sign refreshes
+# ── Betting (needs Vault) ────────────────────────────────────────────────────
+betting:
+  enabled: true                # true/false (default true)
+  min-bet: 100.0               # number >= 0 (default 100.0)
+  max-bet: 10000.0             # number >= min-bet (default 10000.0)
+  allow-spectator-bet: true    # true/false (default true): spectators of the match may bet
+  bet-window-seconds: 30       # seconds (default 30): betting stays open this long after the match starts
 
-visual:
-  titles: true
-  sounds: true
-  particles: true
-  scoreboard: true
-  boss-bar: true
-  action-bar: true
-  killstreak-titles: true
-  kill-announcements: true
-  victory-fireworks: true
-  countdown-sounds: true
-  spectator-invisibility: true
+# ── Tournaments ──────────────────────────────────────────────────────────────
+tournaments:
+  walkover-grace-seconds: 60   # seconds (default 60): wait for an offline player before awarding a walkover
 
-killstreak:
-  milestones:
-    5: "KILLING SPREE"
-    10: "DOMINATING"
-    15: "UNSTOPPABLE"
-    20: "GODLIKE"
-  sound: ENTITY_LIGHTNING_BOLT_THUNDER
-  particle: FLAME
+# ── PvP and combat management (server-wide, PvPManager-style) ────────────────
+pvp:
+  enabled: true                # true/false (default true): master switch for everything under pvp
+  server-pvp: true             # true/false (default true): server-wide PvP on/off (also set by /pvp global)
+  disabled-worlds: []          # world names where PvP is fully off
+  transfer-drops: false        # true/false (default false): a victim's drops go straight to the killer
+  combat:
+    tag-duration: 15           # seconds in combat after a hit (default 15)
+    tag-on-damage: true        # true/false (default true): taking damage tags you
+    tag-on-attack: true        # true/false (default true): attacking tags you
+    block-teleport: true       # true/false (default true): block /tpa, /tp, /home... while tagged (OmniArena's own are allowed)
+    block-elytra: true         # true/false (default true): no elytra gliding or firework boost while tagged
+    block-ender-pearl: false   # true/false (default false): block ender pearls while tagged
+    block-commands: true       # true/false (default true): block commands while tagged (except allowed-commands)
+    allowed-commands:          # commands still allowed while tagged
+      - /oa
+      - /pvp
+      - /msg
+      - /r
+      - /helpop
+    block-block-place: true    # true/false (default true): no block placing while tagged
+    disable-fly: true          # true/false (default true): drop flight when combat starts
+    disable-gamemode: true     # true/false (default true): force survival when combat starts
+    disable-invisibility: true # true/false (default true): strip invisibility when combat starts
+    disable-disguise: true     # true/false (default true): undisguise (LibsDisguises) when combat starts
+    punish-combat-log: true    # true/false (default true): punish quitting while tagged
+    combat-log-action: KILL    # KILL, COMMAND or NOTHING (default KILL)
+    combat-log-commands: []    # run when combat-log-action is COMMAND; {player} is replaced
+    drop-on-combat-log: true   # true/false (default true): the combat logger's items drop
+    broadcast-combat-log: true # true/false (default true): announce combat logging
+  toggle:
+    enabled: true              # true/false (default true): players may use /pvp to switch PvP off for themselves
+    cooldown: 5                # seconds between /pvp toggles (default 5)
+    default-state: true        # true/false (default true): PvP on for new players
+  newbie:
+    enabled: true              # true/false (default true): protect first-time players
+    duration: 300              # seconds of protection (default 300)
+    disable-on-attack: true    # true/false (default true): protection ends if the newbie attacks
+    block-pickup: false        # true/false (default false): protected players cannot pick up items
+  killabuse:
+    enabled: true              # true/false (default true): stop farming the same victim
+    max-kills: 3               # kills on one victim before they stop counting (default 3)
+    time-window: 300           # seconds the kill window spans (default 300)
+  respawn-protection:
+    enabled: true              # true/false (default true)
+    duration: 5                # seconds of invulnerability after respawn (default 5)
+  border-hopping:
+    prevent: true              # true/false (default true): tagged players cannot flee into safe zones
+  auto-soup:
+    enabled: false             # true/false (default false)
+    heal-amount: 3.5           # half-hearts healed per soup (default 3.5)
+    soup-material: MUSHROOM_STEW # item name (default MUSHROOM_STEW)
+  blood:
+    enabled: true              # true/false (default true): blood splash on hit
+    block: REDSTONE_BLOCK      # block name used for the particles (default REDSTONE_BLOCK)
+  block-lava-fire-near-disabled: true # true/false (default true): no lava/fire placement near players with PvP off
+  lava-fire-radius: 5.0        # blocks (default 5.0): radius for the option above
 
-scoreboard:
-  title: "<gradient:#ff6b35:#f7c59f>OmniArena</gradient>"
-  update-interval: 20  # ticks (minimum effective 20 = 1s)
+# ── Visuals (global switches; each arena can also switch channels off) ───────
+visuals:
+  titles: true                 # true/false (default true)
+  sounds: true                 # true/false (default true)
+  particles: true              # true/false (default true)
+  scoreboard: true             # true/false (default true): sidebar
+  boss-bar: true               # true/false (default true)
+  action-bar: true             # true/false (default true)
+  killstreak-titles: true      # true/false (default true)
+  kill-announcements: true     # true/false (default true)
+  victory-fireworks: true      # true/false (default true)
+  countdown-sounds: true       # true/false (default true)
+  spectator-invisibility: true # true/false (default true)
+  scoreboard-title: "<gradient:#ff6b35:#f7c59f>OmniArena</gradient>" # MiniMessage text
+  boss-bar-colors:             # BLUE, GREEN, PINK, PURPLE, RED, WHITE or YELLOW
+    timer: GREEN               # default GREEN: normal match timer
+    waiting: YELLOW            # default YELLOW: waiting/starting
+    ending: PURPLE             # default PURPLE: match ending
+    low-time: RED              # default RED: little time left
+    low-time-seconds: 60       # seconds (default 60): "little time" threshold
+  killstreak:
+    sound: ENTITY_LIGHTNING_BOLT_THUNDER # sound name (default ENTITY_LIGHTNING_BOLT_THUNDER)
+    particle: FLAME            # particle name (default FLAME)
+    milestones:                # kills in a row: announcement text
+      5: "KILLING SPREE"
+      10: "DOMINATING"
+      15: "UNSTOPPABLE"
+      20: "GODLIKE"
 
-boss-bar:
-  timer-color: GREEN
-  waiting-color: YELLOW  # waiting/starting
-  ending-color: PURPLE
-  low-time-color: RED  # color when < 60s remain
-  low-time-threshold: 60
-
+# ── Integrations (each needs the other plugin installed; true/false, default true) ──
 integrations:
-  vault: true
-  placeholderapi: true
+  vault: true                  # economy for rewards, bets, tournament prizes
+  placeholderapi: true         # %omniarena_...% placeholders (leaderboards for any hologram plugin: %omniarena_top_<kills|wins|kd|elo>_<1-10>_name% / _value%)
   worldguard: true
   luckperms: true
-  # Leaderboard placeholders for any hologram plugin (needs PlaceholderAPI): %omniarena_top_<kills|wins|kd|elo>_<1-10>_name%
-  # and ..._value%, plus %omniarena_elo%, %omniarena_rank%, %omniarena_arena%, %omniarena_in_match%.
-  # DecentHolograms: /oa leaderboard create <id> [kills|wins|kd|elo] [size] makes a hologram there. Needs the plugin installed.
-  decentholograms: true
-  # FancyHolograms: same command; used when DecentHolograms is not installed.
-  fancyholograms: true
-  # Citizens: /oa npc create <menu|join|queue|spectate> binds NPC right-clicks to menus, joining, queueing, spectating.
-  citizens: true
-  # Multiverse-Core: lets /oa arena tp and /oa setup load an arena's world on demand when it is not loaded.
-  multiverse: true
+  decentholograms: true        # /oa leaderboard create <id> [kills|wins|kd|elo] [size]
+  fancyholograms: true         # same command, used when DecentHolograms is not installed
+  citizens: true               # /oa npc create <menu|join|queue|spectate>
+  multiverse: true             # /oa arena tp and /oa setup can load an arena's world on demand
   tab:
-    # TAB (https://modrinth.com/plugin/tab-was-taken) compatibility.
-    # When takeover is true, OmniArena stops drawing its own sidebar + bossbar
-    # so TAB can render them from our PlaceholderAPI placeholders instead.
-    # Placeholders: %omniarena_gamemode_name%, %omniarena_state%, %omniarena_arena%,
-    #   %omniarena_arena_kills%, %omniarena_alive%, %omniarena_players%,
-    #   %omniarena_time_left%, %omniarena_team%, %omniarena_team_color% (+ lifetime stats)
-    takeover: false
+    # TAB compatibility. true = OmniArena stops drawing its own sidebar and boss bar so TAB can show
+    # them from our PlaceholderAPI placeholders (%omniarena_gamemode_name%, %omniarena_state%, %omniarena_alive%, ...).
+    takeover: false            # true/false (default false)
 
-# Self-healing: config repair, watchdog and /oa doctor
-health:
-  enabled: true              # master switch for the runtime watchdog (config repair at startup always runs)
-  watchdog-seconds: 30       # how often the watchdog checks arenas, matches, players and background tasks
-  stuck-arena-seconds: 180   # an arena in ENDING/RESETTING (no regen running) longer than this is force-cleaned
-  notify-admins: true        # tell admins on join "OmniArena fixed N problems - /oa doctor" after a repair
-  backups-to-keep: 10        # config.yml/messages.yml backups kept per file in plugins/OmniArena/backups/
-
+# ── Web dashboard ────────────────────────────────────────────────────────────
 web:
-  enabled: true
-  # Interface the dashboard listens on. 127.0.0.1 = local only (safe default).
-  # Set to 0.0.0.0 for remote access, but put it behind a reverse proxy with HTTPS
-  # (the session token is sent in the URL/query string).
+  enabled: true                # true/false (default true)
+  # 127.0.0.1 = this machine only (safe default). Use 0.0.0.0 for remote access, but put it behind an HTTPS reverse proxy.
   bind-address: 127.0.0.1
-  port: 8123
-  public-url: ""  # optional base URL for generated editor links
-  session-minutes: 30
-  max-sessions: 1
-  title: OmniArena Control
+  port: 8123                   # 1-65535 (default 8123)
+  public-url: ""               # optional base URL used in generated editor links
+  title: OmniArena Control     # dashboard title text
 
-betting:
-  enabled: true
-  min-bet: 100.0
-  max-bet: 10000.0
-  allow-spectator-bet: true
-  bet-window-seconds: 30
+# ── Self-healing: config repair, watchdog and /oa doctor ─────────────────────
+health:
+  enabled: true                # true/false (default true): runtime watchdog (config repair at startup always runs)
+  notify-admins: true          # true/false (default true): tell admins on join when something was repaired
+  backups-to-keep: 10          # whole number >= 1 (default 10): config/messages backups kept in plugins/OmniArena/backups/
 
-tournament:
-  walkover-grace-seconds: 60   # wait this long for an offline player before awarding a walkover
+# ── Advanced: rarely needed tuning, safe to leave alone ──────────────────────
+advanced:
+  persist-player-state: true   # true/false (default true): write each player's pre-arena state to player-states/<uuid>.yml so a crash cannot lose inventories
+  regen:
+    batch-size: 4000           # blocks per tick (default 4000): higher = faster rebuild, lower = smoother
+    progress-interval-percent: 10 # 1-100 (default 10): chat progress step during manual regen
+  signs:
+    update-interval: 20        # ticks (default 20): how often join signs refresh
+  scoreboard:
+    update-interval: 20        # ticks (default 20): sidebar refresh (20 = 1 second is the effective minimum)
+  health:
+    watchdog-seconds: 30       # seconds (default 30): how often the watchdog checks arenas and matches
+    stuck-arena-seconds: 180   # seconds (default 180): an arena stuck in ENDING/RESETTING this long is force-cleaned
+  web:
+    session-minutes: 30        # minutes (default 30): dashboard login lifetime (needs a restart)
+    max-sessions: 1            # whole number (default 1): simultaneous dashboard logins (needs a restart)

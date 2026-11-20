@@ -37,7 +37,7 @@ public class BoardManager {
 
     private boolean enabled(Match match) {
         return match.getArena().getVisual().isScoreboard()
-                && ConfigManager.getInstance().getConfig().getBoolean("visual.scoreboard", true);
+                && ConfigManager.getInstance().getConfig().getBoolean("visuals.scoreboard", true);
     }
 
     public void createBoard(Player player, Match match) {
@@ -59,9 +59,9 @@ public class BoardManager {
     /** Updates every viewer (players and spectators) of the match; rankings computed once. */
     public void updateAll(Match match) {
         if (!enabled(match)) return;
-        // scoreboard.update-interval is in ticks; callers tick once per second, so never go below 1s.
+        // advanced.scoreboard.update-interval is in ticks; callers tick once per second, so never go below 1s.
         long intervalMs = Math.max(1000L, ConfigManager.getInstance().getConfig()
-                .getLong("scoreboard.update-interval", 20L) * 50L);
+                .getLong("advanced.scoreboard.update-interval", 20L) * 50L);
         long now = System.currentTimeMillis();
         Long last = lastUpdate.get(match);
         // 150ms tolerance for scheduler jitter so a steady 1s caller is never skipped.
@@ -127,7 +127,7 @@ public class BoardManager {
     }
 
     private String title() {
-        String t = ConfigManager.getInstance().getConfig().getString("scoreboard.title", DEFAULT_TITLE);
+        String t = ConfigManager.getInstance().getConfig().getString("visuals.scoreboard-title", DEFAULT_TITLE);
         return trim(ColorUtil.toLegacy(ColorUtil.parse(t)), 64);
     }
 

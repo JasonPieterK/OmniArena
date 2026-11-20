@@ -79,7 +79,7 @@ public enum RegenAnimationType {
         RegenAnimationType mapped = LEGACY.get(v);
         if (mapped != null) return mapped;
         try {
-            Logger.getLogger("OmniArena").warning("Unknown regen.animation.type '" + value
+            Logger.getLogger("OmniArena").warning("Unknown regen.style '" + value
                     + "', using " + DEFAULT.name() + ". Valid styles: " + validList());
         } catch (Throwable ignored) {
             // logging must never break config parsing

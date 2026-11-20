@@ -93,7 +93,7 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `kit` | `KitManager`, `Kit`/`AdminKit`/`PlayerKit`, `KitGUI`, `KitShareHandler`, `KitMenuHolder` | Preset kits (`admin-kits/`) and personal kits (`player-kits/`), sanitising and power cap, sharing with 60 s expiry. |
 | `queue` | `QueueManager` | Per-kit matchmaking queues of solo players and parties; 1 s task. |
 | `rating` | `EloManager`, `EloRating` | ELO storage (`elo.yml`) and math (1v1 and team). |
-| `party` | `PartyManager` | Parties (invites keyed by party id, leader transfer, kick, size limit `party.max-size`). Feeds the queue. |
+| `party` | `PartyManager` | Parties (invites keyed by party id, leader transfer, kick, size limit `ranked.party-max-size`). Feeds the queue. |
 | `betting` | `BettingManager` | Vault-backed bet pools and settlement. |
 | `tournament` | `TournamentManager`, `Tournament`, `TournamentBracket`, `TournamentMatch`, `TournamentState` | Single-elimination tournaments with persistence. |
 | `stats` | `StatsManager`, `PlayerStats` | Lifetime stats (`stats.yml`), top lists, `peekStats` (read-only) vs `getStats` (creates). |
@@ -287,9 +287,9 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - Timeout: `buildTimeoutResult` awards a strict kill leader (or leading team) in `KILLS` modes;
   ties and `LAST_ALIVE` modes yield `Outcome.TIMEOUT` (a draw).
 - Player state: `MatchManager.saveState/restoreState` store and restore location, game mode, health,
-  food, saturation, XP, effects, flight, speeds, invisibility and (if `arena.inventory-restore`)
+  food, saturation, XP, effects, flight, speeds, invisibility and (if `matches.inventory-restore`)
   inventory/armor for players *and* spectators. `PlayerStateStore` mirrors it to
-  `player-states/<uuid>.yml` when `arena.persist-player-state` (default true) (snapshot on main
+  `player-states/<uuid>.yml` when `advanced.persist-player-state` (default true) (snapshot on main
   thread, atomic write on a single writer thread) so `PlayerJoinListener` can restore a player
   after a crash; `MatchManager.shutdownStateStore()` flushes it in `onDisable`. Always leave
   through `leaveArena`/`leaveSpectator` so state is restored (and the file deleted). A stale
@@ -297,7 +297,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`, refuses arenas reserved by
   an in-progress tournament (`isArenaReserved`) for anyone not in the current pending match, and
   refuses outsiders in a ranked match that is underway.
-- Countdown task: below `effectiveMin` players it stays WAITING and counts `arena.lobby-timeout`
+- Countdown task: below `effectiveMin` players it stays WAITING and counts `matches.lobby-timeout`
   (config, default 120, 0 = never) seconds before closing the lobby.
 - `Arena.lives` (arena file key `lives`, 0 = off, max 100): settable via `/oa edit <arena> set
   lives <n>` and the dashboard. `PlayerDeathListener` decrements `Match.getLivesMap()`, respawns
@@ -354,7 +354,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - Styles: 10 enum values in `RegenAnimationType` (`INSTANT`, `SPHERE` default, `RISE`, `FALL`,
   `SWEEP`, `TIME_REWIND`, `GALAXY`, `HOLOGRAM_SCAN`, `METEOR_SHOWER`, `OVERGROWTH`), plus the
   legacy-name map in `fromConfig`/`parse`. Unknown or blank -> `SPHERE`. Batch: `INSTANT` uses
-  `regen.batch-size`; animated types use `min(batch-size, 1200)`. `MAX_DESCENDERS = 90`.
+  `advanced.regen.batch-size`; animated types use `min(batch-size, 1200)`. `MAX_DESCENDERS = 90`.
 - When adding a style: add the enum value, `orderEntries` case, `buildPreview` case, optional
   sound case, extend `RegenAnimationTypeTest`, and update docs (counts appear in README, DOCS.md and
   the help guides).
@@ -375,7 +375,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   are free and the arena is idle, and requeues nothing itself (it calls `leaveQueue` for both
   players). A 100-tick task (`tickTask`, cancelled in `stop()`, gated by `isStopped()`) retries
   launches and recovers matches that vanished without a result (`tm.setStarted(false)`).
-- Offline player: `waitingSince` map; walkover only after `tournament.walkover-grace-seconds`
+- Offline player: `waitingSince` map; walkover only after `tournaments.walkover-grace-seconds`
   (default 60). A player who leaves the arena while the match runs forfeits via `forceWin`.
 - `startTournament` drops offline participants and needs >= 2 online players.
 - `onMatchEnd(MatchResult)`: finds the first started, non-completed, non-bye match of the current
@@ -391,7 +391,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   `bracket.currentRound`). `loadAll` skips FINISHED/CANCELLED, restores brackets (falling back to
   `REGISTRATION` if unusable), and schedules `resume` on the next tick. `stop()` saves then clears
   memory; `start()` reloads. Tournament matches are not ranked.
-- Delay between launches: `match.end-delay + 2` seconds (arena must finish resetting first). With
+- Delay between launches: `matches.end-delay + 2` seconds (arena must finish resetting first). With
   automatic regeneration the arena stays `RESETTING` until the rebuild is done, so an early launch
   fails `joinArena` and the 100-tick safety task retries it.
 - A standalone `/tournament` command exists (plugin.yml, forwarded to `/oa tournament`).
@@ -437,9 +437,8 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
 - `stats.yml`, `elo.yml`, `tournaments.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
   `kit-cooldowns.yml`, `player-states/<uuid>.yml`.
 - `YamlUtil.save` swallows `IOException` and logs. Prefer it for new files.
-- Never change a persisted key name without a migration or a fallback read of the old key (see the
-  `cancel-teleport` / `block-enderpearls` fallbacks in `CombatListener.legacyBool`, which use
-  `isSet` so the jar defaults do not mask an old key).
+- Never change a persisted key name without a migration or a fallback read of the old key (for
+  `config.yml` add the old name to `ConfigMigration.MOVES`, see section 11).
 
 ---
 
@@ -470,7 +469,13 @@ unknownSubcommand, explainNotJoinable) for user mistakes so errors stay clickabl
 
 ### Adding a config key
 
-1. Add it to `src/main/resources/config.yml` with a comment.
+`config.yml` is layout version 2 (`config-version: 2`). Top-level sections, in file order: `general`, `arenas`
+(defaults for new arenas + arena-wide switches), `matches`, `regen`, `ranked`, `kits`, `rewards`, `betting`,
+`tournaments`, `pvp`, `visuals`, `integrations`, `web`, `health`, `advanced` (rarely-touched tuning). The settings GUI and the
+web Config tab use these section names as categories (in file order, `config-version` is hidden).
+
+1. Add it to `src/main/resources/config.yml` in the right section, with a one-line comment giving the default and the
+   allowed values. Rarely-touched tuning goes under `advanced`.
 2. Read it with `ConfigManager.getInstance().getConfig().getXxx(key, default)` at the point of use.
 3. The web/GUI schema derives from the live `config.yml` and `messages.yml` automatically
    (`ConfigSchemaService.settings()`; type is inferred from the value). There is no padding and no
@@ -478,9 +483,32 @@ unknownSubcommand, explainNotJoinable) for user mistakes so errors stay clickabl
    `ConfigSchemaServiceTest` and the web Config tab after changes.
 4. If the key must be validated in the web UI add rules in `ConfigApplyService` (types, ranges, enums).
 5. Document it in DOCS.md section 18 and, if user-facing, the README.
-6. Do not add a key nobody reads. Today every key in `config.yml` is read. `plugin.debug` is read via
+6. Do not add a key nobody reads. Today every key in `config.yml` is read. `general.debug` is read via
    `ConfigManager.debugLog(() -> "...")` (lazy supplier, no cost when off); use it for verbose
    diagnostics (matchmaking, regen timings, web requests) and never log tokens.
+7. **Renaming or moving a key**: add `old -> new` to `ConfigMigration.MOVES` (and bump `CURRENT_VERSION` plus the
+   `config-version` line in `config.yml` for a new layout version), extend `ConfigMigrationTest`. Never leave old names
+   anywhere else in the code.
+
+**Migration** (`com.omniarena.config.ConfigMigration`, pure logic, tested): `ConfigManager.load()/reload()` runs
+`migrateLayout()` BEFORE `ConfigRepair`. If `config-version` < 2 it backs the file up (`BackupUtil`, `backups/config-*.yml`; no
+backup, no migration), moves every old key via `MOVES`, drops `REMOVED` keys, and writes the result on top of the bundled
+commented `config.yml` (`overlay`; the admin's values win, unknown keys are kept, `killstreak.milestones` replaces rather than
+merges). `regen.arenas.<name>.auto` did not move. After every load `applyFallback` runs in memory so old keys still work
+if the file could not be rewritten; this is the only place that knows old key names (the old `legacyBool` fallback in
+`CombatListener` is gone, its old names are in `MOVES`).
+
+Old -> new (v1 -> v2): `plugin.debug` -> `general.debug`; `tools.wand-material` -> `general.wand-material`;
+`arena.default-{min-players,max-players,countdown,match-duration,game-mode}` -> `arenas.{min-players,max-players,countdown,match-duration,game-mode}`;
+`arena.{spectator-allowed,mid-match-join,respawn-delay,spawn-protection,region-protection}` -> `arenas.*`; `signs.glow-effect` -> `arenas.sign-glow`;
+`match.*` -> `matches.*`; `arena.lobby-timeout` / `arena.inventory-restore` -> `matches.*`;
+`regen.animation.{type,particles,sound}` -> `regen.{style,particles,sound}`; `regen.progress.enabled` -> `regen.progress-messages`;
+`party.max-size` -> `ranked.party-max-size`; `tournament.*` -> `tournaments.*`; `pvp.global.pvp-enabled` -> `pvp.server-pvp`;
+`visual.*` -> `visuals.*`; `scoreboard.title` -> `visuals.scoreboard-title`; `boss-bar.{timer,waiting,ending,low-time}-color` ->
+`visuals.boss-bar-colors.{timer,waiting,ending,low-time}`; `boss-bar.low-time-threshold` -> `visuals.boss-bar-colors.low-time-seconds`;
+`killstreak.*` -> `visuals.killstreak.*`; to `advanced.*`: `arena.persist-player-state`, `regen.batch-size` (`advanced.regen.batch-size`),
+`regen.progress.interval-percent` (`advanced.regen.progress-interval-percent`), `signs.update-interval`, `scoreboard.update-interval`,
+`health.{watchdog,stuck-arena}-seconds`, `web.{session-minutes,max-sessions}`. The canonical table is `ConfigMigration.MOVES`.
 
 ### Messages
 
@@ -576,7 +604,7 @@ back to the jar's bundled `messages.yml`.
     that node declared and default-true for anything regular players should use.
 12. `ConfigSchemaService.settings()` instantiates a lot on each call (`SettingsGUI.grouped()` constructs a
     new service per call): avoid calling it in hot paths.
-13. `WebSessionManager` is created once; `web.session-minutes`/`web.max-sessions` do not live-reload.
+13. `WebSessionManager` is created once; `advanced.web.session-minutes`/`advanced.web.max-sessions` do not live-reload.
 14. Maven profiles: `paper` and `mc-26.2` are `activeByDefault`, which is switched off by any
     explicit `-P`; always pass `-P<platform>,mc-<version>`.
 15. `target/` and `dist/` are git-ignored; do not force-add build output.
@@ -584,7 +612,7 @@ back to the jar's bundled `messages.yml`.
     `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena`
     (blacklist always; whitelist when enabled unless `omniarena.join.bypass`/OP). Do not add join
     paths that skip `joinArena`.
-16a. Visual channels: `VisualGate` combines the global `visual.titles|sounds|particles`
+16a. Visual channels: `VisualGate` combines the global `visuals.titles|sounds|particles`
     key with the arena flag. New titles/sounds/particles must go through `TitleManager`,
     `SoundManager`, `ParticleManager`/`EffectManager` (which gate) or call `VisualGate` themselves.
 16c. Integration isolation (`IntegrationManager`): hooks are `vault`, `placeholderapi`, `worldguard`, `luckperms`,
@@ -645,9 +673,9 @@ back to the jar's bundled `messages.yml`.
   persistent data: a corrupt file is moved to `broken/` (arenas: `arenas/broken/`) with a timestamp and loading
   continues empty. Used by `ArenaConfig.loadAll` (also on any exception while building the arena), `StatsManager`,
   `EloManager`, `TournamentManager`, player kits. New persistent files should use it too.
-- **Watchdog** (`Watchdog`, every `health.watchdog-seconds`, default 30; `health.enabled` switch; start/stop idempotent, wired
+- **Watchdog** (`Watchdog`, every `advanced.health.watchdog-seconds`, default 30; `health.enabled` switch; start/stop idempotent, wired
   into onEnable/onDisable/`/oa stop|start|reload`, gated by `isStopped()`): arenas in ENDING/RESETTING longer than
-  `health.stuck-arena-seconds` (default 180; RESETTING with an active regen is never stuck) are force-cleaned via
+  `advanced.health.stuck-arena-seconds` (default 180; RESETTING with an active regen is never stuck) are force-cleaned via
   `MatchManager.forceCleanup(match)` and reset to WAITING; RUNNING/STARTING arenas without a match are reset; matches whose arena
   was deleted are cleaned (`startAutoRegen` skips regen for an arena that is no longer registered); players mapped to a vanished match
   (`MatchManager.findOrphanedPlayers/healOrphanedPlayers`) get their state back through the stale-mapping paths of

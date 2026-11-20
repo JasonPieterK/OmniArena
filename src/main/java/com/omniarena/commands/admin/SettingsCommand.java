@@ -86,7 +86,7 @@ public class SettingsCommand extends SubCommand {
         return switch (entry.type()) {
             case BOOLEAN -> name.append(booleanButtons(entry, toBoolean(current, entry.defaultValue())));
             case INTEGER, DECIMAL, STRING, COLOR, LIST, SELECT -> {
-                if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
+                if ("regen.style".equalsIgnoreCase(entry.key())) {
                     yield name.append(styleButton(entry, String.valueOf(current != null ? current : entry.defaultValue())));
                 }
                 yield name.append(suggestButton(entry, stringifyCurrent(current)));
@@ -157,7 +157,7 @@ public class SettingsCommand extends SubCommand {
                         .filter(s -> !s.isBlank())
                         .toList();
                 case COLOR, SELECT, STRING -> {
-                    if ("regen.animation.type".equalsIgnoreCase(entry.key())) {
+                    if ("regen.style".equalsIgnoreCase(entry.key())) {
                         RegenAnimationType parsed = RegenAnimationType.parse(raw);
                         if (parsed != null) yield parsed.name();
                         {

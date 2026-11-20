@@ -34,7 +34,7 @@ public class PlayerInteractListener implements Listener {
 
     /** Configurable selection-wand material; defaults to a wooden hoe. */
     public static org.bukkit.Material wandMaterial() {
-        String name = ConfigManager.getInstance().getConfig().getString("tools.wand-material", "WOODEN_HOE");
+        String name = ConfigManager.getInstance().getConfig().getString("general.wand-material", "WOODEN_HOE");
         try { return org.bukkit.Material.valueOf(name.toUpperCase()); }
         catch (IllegalArgumentException e) { return org.bukkit.Material.WOODEN_HOE; }
     }

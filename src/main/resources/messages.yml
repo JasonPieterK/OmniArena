@@ -1,5 +1,6 @@
-# OmniArena Messages Configuration
-# Supports MiniMessage format: https://docs.advntr.dev/minimessage/format.html
+# OmniArena messages. Format: MiniMessage (https://docs.advntr.dev/minimessage/format.html).
+# {placeholders} are filled in by the plugin; keep them in your text. Keys are grouped by topic below.
+# Edit freely, then run /oa reload. Keys you delete are filled in from the built-in defaults.
 
 prefix: "<dark_gray>[<gradient:#ff6b35:#f7c59f>OmniArena</gradient><dark_gray>] "
 
@@ -35,24 +36,18 @@ arena-info-spawns: " <gray>Spawns: <white>{spawns}"
 match-starting: "<yellow>Match starting in <gold>{seconds}</gold> seconds!"
 match-started: "<green>Match started! Good luck!"
 match-ended: "<gold>Match over! {result}"
-match-winner: "<gold>Winner: <yellow>{winner}"
-match-draw: "<gray>The match ended in a draw."
 
 # Join / Leave
 join-arena: "<green>You joined arena <yellow>{arena}</yellow>!"
 leave-arena: "<yellow>You left arena <yellow>{arena}</yellow>."
 already-in-arena: "<red>You are already in an arena. <gray>Leave it first with <white>/oa leave</white>."
 not-in-arena: "<red>You are not in an arena. <gray>Join one with <white>/oa join</white> (or <white>/oa join <arena></white>)."
-arena-full: "<red>Arena <yellow>{arena}</yellow> is full ({max} players). <gray>Try another arena (<white>/oa join</white>) or spectate with <white>/oa spectate {arena}</white>."
 arena-disabled-join: "<red>Arena <yellow>{arena}</yellow> is disabled, so nobody can join. <gray>Admins: enable it with <white>/oa arena enable {arena}</white>."
 arena-in-progress: "<yellow>Arena <yellow>{arena}</yellow> is in progress. Join as spectator? <green>[Click]"
-match-min-players: "<yellow>Waiting for players... <gray>({current}/{min} needed)"
 
 # Spectator
 spectate-joined: "<gray>You are now spectating <yellow>{arena}</yellow>."
-spectate-left: "<gray>You left spectator mode."
 spectate-not-allowed: "<red>You can't spectate <yellow>{arena}</yellow> right now: spectating is disabled for it, or it has no running match. <gray>Check <white>/oa list {arena}</white>; admins can set a spectator spawn with <white>/oa setup {arena} spectator</white>."
-spectate-follow: "<gray>Following <yellow>{player}</yellow>. Sneak to stop."
 
 # Kill / Death
 kill-announcement: "<red>{killer} <dark_gray>[<red>{killer_kills}<dark_gray>] <gray>killed <yellow>{victim} <gray>with <white>{weapon}<gray>."
@@ -65,7 +60,6 @@ combat-untagged: "<green>You are no longer in combat."
 combat-expired: "<green>⚔ You are out of combat."
 combat-log: "<dark_red>{player} logged out in combat and was slain!"
 combat-no-command: "<red>You can't use that command while in combat."
-combat-no-teleport: "<red>You can't teleport while in combat."
 combat-no-place: "<red>You can't place blocks while in combat."
 combat-no-safezone: "<red>You can't enter a safe zone while in combat!"
 combat-no-lavafire: "<red>You can't place lava or fire near a protected player."
@@ -88,7 +82,6 @@ killstreak-broadcast: "<yellow>{player}</yellow> is on a <gold>{streak} killstre
 killstreak-broken: "<green>You broke <yellow>{player}'s</yellow> <gold>{streak}</gold> killstreak!"
 combo-counter: "<gold>x{combo} COMBO!"
 revenge-kill: "<gold>REVENGE! You killed <yellow>{player}</yellow> who killed you!"
-assist-notification: "<gray>Assist! You helped kill <yellow>{player}</yellow>."
 
 # Kit
 kit-created: "<green>Kit <yellow>{kit}</yellow> created."
@@ -102,14 +95,9 @@ kit-already-exists: "<red>You already have a kit named <yellow>{kit}</yellow>. <
 kit-share-sent: "<green>Kit share request sent to <yellow>{player}</yellow>."
 kit-share-received: "<yellow>{sender}</yellow> wants to share kit <green>{kit}</green> with you. <yellow>[Accept]"
 kit-share-accepted: "<green>Kit <yellow>{kit}</yellow> added to your kits."
-kit-share-declined: "<red>Kit share request declined."
 kit-share-expired: "<red>Kit share request from <yellow>{sender}</yellow> expired."
-kit-preview-title: "Preview: {kit}"
 kit-renamed: "<green>Kit <yellow>{old}</yellow> renamed to <yellow>{new}</yellow>."
-kit-set-public: "<green>Kit <yellow>{kit}</yellow> is now public."
-kit-set-private: "<yellow>Kit <yellow>{kit}</yellow> is now private."
 kit-cooldown: "<red>This kit is on cooldown for <yellow>{seconds}</yellow>s. <gray>Try again after the timer ends."
-kit-banned-item: "<red>Kit contains banned item(s): <yellow>{items}</yellow>. <gray>They were removed; edit <white>kits.power-cap.banned-items</white> in config.yml to allow them."
 kit-no-permission: "<red>You don't have permission to use kit <yellow>{kit}</yellow>. <gray>Ask an admin for the permission node set with <white>/oa kits permission {kit} <node></white>."
 kit-lobby-only: "<red>You can only equip kits in the arena lobby. <gray>Join an arena with <white>/oa join</white> and equip while waiting."
 kit-admin-set-public: "<green>Admin kit <yellow>{kit}</yellow> set public."
@@ -148,7 +136,7 @@ stats-reset: "<green>Stats for <yellow>{player}</yellow> reset."
 leaderboard-header: "<gold>=== Leaderboard: {type} ==="
 leaderboard-entry: " <gray>{rank}. <yellow>{player} <white>{value}"
 
-# Titles (match events — these are chat titles)
+# Titles (shown on screen during matches)
 title-match-start: "<gold>FIGHT!"
 title-match-start-sub: "<gray>Match started in <yellow>{arena}"
 title-match-end-win: "<green>VICTORY!"
@@ -164,19 +152,10 @@ title-killstreak-sub: "<yellow>{title}"
 title-first-blood: "<dark_red>FIRST BLOOD"
 title-first-blood-sub: "<red>{player} drew first blood!"
 
-# Modules / Classes
-class-selected: "<green>Class <yellow>{class}</yellow> selected."
-class-not-found: "<red>Class <yellow>{class}</yellow> not found. <gray>Check the spelling."
-class-created: "<green>Class <yellow>{class}</yellow> created for arena <yellow>{arena}</yellow>."
-
 # Regen / Reset
 regen-started: "<yellow>Regenerating arena <yellow>{arena}</yellow>..."
 regen-complete: "<green>Arena <yellow>{arena}</yellow> regenerated."
 regen-failed: "<red>Regen failed for <yellow>{arena}</yellow>. <gray>Check the server console for the exact reason; usually no snapshot exists yet: run <white>/oa regen snapshot {arena}</white> first."
-
-# Economy
-reward-kill: "<green>+${amount} for kill."
-reward-win: "<green>+${amount} for winning!"
 
 # Tournament
 tournament-no-permission: "<red>You can't manage this tournament: only its creator or admins (<white>omniarena.tournament.admin</white>) can."
@@ -187,16 +166,6 @@ tournament-list-entry: "<yellow>{name} <gray>[{state}] {players}/{max} on {arena
 tournament-prize-set: "<green>Set {place} prize of <yellow>{amount}</yellow> for <yellow>{name}</yellow>."
 tournament-prize-invalid: "<red>Invalid prize. <gray>Usage: <white>/tournament setprize <name> <1st|2nd|3rd> <amount></white> where amount is a number of 0 or more."
 tournament-players-only: "<red>This tournament action needs a player (it uses your position/identity). <gray>Run it in-game, or use <white>/tournament list|status <name></white> from console."
-
-# Boss bar templates
-bossbar-timer: "Time Remaining: {time}"
-bossbar-health: "Team Health: {health}"
-bossbar-objective: "Objective: {status}"
-
-# Action bar templates
-actionbar-combo: "Combo: x{combo}"
-actionbar-objective: "{objective}"
-actionbar-spawn-protection: "Spawn Protection: {seconds}s"
 
 # ── Detailed errors (what failed / why / how to fix) ──
 usage-line: "<red>Usage: <yellow>{usage}"

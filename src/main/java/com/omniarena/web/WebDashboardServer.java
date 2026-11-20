@@ -117,8 +117,8 @@ public class WebDashboardServer {
 
     public WebDashboardServer(OmniArena plugin) {
         this.plugin = plugin;
-        long minutes = plugin.getConfigManager().getConfig().getLong("web.session-minutes", 30);
-        int maxSessions = plugin.getConfigManager().getConfig().getInt("web.max-sessions", 1);
+        long minutes = plugin.getConfigManager().getConfig().getLong("advanced.web.session-minutes", 30);
+        int maxSessions = plugin.getConfigManager().getConfig().getInt("advanced.web.max-sessions", 1);
         this.sessions = new WebSessionManager(Duration.ofMinutes(Math.max(1, minutes)), Math.max(0, maxSessions));
         this.schemaService = new ConfigSchemaService(plugin);
         this.docsCatalog = new DocsCatalog(plugin);

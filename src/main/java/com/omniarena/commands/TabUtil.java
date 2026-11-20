@@ -117,7 +117,7 @@ public final class TabUtil {
     /** Value suggestions for a schema-defined setting. */
     public static List<String> settingValue(com.omniarena.web.model.SettingDefinition def, String cur) {
         if (def == null) return hint("<value>", cur);
-        if ("regen.animation.type".equalsIgnoreCase(def.key())) {
+        if ("regen.style".equalsIgnoreCase(def.key())) {
             return enums(com.omniarena.arena.regen.RegenAnimationType.class, cur);
         }
         return switch (def.type()) {

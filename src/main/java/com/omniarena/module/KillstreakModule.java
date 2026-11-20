@@ -28,7 +28,7 @@ public class KillstreakModule {
     private void loadMilestones() {
         milestones.clear();
         ConfigurationSection section = ConfigManager.getInstance().getConfig()
-                .getConfigurationSection("killstreak.milestones");
+                .getConfigurationSection("visuals.killstreak.milestones");
         if (section == null) {
             milestones.put(5,  "KILLING SPREE");
             milestones.put(10, "DOMINATING");
@@ -67,10 +67,10 @@ public class KillstreakModule {
         if (title != null) {
             // Notify killer
             var cfg = ConfigManager.getInstance().getConfig();
-            if (cfg.getBoolean("visual.killstreak-titles", true)) {
+            if (cfg.getBoolean("visuals.killstreak-titles", true)) {
                 plugin.getVisual().getTitleManager().sendKillstreakTitle(killer, streak, title);
             }
-            playConfiguredSound(killer, streak, cfg.getString("killstreak.sound", "ENTITY_LIGHTNING_BOLT_THUNDER"));
+            playConfiguredSound(killer, streak, cfg.getString("visuals.killstreak.sound", "ENTITY_LIGHTNING_BOLT_THUNDER"));
 
             // Broadcast to arena
             String broadcastMsg = ConfigManager.getInstance().getMessage("killstreak-broadcast")
@@ -84,7 +84,7 @@ public class KillstreakModule {
             }
 
             // Trail effect every 5 kills
-            spawnConfiguredParticle(killer, ConfigManager.getInstance().getConfig().getString("killstreak.particle", "FLAME"));
+            spawnConfiguredParticle(killer, ConfigManager.getInstance().getConfig().getString("visuals.killstreak.particle", "FLAME"));
         }
 
         // Notify self of streak
