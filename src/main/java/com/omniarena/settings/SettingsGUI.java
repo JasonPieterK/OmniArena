@@ -2,21 +2,24 @@ package com.omniarena.settings;
 
 import com.omniarena.OmniArena;
 import com.omniarena.config.ConfigManager;
-import com.omniarena.util.ItemUtil;
+import com.omniarena.gui.AdminHubMenu;
+import com.omniarena.gui.ChatPrompt;
+import com.omniarena.gui.MenuBuilder;
+import com.omniarena.gui.MenuLayout;
+import com.omniarena.gui.MenuListener;
 import com.omniarena.web.ConfigSchemaService;
 import com.omniarena.web.model.SettingDefinition;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
 
 /**
- * Interactive chest-based settings editor opened by {@code /oa settings}.
+ * Interactive chest-based settings editor opened by {@code /oa settings}, built on the OmniMenu framework.
  * Two levels: a category grid, then a paginated list of that category's
- * settings. Booleans toggle on click; numbers adjust with left/right/shift;
+ * settings. Booleans are lime/red concrete toggles; numbers adjust with left/right/shift;
  * lists & strings fall back to a chat prompt.
  */
 public final class SettingsGUI {
@@ -27,11 +30,11 @@ public final class SettingsGUI {
 
     private static final Map<String, Material> GROUP_ICON = Map.ofEntries(
             Map.entry("Config", Material.COMPARATOR), Map.entry("Arena", Material.IRON_SWORD),
-            Map.entry("Match", Material.CLOCK), Map.entry("Regen", Material.CLOCK),
+            Map.entry("Match", Material.CLOCK), Map.entry("Regen", Material.BRICKS),
             Map.entry("Pvp", Material.DIAMOND_SWORD), Map.entry("Web", Material.COMPASS),
             Map.entry("Modules", Material.COMMAND_BLOCK), Map.entry("Integrations", Material.REDSTONE),
             Map.entry("Kits", Material.CHEST), Map.entry("Visual", Material.GLOWSTONE_DUST),
-            Map.entry("Performance", Material.CLOCK), Map.entry("Database", Material.BARREL),
+            Map.entry("Performance", Material.REPEATER), Map.entry("Database", Material.BARREL),
             Map.entry("Rewards", Material.GOLD_INGOT), Map.entry("Killstreak", Material.BLAZE_POWDER),
             Map.entry("Signs", Material.OAK_SIGN), Map.entry("Quality", Material.NETHER_STAR),
             Map.entry("Plugin", Material.BOOK));
@@ -59,98 +62,132 @@ public final class SettingsGUI {
 
     /** The setting shown at the given slot of a group page, or null if the slot is empty/out of range. */
     public static SettingDefinition defAt(String group, int page, int slot) {
-        if (slot < 0 || slot >= PAGE_SIZE) return null;
         List<SettingDefinition> defs = grouped().getOrDefault(group, List.of());
         int pages = Math.max(1, (int) Math.ceil(defs.size() / (double) PAGE_SIZE));
         page = Math.max(0, Math.min(page, pages - 1));
-        int idx = page * PAGE_SIZE + slot;
-        return idx < defs.size() ? defs.get(idx) : null;
+        int from = page * PAGE_SIZE;
+        int count = Math.max(0, Math.min(PAGE_SIZE, defs.size() - from));
+        int[] slots = MenuLayout.flowSlots(count, 5);
+        for (int i = 0; i < slots.length; i++) if (slots[i] == slot) return defs.get(from + i);
+        return null;
     }
 
-    /** Closes every open settings menu (used on plugin disable). */
+    /** Closes every open OmniArena menu (used on plugin disable). */
     public static void closeAll() {
-        for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
-            if (p.getOpenInventory().getTopInventory().getHolder() instanceof SettingsHolder) p.closeInventory();
-        }
+        MenuListener.closeAll();
+    }
+
+    private static boolean allowed(Player player) {
+        if (com.omniarena.permission.PermissionChecker.hasAdminReload(player)) return true;
+        player.closeInventory();
+        return false;
     }
 
     // ── Category grid ──────────────────────────────────────────────────────────
     public static void openCategories(Player player) {
         try {
+            if (!allowed(player)) return;
             LinkedHashMap<String, List<SettingDefinition>> groups = grouped();
             List<String> names = new ArrayList<>(groups.keySet());
             Collections.sort(names);
-            if (names.size() > 54) names = names.subList(0, 54);
+            if (names.size() > 45) names = names.subList(0, 45);
 
-            int rows = Math.min(6, Math.max(1, (int) Math.ceil(names.size() / 9.0)));
-            SettingsHolder holder = new SettingsHolder("", 0, true);
-            Inventory inv = Bukkit.createInventory(holder, rows * 9, "§8OmniArena · Settings");
-            holder.setInventory(inv);
-
-            int slot = 0;
+            int rows = Math.min(6, MenuLayout.rowsFor(names.size()) + 1);
+            MenuBuilder b = new MenuBuilder("<dark_gray>OmniArena <gray>Settings", rows);
+            List<MenuBuilder.Button> buttons = new ArrayList<>();
             for (String g : names) {
                 Material icon = GROUP_ICON.getOrDefault(g, Material.PAPER);
-                inv.setItem(slot++, ItemUtil.buildGuiItem(icon, "§e§l" + g,
-                        "§7" + groups.get(g).size() + " setting(s)", "§8Click to open"));
+                buttons.add(MenuBuilder.button(MenuBuilder.item(icon, "<yellow><bold>" + MenuBuilder.esc(g),
+                        "<gray>" + groups.get(g).size() + " setting(s)", "", "<yellow>Click <gray>to open"),
+                        (p, t) -> openGroup(p, g, 0)));
             }
-            player.openInventory(inv);
+            b.flow(buttons);
+            b.footer((p, t) -> AdminHubMenu.open(p), "<gray>Global plugin settings, grouped by topic.", "<gray>Changes save immediately.");
+            b.open(player);
         } catch (Exception e) {
             OmniArena.getInstance().getLogger().log(java.util.logging.Level.SEVERE, "Failed to open the settings GUI (" + e + "). Full trace below. Fix: use the chat version /oa settings, and report the trace.", e);
-            player.sendMessage("§cCould not open the settings menu. §7Use §f/oa settings§7 (chat version) instead; an admin can check the console for the cause.");
+            player.sendMessage("\u00a7cCould not open the settings menu. \u00a77Use \u00a7f/oa settings\u00a77 (chat version) instead; an admin can check the console for the cause.");
         }
     }
 
     // ── One category, paginated ────────────────────────────────────────────────
     public static void openGroup(Player player, String group, int page) {
+        if (!allowed(player)) return;
         List<SettingDefinition> defs = grouped().getOrDefault(group, List.of());
         int pages = Math.max(1, (int) Math.ceil(defs.size() / (double) PAGE_SIZE));
-        page = Math.max(0, Math.min(page, pages - 1));
+        final int pg = Math.max(0, Math.min(page, pages - 1));
 
-        SettingsHolder holder = new SettingsHolder(group, page, false);
-        Inventory inv = Bukkit.createInventory(holder,
-                54, "§8Settings · §e" + group + " §8(" + (page + 1) + "/" + pages + ")");
-        holder.setInventory(inv);
+        int from = pg * PAGE_SIZE;
+        int count = Math.max(0, Math.min(PAGE_SIZE, defs.size() - from));
+        int rows = Math.min(6, MenuLayout.rowsFor(Math.max(1, count)) + 1);
+        MenuBuilder b = new MenuBuilder("<dark_gray>Settings <gray>\u00b7 <yellow>" + MenuBuilder.esc(group)
+                + " <dark_gray>(" + (pg + 1) + "/" + pages + ")", rows);
 
-        int from = page * PAGE_SIZE;
-        for (int i = 0; i < PAGE_SIZE && from + i < defs.size(); i++) {
-            inv.setItem(i, renderSetting(defs.get(from + i)));
+        int[] slots = MenuLayout.flowSlots(count, rows - 1);
+        for (int i = 0; i < slots.length; i++) {
+            SettingDefinition def = defs.get(from + i);
+            b.set(slots[i], renderSetting(def), (p, t) -> click(p, def, t, group, pg));
         }
-        // Nav row
-        inv.setItem(45, ItemUtil.buildGuiItem(Material.ARROW, "§e« Back", "§8To categories"));
-        if (page > 0) inv.setItem(48, ItemUtil.buildGuiItem(Material.SPECTRAL_ARROW, "§e‹ Previous page"));
-        if (page < pages - 1) inv.setItem(50, ItemUtil.buildGuiItem(Material.SPECTRAL_ARROW, "§eNext page ›"));
-        inv.setItem(49, ItemUtil.buildGuiItem(Material.BARRIER, "§c§lClose"));
-        player.openInventory(inv);
+        b.footer((p, t) -> openCategories(p), "<gray>Click a setting to change it.",
+                "<gray>Green = on, red = off. Numbers: left +, right -, shift x10.",
+                "<gray>Text and lists are typed in chat.");
+        if (pg > 0) b.set(MenuLayout.footerPrev(rows), MenuBuilder.item(Material.SPECTRAL_ARROW, "<yellow>Previous page"),
+                (p, t) -> openGroup(p, group, pg - 1));
+        if (pg < pages - 1) b.set(MenuLayout.footerNext(rows), MenuBuilder.item(Material.SPECTRAL_ARROW, "<yellow>Next page"),
+                (p, t) -> openGroup(p, group, pg + 1));
+        b.open(player);
+    }
+
+    private static void click(Player player, SettingDefinition def, org.bukkit.event.inventory.ClickType type, String group, int page) {
+        if (!allowed(player)) return;
+        switch (def.type()) {
+            case BOOLEAN -> {
+                toggle(def);
+                openGroup(player, group, page);
+            }
+            case INTEGER, DECIMAL -> {
+                double base = def.type() == SettingDefinition.SettingType.DECIMAL ? 0.5 : 1;
+                double step = type.isShiftClick() ? base * 10 : base;
+                if (type.isRightClick()) step = -step;
+                adjust(player, def, step);
+                openGroup(player, group, page);
+            }
+            default -> {
+                Object curVal = current(def);
+                String prompt = "/oa settings set " + def.key() + " " + stringify(curVal);
+                ChatPrompt.suggest(player, "Set " + def.key(), prompt, def.description());
+            }
+        }
     }
 
     private static ItemStack renderSetting(SettingDefinition def) {
         Object val = current(def);
-        String type = def.type().name();
-        Material icon;
+        String name = "<aqua><bold>" + MenuBuilder.esc(def.label());
         List<String> lore = new ArrayList<>();
-        lore.add("§8" + def.key());
-        if (def.description() != null && !def.description().isBlank()) lore.add("§7" + def.description());
+        lore.add("<dark_gray>" + MenuBuilder.esc(def.key()));
+        if (def.description() != null && !def.description().isBlank()) lore.add("<gray>" + MenuBuilder.esc(def.description()));
         lore.add("");
-        lore.add("§fValue: §a" + stringify(val));
-
-        switch (type) {
-            case "BOOLEAN" -> {
-                boolean b = toBool(val);
-                icon = b ? Material.LIME_DYE : Material.GRAY_DYE;
-                lore.add("§eClick §7to toggle " + (b ? "§cOFF" : "§aON"));
+        switch (def.type()) {
+            case BOOLEAN -> {
+                return MenuBuilder.toggle(toBool(val), name, lore.toArray(new String[0]));
             }
-            case "INTEGER", "DECIMAL" -> {
-                icon = Material.COMPARATOR;
-                lore.add("§eLeft §7+1   §eRight §7-1");
-                lore.add("§eShift-Left §7+10   §eShift-Right §7-10");
+            case INTEGER, DECIMAL -> {
+                lore.add("<white>Value: <green>" + MenuBuilder.esc(stringify(val)));
+                lore.add("<yellow>Left <gray>+1   <yellow>Right <gray>-1");
+                lore.add("<yellow>Shift <gray>for 10");
+                return MenuBuilder.item(Material.COMPARATOR, name, lore.toArray(new String[0]));
+            }
+            case LIST -> {
+                lore.add("<white>Value: <green>" + MenuBuilder.esc(stringify(val)));
+                lore.add("<yellow>Click <gray>to edit in chat");
+                return MenuBuilder.item(Material.WRITABLE_BOOK, name, lore.toArray(new String[0]));
             }
             default -> {
-                icon = Material.NAME_TAG;
-                lore.add("§eClick §7to edit in chat");
+                lore.add("<white>Value: <green>" + MenuBuilder.esc(stringify(val)));
+                lore.add("<yellow>Click <gray>to edit in chat");
+                return MenuBuilder.item(Material.NAME_TAG, name, lore.toArray(new String[0]));
             }
         }
-        // Encode the key in the display name (hidden lookup) using a leading marker.
-        return ItemUtil.buildGuiItem(icon, "§b§l" + def.label(), lore.toArray(new String[0]));
     }
 
     // ── Click handling helpers (called by the listener) ────────────────────────
