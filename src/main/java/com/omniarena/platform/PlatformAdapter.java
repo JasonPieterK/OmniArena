@@ -49,6 +49,9 @@ public interface PlatformAdapter {
 
     void hideBossBar(Player player, BossBar bar);
 
+    /** Opens a written book (read-only, nothing is added to the inventory) with one component per page. */
+    void openBook(Player player, String title, String author, List<Component> pages);
+
     // ── items / inventories / signs / displays ───────────────────────
     void setDisplayName(ItemMeta meta, Component name);
 

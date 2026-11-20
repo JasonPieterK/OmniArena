@@ -171,10 +171,11 @@ Implemented, with these differences from the plan as written:
   `/api/apply`, `/api/create-arena`, `/api/delete-arena`, `/api/docs`, `/api/live-matches`,
   `/api/players` and `POST /api/logout`. The UI has six tabs: Dashboard, Live Matches, Arenas
   (including the per-arena `lives` field), Players, Config, Docs.
-- The session link is created with `/oa website` (admin permission `omniarena.admin`); there is no
-  `/oa editor` command. `/oa override killweb` revokes sessions.
+- The session link is created with `/oa web` (admin permission `omniarena.admin`); there is no
+  `/oa editor` command. `/oa web kill` revokes all sessions. (QoL redesign: `/oa website` and
+  `/oa override killweb` were removed.)
 - Sessions: 24 random bytes, **sliding** lifetime `web.session-minutes` (each valid request renews
-  it), cap `web.max-sessions` (0 = unlimited), both read once at plugin enable; `POST /api/logout`
+  it), cap `advanced.web.max-sessions` (0 = unlimited), both (`advanced.web.*`, formerly `web.session-minutes` / `web.max-sessions`) read once at plugin enable; `POST /api/logout`
   revokes a session. The page strips the `?token=` from the address bar and keeps the token in
   `sessionStorage`.
 - The server binds `web.bind-address` (default `127.0.0.1`) and speaks plain HTTP. The token is sent
@@ -193,3 +194,6 @@ Implemented, with these differences from the plan as written:
   command is in the README.
 - Tests: `ConfigSchemaServiceTest` (schema lists only real, unique keys) exists; no
   `WebDashboardServerTest` was written.
+- QoL redesign update: the Docs tab renderer (`markdownToHtml` in `web/app.js`) now lifts fenced code blocks out before
+  formatting, renders italic text, pipe tables, http(s) links and a sidebar table of contents from the h1 to h3 headings.
+  `DOCS.md` was rewritten for the redesigned plugin (guides, command reference, config v2, placeholders, event API).

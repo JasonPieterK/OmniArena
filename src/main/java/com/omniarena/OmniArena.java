@@ -199,7 +199,7 @@ public final class OmniArena extends JavaPlugin {
         logStartupBanner(elapsed);
     }
 
-    /** (Re)starts the periodic sign refresh; safe to call repeatedly (e.g. after /oa start). */
+    /** (Re)starts the periodic sign refresh; safe to call repeatedly (e.g. after /oa plugin start). */
     public void startSignUpdateTask() {
         if (signUpdateTask != null) {
             signUpdateTask.cancel();

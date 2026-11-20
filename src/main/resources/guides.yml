@@ -1,0 +1,428 @@
+# ============================================================================
+# OmniArena guide books (/oa guide [topic])
+# This file is copied to plugins/OmniArena/guides.yml so you can edit it. Missing topics and missing keys are
+# filled in from the plugin jar, so you can delete a topic to get the default back. Run /oa reload after editing.
+#
+# Each topic has:
+#   title:    book title and link text in the index (keep it short)
+#   admin:    true = listed and readable by admins only (default false)
+#   summary:  hover text of the link in the index
+#   text:     the pages, written in MiniMessage. Long text is split into pages automatically (about 14 lines of
+#             19 characters); a line containing only <page> forces a new page.
+#
+# Shorthand for clickable commands:
+#   {{/oa setup <arena>}}   shows the command; clicking puts it in the chat box (placeholders are cut off)
+#   {{!/oa menu}}           shows the command; clicking runs it at once (use for harmless commands only)
+# Keep a <click> or <hover> tag and its text on ONE line. Do not use the & colour codes in book text.
+# ============================================================================
+topics:
+
+  start:
+    title: "Quick start"
+    admin: true
+    summary: "Your first arena in 5 minutes"
+    text: |-
+      <bold><dark_blue>Quick start</dark_blue></bold>
+      <italic><gray>Your first arena in 5 minutes. Stand where you want to build.</gray></italic>
+
+      <bold>1.</bold> <bold>Create it</bold>
+      {{/oa setup <arena>}}
+      Use a name like duel_1. You get the <bold>wand</bold> and a setup menu.
+      <page>
+      <bold>2.</bold> <bold>Build</bold> the arena first. The plugin saves a copy of it to rebuild after every match.
+
+      <bold>3.</bold> <bold>Select</bold> the area with the wand:
+      left-click = corner 1
+      right-click = corner 2
+
+      Then run
+      {{/oa setup <arena> region}}
+      <page>
+      <bold>4.</bold> <bold>Spawns.</bold> Stand on a pad and run
+      {{/oa setup <arena> spawn}}
+      Repeat for every pad.
+
+      <italic><gray>Optional: {{/oa setup <arena> lobby}} and {{/oa setup <arena> spectator}} set the waiting room and the viewing spot.</gray></italic>
+      <page>
+      <bold>5.</bold> <bold>Finish</bold>
+      {{/oa setup <arena> finish}}
+      The arena opens for players.
+
+      <bold>6.</bold> <bold>Play!</bold>
+      {{/oa join <arena>}}
+      or put up a sign with
+      {{/oa sign create <arena>}}
+      <page>
+      <bold><dark_blue>If something is off</dark_blue></bold>
+      Run {{!/oa doctor}} for a health check with fix buttons.
+
+      <italic><gray>Everything here is also a button menu: {{!/oa menu}} then Admin.</gray></italic>
+      <italic><gray>More: guides arena, regen, doctor.</gray></italic>
+
+  arena:
+    title: "Arena setup"
+    admin: true
+    summary: "Wizard, region, spawns, edit menu, enable"
+    text: |-
+      <bold><dark_blue>Arena setup</dark_blue></bold>
+      An arena is a region with spawns, a game type and rules.
+
+      <bold>Create / continue</bold>
+      {{/oa setup <arena>}}
+      Opens the setup menu with a checklist. Run it again any time to continue.
+      <page>
+      <bold>Steps (text shortcuts)</bold>
+      {{/oa setup <arena> region}}
+      saves your wand selection and takes the rebuild snapshot
+
+      {{/oa setup <arena> spawn}}
+      adds a battle spawn (player 1 uses spawn 1, and so on)
+
+      {{/oa setup <arena> clearspawns}}
+      removes all battle spawns
+      <page>
+      {{/oa setup <arena> lobby}}
+      {{/oa setup <arena> spectator}}
+      set that single spawn to where you stand.
+
+      {{/oa setup <arena> finish}}
+      checks the arena and enables it. At least one battle spawn is required.
+      <page>
+      <bold>Edit menu</bold>
+      {{/oa edit <arena>}}
+      Buttons for game mode, goal, lives, players, duration, countdown, respawn, chat, teams, rules, visuals, modules and regen style.
+
+      <italic><gray>Green = on, red = off.</gray></italic>
+      <page>
+      <bold>Edit by text</bold>
+      {{/oa edit <arena> set <key> <value>}}
+      {{/oa edit <arena> get <key>}}
+      Tab-complete lists every key, for example game-mode, players, lives, goal-value, respawn-type, team-enabled and regen-auto.
+      <page>
+      <bold>Whitelist</bold>
+      {{/oa edit <arena> whitelist add <player>}}
+      Also blacklist, remove and list. Turn the whitelist on with
+      {{/oa edit <arena> set whitelist-enabled true}}
+      <page>
+      <bold>Manage</bold>
+      {{/oa arena tp <arena>}}
+      {{/oa arena enable <arena>}}
+      {{/oa arena disable <arena>}}
+      {{/oa arena delete <arena>}}
+      {{/oa list <arena>}} shows one arena's details.
+
+      <italic><gray>Another world? Multiverse loads it for you when installed.</gray></italic>
+      <page>
+      <bold>Game types</bold>
+      16 modes, set with the game-mode key: Deathmatch, Team Deathmatch, Last One Standing, Sumo, Classic PvP, Crystal PvP, Mace, Sword Duel, Axe and Shield, UHC, Potion PvP, NoDebuff, Archer, Netherite OP, Spleef and Gladiator.
+
+      <italic><gray>Teams need team-enabled true.</gray></italic>
+
+  play:
+    title: "How to play"
+    summary: "Join, spectate, queue, stats, kits, party"
+    text: |-
+      <bold><dark_blue>How to play</dark_blue></bold>
+      Open the main menu with
+      {{!/oa menu}}
+      or just type {{!/oa}}.
+
+      <bold>Join a match</bold>
+      {{/oa join <arena>}}
+      With no name you get a picker. You can also right-click an arena sign.
+      <page>
+      <bold>While waiting</bold>
+      You wait in the lobby. The match starts when enough players are in and the countdown ends. You get your gear and your own items back when you leave.
+
+      <bold>Leave</bold>
+      {{!/oa leave}}
+      <page>
+      <bold>Watch</bold>
+      {{/oa spectate <arena>}}
+      You fly around invisible. Leave with {{!/oa leave}}.
+
+      <bold>Arenas</bold>
+      {{!/oa list}}
+      <page>
+      <bold>Ranked</bold>
+      {{/oa queue}}
+      Matches you with a player of similar ELO. More in the guide {{!/oa guide ranked}}.
+      <page>
+      <bold>Stats</bold>
+      {{/oa stats <player>}}
+      {{/oa stats top <kills|wins|kd|elo>}}
+      Kills, deaths, wins, time played, ELO and rank.
+      <page>
+      <bold>Kits</bold>
+      {{/kit}} opens your kit menu. Guide: {{!/oa guide kits}}
+
+      <bold>Party</bold>
+      {{/party create}}
+      {{/party invite <player>}}
+      Friends queue and fight on the same team.
+      <page>
+      <bold>Also</bold>
+      {{/oa tournament}} for brackets
+      {{/oa bet}} to bet on matches
+      {{/pvp}} to toggle PvP
+
+      <italic><gray>Stuck? {{!/oa help}} lists every command.</gray></italic>
+
+  kits:
+    title: "Kits"
+    summary: "Personal kits, preset kits, sharing"
+    text: |-
+      <bold><dark_blue>Kits</dark_blue></bold>
+      A kit is a saved set of items and armor.
+
+      <bold>Your kits</bold>
+      {{/kit}} opens the menu.
+      {{/kit create <name>}} saves what you carry.
+      {{/kit equip <name>}}
+      {{/kit list}}
+      <page>
+      {{/kit delete <name>}}
+      {{/kit rename <old> <new>}}
+      {{/kit preview <name>}}
+
+      <bold>Share</bold>
+      {{/kit share <name> <player>}}
+      They accept within 1 minute with {{/kit accept <name>}}
+      <page>
+      <bold>Rules</bold>
+      In an arena you can only change kit in the lobby, before the match starts.
+      You have a limited number of slots (3 by default). Banned items and huge enchants are removed when saving.
+
+      <bold>Preset kits</bold>
+      Made by admins. They show in the same menu and may have a cooldown or permission.
+      <page>
+      <bold><dark_red>Admins</dark_red></bold>
+      {{/oa kits}} opens the admin menu.
+      {{/oa kits create <name>}} copies your inventory.
+      Also: delete, rename, equip, list, setpublic, setprivate, icon, description, cooldown, permission.
+
+  ranked:
+    title: "Ranked and ELO"
+    summary: "Queue, ELO, parties"
+    text: |-
+      <bold><dark_blue>Ranked and ELO</dark_blue></bold>
+      {{/oa queue}} joins the ranked queue.
+      {{/oa queue <kit>}} queues with a preset kit.
+      {{/oa queue status}}
+      {{/oa queue leave}}
+      <page>
+      <bold>How matching works</bold>
+      Players are paired by ELO. At first only about 200 points apart. The gap grows 50 every 10 seconds you wait, up to 1000.
+
+      A free arena is needed. If none is free you stay queued.
+      <page>
+      <bold>ELO</bold>
+      Everybody starts at 1000. A win raises it, a loss lowers it, a draw barely moves it. Leaving a running ranked duel counts as a loss.
+
+      See it with {{/oa stats}} or the top list {{/oa stats top elo}}
+      <page>
+      <bold>Parties</bold>
+      The party leader queues the whole party. You face another party of the same size, or enough solo players to fill the other team.
+
+      Needs an arena with two teams and room for both sides.
+      <page>
+      <italic><gray>Tip: ranked matches are closed to outsiders once they start. Watch them with {{/oa spectate <arena>}}</gray></italic>
+
+  tournament:
+    title: "Tournaments"
+    summary: "Brackets, prizes"
+    text: |-
+      <bold><dark_blue>Tournaments</dark_blue></bold>
+      Single elimination on one arena, one match at a time.
+
+      <bold>Players</bold>
+      {{/oa tournament list}}
+      {{/oa tournament join <name>}}
+      {{/oa tournament leave <name>}}
+      {{/oa tournament status <name>}}
+      <page>
+      <bold>Organisers</bold>
+      {{/oa tournament create <name> <arena> <max>}}
+      {{/oa tournament start <name>}}
+      It starts by itself when full. Offline players are dropped at the start.
+
+      Admins can also delete a tournament and set prizes:
+      {{/oa tournament setprize <name> 1st <amount>}}
+      <page>
+      <bold>The bracket</bold>
+      Seats are by join order. If the field is not a power of two, the first seeds get a bye. An offline player forfeits after about 60 seconds. A draw is decided by who stays, then health, then a coin flip.
+      <page>
+      <bold>Prizes</bold>
+      Need Vault. 1st for the winner, 2nd for the finalist, 3rd is split between the semi-final losers.
+
+      <italic><gray>Tournament matches are not ranked.</gray></italic>
+
+  betting:
+    title: "Betting"
+    summary: "Bet on running matches"
+    text: |-
+      <bold><dark_blue>Betting</dark_blue></bold>
+      Needs Vault and an economy plugin.
+
+      {{/oa bet place <arena> <player> <amount>}}
+      bets on who wins a running match.
+      {{/oa bet info}}
+      {{/oa bet cancel}}
+      <page>
+      <bold>Rules</bold>
+      One bet per player at a time. The amount must be within the server limits (100 to 10000 by default). Betting stays open for 30 seconds after the match starts.
+
+      Money is taken when you bet.
+      <page>
+      <bold>Payout</bold>
+      Winners share the whole pool by the size of their bet. Losers lose their bet.
+
+      <italic><gray>Draw, no winner, or nobody bet on the winner: everybody gets their money back.</gray></italic>
+
+  regen:
+    title: "Regeneration"
+    admin: true
+    summary: "Automatic arena rebuild after each match"
+    text: |-
+      <bold><dark_blue>Regeneration</dark_blue></bold>
+      After every match the arena is rebuilt from its snapshot, with an animation. It stays closed (resetting) until done.
+
+      <bold>Snapshot</bold>
+      Taken by {{/oa setup <arena> region}}. Re-take it after you change the build:
+      {{/oa regen snapshot <arena>}}
+      <page>
+      <bold>Rebuild by hand</bold>
+      {{/oa regen <arena>}}
+      Not while a match runs.
+
+      <bold>Style</bold>
+      SPHERE (default), INSTANT, RISE, FALL, SWEEP, TIME_REWIND, GALAXY, HOLOGRAM_SCAN, METEOR_SHOWER, OVERGROWTH.
+      <page>
+      <bold>Settings</bold>
+      Open {{!/oa settings}} and look at Regeneration: auto on/off, style, particles, sound, progress messages.
+
+      Switch off for one arena:
+      {{/oa edit <arena> set regen-auto false}}
+      <page>
+      <italic><gray>No region means no snapshot and no rebuild. Run {{!/oa doctor}} to see arenas without a snapshot.</gray></italic>
+
+  leaderboards:
+    title: "Leaderboards"
+    admin: true
+    summary: "Placeholders and hologram plugins"
+    text: |-
+      <bold><dark_blue>Leaderboards</dark_blue></bold>
+      OmniArena has no holograms of its own. It feeds PlaceholderAPI, and can place ready-made holograms.
+
+      <bold>Easy way</bold>
+      {{/oa leaderboard create <id> <kills|wins|kd|elo> [size]}}
+      Needs DecentHolograms or FancyHolograms. Created where you stand.
+      <page>
+      {{/oa leaderboard list}}
+      {{/oa leaderboard remove <id>}}
+      Size is 1 to 10, default 10. Lines refresh by themselves.
+      <page>
+      <bold>Any plugin</bold>
+      With PlaceholderAPI write these into any hologram, scoreboard or tab list:
+      %omniarena_top_kills_1_name%
+      %omniarena_top_kills_1_value%
+      <page>
+      Types: kills, wins, kd, elo. Positions 1 to 10.
+      Your own: %omniarena_kills% %omniarena_wins% %omniarena_elo% %omniarena_rank%
+
+      <italic><gray>Full list in DOCS.md, section Placeholders.</gray></italic>
+
+  npc:
+    title: "NPCs"
+    admin: true
+    summary: "Citizens NPCs that join or queue players"
+    text: |-
+      <bold><dark_blue>NPCs</dark_blue></bold>
+      Needs the Citizens plugin. Right-clicking the NPC does the action.
+
+      Stand where it should appear:
+      {{/oa npc create menu}} opens the menu
+      {{/oa npc create join <arena>}}
+      {{/oa npc create queue [kit]}}
+      {{/oa npc create spectate [arena]}}
+      <page>
+      {{/oa npc list}}
+      {{/oa npc remove <id>}}
+      The id is the number from the list.
+
+      <italic><gray>Rename or reskin the NPC with Citizens' own commands.</gray></italic>
+
+  pvp:
+    title: "PvP and combat"
+    summary: "Toggle, combat tag, newbie protection"
+    text: |-
+      <bold><dark_blue>PvP and combat</dark_blue></bold>
+      {{!/pvp}} switches your own PvP on or off.
+      {{/pvp status [player]}} shows your PvP state, combat tag and newbie protection.
+      <page>
+      <bold>Combat tag</bold>
+      After a hit you are tagged for 15 seconds. While tagged the server can block teleports, commands, flying, elytra, pearls and block placing, and quitting may be punished.
+      <page>
+      <bold>New players</bold>
+      Protected for a few minutes. {{/pvp newbie}} shows the time left, {{/pvp newbie disable}} ends it early.
+      <page>
+      <bold><dark_red>Admins</dark_red></bold>
+      {{/pvp tag <player> [seconds]}}
+      {{/pvp untag <player>}}
+      {{/pvp global <on|off>}}
+      {{/pvp list}}
+      {{/pvp newbie add <player>}}
+
+      <italic><gray>Everything is under pvp in the settings.</gray></italic>
+
+  doctor:
+    title: "Self-healing"
+    admin: true
+    summary: "/oa doctor and what is fixed automatically"
+    text: |-
+      <bold><dark_blue>Self-healing</dark_blue></bold>
+      OmniArena repairs itself where it can.
+
+      <bold>At startup and reload</bold>
+      Missing config keys are added, wrong values get their default, a broken file is replaced after a backup in the backups folder.
+      <page>
+      <bold>While running</bold>
+      A watchdog checks every 30 seconds. It frees arenas stuck ending or resetting, cleans matches of deleted arenas, restores players mapped to a match that is gone, and restarts stopped tasks.
+      <page>
+      <bold>The doctor</bold>
+      {{!/oa doctor}} prints a report: files, arenas, stuck state, tasks, integrations, recent errors. Problems come with a clickable fix.
+      {{!/oa doctor fix}} runs every fix now.
+      <page>
+      <italic><gray>An error in one feature is logged and counted, it never stops a match. Admins are told on join when something was repaired.</gray></italic>
+
+  config:
+    title: "Configuration"
+    admin: true
+    summary: "Settings, config.yml, web dashboard, reload"
+    text: |-
+      <bold><dark_blue>Configuration</dark_blue></bold>
+      <bold>Settings menu</bold>
+      {{!/oa settings}}
+      Click a category, then a setting. Booleans toggle, numbers go up and down, text opens a chat prompt.
+
+      By text:
+      {{/oa settings set <key> <value>}}
+      <page>
+      <bold>The file</bold>
+      plugins/OmniArena/config.yml has comments for every key. Edit it, then
+      {{!/oa reload}}
+      Old files are upgraded automatically and backed up first.
+      <page>
+      <bold>Web dashboard</bold>
+      {{!/oa web}} gives a login link. Edit settings and arenas in the browser, read the docs and watch live matches.
+      {{/oa web kill}} logs everyone out.
+      <page>
+      <bold>Plugin control</bold>
+      {{/oa plugin stop}}
+      {{/oa plugin start}}
+      {{/oa plugin restart}}
+      {{/oa plugin version}}
+      <italic><gray>Stopping ends all matches safely. While the plugin is stopped only /oa plugin start works.</gray></italic>
+      <page>
+      <bold>Edit these books</bold>
+      plugins/OmniArena/guides.yml. Missing topics are filled in from the jar.

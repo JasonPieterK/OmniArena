@@ -34,7 +34,7 @@ public class VisualController {
     public ActionBarManager getActionBarManager() { return actionBarManager; }
     public EffectManager getEffectManager() { return effectManager; }
 
-    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa start). Nothing periodic is owned here any more. */
+    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa plugin start). Nothing periodic is owned here any more. */
     public void start() {
     }
 

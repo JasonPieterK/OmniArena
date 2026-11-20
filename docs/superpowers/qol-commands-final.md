@@ -20,6 +20,7 @@ Old commands are removed with no aliases. Unknown input gets a did-you-mean with
 | `/oa bet place\|cancel\|info ...` (`/bet`) | Bet on a running match |
 | `/oa tournament ...` (`/tournament`) | Bracket tournaments |
 | `/oa help [command]` | Clickable categorised index (admin section only for admins) |
+| `/oa guide [topic]` | In-game guide books; no topic opens the index (admin topics only for admins) |
 | `/party ...` | Parties |
 | `/kit ...` | Personal kits (menu with no args) |
 | `/pvp` | Toggle your PvP |
@@ -44,7 +45,9 @@ Old commands are removed with no aliases. Unknown input gets a did-you-mean with
 | `/oa kits` | Admin kit menu |
 | `/oa kits <create\|delete\|rename\|equip\|list\|setpublic\|setprivate\|icon\|description\|cooldown\|permission> ...` | Admin preset kit actions |
 | `/oa sign <create\|remove\|list>` | Arena join signs |
-| `/oa holo <create\|list\|move\|remove>` (`/oa hologram` still works) | Leaderboard holograms (unchanged, replaced in a later phase) |
+| `/oa leaderboard <create\|remove\|list> <id> [kills\|wins\|kd\|elo] [size]` | Leaderboard holograms in DecentHolograms or FancyHolograms (`omniarena.admin.leaderboard`) |
+| `/oa npc <create\|remove\|list> <menu\|join <arena>\|queue [kit]\|spectate [arena]>` | Citizens NPCs (`omniarena.admin.npc`) |
+| `/oa doctor [fix]` | Health report and fixes (`omniarena.admin.doctor`) |
 | `/oa settings [set <key> <value>]` | Plugin settings |
 | `/oa reload` | Reload config, messages, kits, arenas (when idle) |
 | `/oa plugin <start\|stop\|restart\|version>` | Lifecycle; the only command that works while stopped |

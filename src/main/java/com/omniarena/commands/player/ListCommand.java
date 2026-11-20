@@ -19,7 +19,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-/** /oa list lists arenas (click one for details); /oa list &lt;arena&gt; shows that arena's details (the old /oa info). */
+/** /oa list lists arenas (click one for details); /oa list &lt;arena&gt; shows that arena's details. */
 public class ListCommand extends SubCommand {
 
     public ListCommand(OmniArena plugin) {

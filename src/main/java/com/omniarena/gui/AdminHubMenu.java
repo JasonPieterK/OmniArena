@@ -43,6 +43,9 @@ public final class AdminHubMenu {
         row.add(MenuBuilder.button(MenuBuilder.item(Material.REDSTONE, "<red><bold>Reload",
                 "<gray>Reload config, messages, kits", "<gray>and arenas (when idle).", "", "<yellow>Click <gray>to reload"),
                 (p, t) -> { p.closeInventory(); Bukkit.dispatchCommand(p, "oa reload"); }));
+        row.add(MenuBuilder.button(MenuBuilder.item(Material.WRITABLE_BOOK, "<aqua><bold>Guides",
+                "<gray>Admin guides: quick start, arena setup,", "<gray>regen, leaderboards, NPCs, doctor, config.", "", "<yellow>Click <gray>to open the guide index"),
+                (p, t) -> { p.closeInventory(); com.omniarena.guide.GuideBooks.openIndex(p); }));
         b.row(1, row);
         b.footer((p, t) -> MainMenu.open(p), "<gray>Admin tools.", "<gray>Everything here also has a /oa command.");
         b.open(player);

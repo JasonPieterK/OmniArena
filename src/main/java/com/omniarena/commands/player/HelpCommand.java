@@ -40,6 +40,8 @@ public class HelpCommand extends SubCommand {
                 new Line("/oa tournament", "bracket tournaments"),
                 new Line("/oa bet", "bet on running matches"),
                 new Line("/pvp", "toggle your PvP; also: status, newbie")));
+        PLAYER.put("Learn", List.of(
+                new Line("/oa guide [topic]", "in-game guide books (how to play, ranked, kits ...)")));
         PLAYER.put("Stats", List.of(
                 new Line("/oa stats [player]", "stats, ELO and rank"),
                 new Line("/oa stats top [kills|wins|kd|elo] [n]", "leaderboards")));
@@ -83,7 +85,8 @@ public class HelpCommand extends SubCommand {
             MessageUtil.send(sender, "<red><bold>Admin</bold>");
             ADMIN.forEach((title, lines) -> section(sender, title, "<red>", lines));
         }
-        MessageUtil.send(sender, "<dark_gray>Details for one command: <gray>/oa help <command>");
+        MessageUtil.send(sender, com.omniarena.util.Suggest.run("/oa guide", "[Open the guide books]")
+                + " <dark_gray>Details for one command: <gray>/oa help <command>");
     }
 
     private void section(CommandSender sender, String title, String color, List<Line> lines) {

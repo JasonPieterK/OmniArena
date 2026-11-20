@@ -11,7 +11,7 @@ import org.bukkit.entity.Player;
 /**
  * Decides whether a presentation channel (titles, sounds, particles) is active.
  * A channel is on only when BOTH the global switch (config.yml {@code visuals.<key>}) and the arena's own
- * switch ({@code visual.<key>} in arenas/&lt;name&gt;.yml, /oa config &lt;arena&gt; visual-&lt;key&gt;) are on.
+ * switch ({@code visual.<key>} in arenas/&lt;name&gt;.yml, /oa edit &lt;arena&gt; set visual-&lt;key&gt;) are on.
  * Subjects outside any arena (unknown player / location) only obey the global switch.
  */
 public final class VisualGate {

@@ -197,8 +197,8 @@ authoritative; see `DOCS.md` sections 12 and 13).
   `IN_PROGRESS` tournaments, every bracket round (`bracket.rounds` as `{p1, p2?, winner?}` maps)
   and `bracket.currentRound`. On startup brackets are restored and resumed; an unusable bracket
   falls back to `REGISTRATION`. Finished and cancelled tournaments are removed, not stored. A
-  `CANCELLED` state exists (set on delete). Active tournaments are saved on `/oa stop` and
-  `onDisable`, cleared from memory on stop, and reloaded by `/oa start`.
+  `CANCELLED` state exists (set on delete). Active tournaments are saved on `/oa plugin stop` and
+  `onDisable`, cleared from memory on stop, and reloaded by `/oa plugin start`.
 - **Draw/timeout rule.** A tournament match that ends without a winner never stalls the bracket:
   the player still in the arena advances; if both are present the player with higher current
   health advances; otherwise a coin flip decides. (Kill-based game types additionally resolve a
@@ -221,7 +221,7 @@ authoritative; see `DOCS.md` sections 12 and 13).
   matches are not ranked (no ELO change).
 
 **Betting**
-- Active bets are not persisted to `betting.yml`; instead every bet is refunded on `/oa stop` and on
+- Active bets are not persisted to `betting.yml`; instead every bet is refunded on `/oa plugin stop` and on
   plugin disable, and pending bets are refunded when a match is cleaned up without being settled.
 - A player may hold only one active bet in total (not one per arena). Cancelling is only possible
   while the betting window is open. `/oa bet info [arena]` shows the pool and bet count, not odds.
@@ -235,3 +235,7 @@ authoritative; see `DOCS.md` sections 12 and 13).
   `plugin.yml` with default true.
 - With automatic arena regeneration a tournament arena is RESETTING until its rebuild finishes; the
   100-tick safety task retries launches that fail for that reason.
+- QoL redesign update: tournaments are still `/oa tournament ...` and betting `/oa bet ...` (with the standalone `/tournament` and
+  `/bet`); the config keys moved to `tournaments.walkover-grace-seconds` (was `tournament.walkover-grace-seconds`) and the rest of
+  the betting keys are unchanged. Both are covered by the `tournament` and `betting` guide books (`/oa guide tournament`,
+  `/oa guide betting`) and DOCS.md sections 2.6 and 2.7. The main menu has a Tournaments button.

@@ -42,6 +42,11 @@ public final class PlatformImpl implements PlatformAdapter {
     @Override public void showBossBar(Player player, BossBar bar) { player.showBossBar(bar); }
     @Override public void hideBossBar(Player player, BossBar bar) { player.hideBossBar(bar); }
 
+    @Override
+    public void openBook(Player player, String title, String author, List<Component> pages) {
+        player.openBook(net.kyori.adventure.inventory.Book.book(Component.text(title), Component.text(author), pages));
+    }
+
     @Override public void setDisplayName(ItemMeta meta, Component name) { meta.displayName(name); }
     @Override public Component getDisplayName(ItemMeta meta) { return meta.displayName(); }
     @Override public void setLore(ItemMeta meta, List<Component> lore) { meta.lore(lore); }

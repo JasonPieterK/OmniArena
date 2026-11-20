@@ -60,6 +60,11 @@ public final class PlatformImpl implements PlatformAdapter {
     @Override public void showBossBar(Player player, BossBar bar) { audiences.player(player).showBossBar(bar); }
     @Override public void hideBossBar(Player player, BossBar bar) { audiences.player(player).hideBossBar(bar); }
 
+    @Override
+    public void openBook(Player player, String title, String author, List<Component> pages) {
+        audiences.player(player).openBook(net.kyori.adventure.inventory.Book.book(Component.text(title), Component.text(author), pages));
+    }
+
     // ── legacy string bridges ────────────────────────────────────────
     /** Legacy strings cannot express "italic off"; a leading reset removes the client's default italics on item text. */
     private static String legacy(Component c) { return "§r" + LEGACY.serialize(c); }

@@ -304,7 +304,7 @@ public class BlockRestoreModule {
     /**
      * Cancels all running regen/snapshot tasks and finalizes them: remaining blocks are
      * placed instantly and preview blocks are removed so no previews are left in the world.
-     * Call on plugin disable and /oa stop.
+     * Call on plugin disable and /oa plugin stop.
      */
     public void cancelAll() {
         shuttingDown = true;

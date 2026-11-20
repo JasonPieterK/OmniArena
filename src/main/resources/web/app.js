@@ -475,22 +475,26 @@
 
   function markdownToHtml(md) {
     let html = md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    html = mdTables(html); // tables first, on escaped text
-    return html
-      .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) => `<pre><code>${c}</code></pre>`)
+    // Fenced code blocks are lifted out first so headings, lists, bold and tables inside them are left alone.
+    const blocks = [];
+    html = html.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) => { blocks.push(c); return '<pre>@@CODE' + (blocks.length - 1) + '@@</pre>'; });
+    html = mdTables(html); // tables on escaped text
+    html = html
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+      .replace(/(^|[\s(>])\*([^*\s](?:[^*]*[^*\s])?)\*(?=$|[\s).,;:!?<])/gm, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+      .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
       .replace(/^---+$/gm, '<hr>')
       .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
       .replace(/(<li>[\s\S]+?<\/li>)/g, '<ul>$1</ul>')
       .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
       .replace(/^(?!<[hbupliot]|<pre|<hr|<blockquote)(.+)$/gm, (_, l) => l.trim() ? `<p>${l}</p>` : '');
+    return html.replace(/@@CODE(\d+)@@/g, (_, i) => '<code>' + blocks[Number(i)].replace(/\n$/, '') + '</code>');
   }
 
   // ── Apply / save / create / delete ─────────────────────────────────────

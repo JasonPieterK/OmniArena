@@ -536,7 +536,7 @@ public class TournamentManager {
         catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Failed to save tournaments.yml", e); }
     }
 
-    /** Persist state and drop in-memory tournaments (used by /oa stop and onDisable). */
+    /** Persist state and drop in-memory tournaments (used by /oa plugin stop and onDisable). */
     public void stop() {
         if (tickTask != null) { tickTask.cancel(); tickTask = null; }
         saveAll();

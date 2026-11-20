@@ -77,6 +77,9 @@ public final class MainMenu {
         profile.add(MenuBuilder.button(MenuBuilder.item(Material.TOTEM_OF_UNDYING, "<light_purple><bold>Tournaments",
                 "<gray>See open and running tournaments.", "", "<yellow>Click <gray>to open"),
                 (p, t) -> openTournaments(p)));
+        profile.add(MenuBuilder.button(MenuBuilder.item(Material.WRITABLE_BOOK, "<aqua><bold>Guides",
+                "<gray>Short books on how to play, ranked,", "<gray>kits, tournaments and more.", "", "<yellow>Click <gray>to open the guide index"),
+                (p, t) -> { p.closeInventory(); com.omniarena.guide.GuideBooks.openIndex(p); }));
         b.row(2, profile);
 
         // Row 3: admin

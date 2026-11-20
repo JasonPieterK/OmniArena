@@ -68,6 +68,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(playerCommands, "queue",      new QueueCommand(plugin));
         reg(playerCommands, "bet",        new BetCommand(plugin));
         reg(playerCommands, "tournament", new TournamentCommand(plugin));
+        reg(playerCommands, "guide",      new GuideCommand(plugin));
         help = new HelpCommand(plugin, adminCommands, playerCommands);
         reg(playerCommands, "help",       help);
 

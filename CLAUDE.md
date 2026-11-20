@@ -3,7 +3,7 @@
 OmniArena is a PVP arena plugin for Paper, Purpur, Spigot and Bukkit (Java, Maven, Bukkit API +
 Adventure/MiniMessage). Package root `com.omniarena`, main class `com.omniarena.OmniArena`.
 User-facing docs: [README.md](README.md), [DOCS.md](DOCS.md). Generic agent summary:
-[AGENTS.md](AGENTS.md). Specs and plans: `docs/superpowers/`.
+[AGENTS.md](AGENTS.md). Specs, plans and the QoL redesign contract: `docs/superpowers/`.
 
 Read this file fully before changing code. Everything here was derived from the source; if the code
 and this file disagree, the code wins: fix this file in the same change.
@@ -21,17 +21,16 @@ mvn -q -Ppaper,mc-26.2 -Dtest=TournamentBracketTest test
 scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HOME / JAVA21_HOME)
 ```
 
-- Tests live in `src/test/java` (`RegenAnimationTypeTest`, `TournamentBracketTest`,
-  `ConfigSchemaServiceTest`, `SuggestTest`; 17 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
-  `ConfigSchemaServiceTest`, `health/*Test`; 25 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
-  `ConfigSchemaServiceTest`, `SuggestTest`, `MenuLayoutTest`, `FailureTrackerTest`, `LeaderboardPlaceholderTest`,
-  `NpcActionTest`, `ArenaWorldsTest`; 39 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
+- Tests live in `src/test/java`: `arena` (`ArenaWorldsTest`, `regen/RegenAnimationTypeTest`), `config`
+  (`ConfigMigrationTest`), `gui` (`MenuLayoutTest`), `guide` (`GuidePaginatorTest`, `GuideBooksTest`), `health`
+  (`YamlRepairTest`, `BackupAndSafeYamlTest`, `ErrorTrackerTest`), `integration` (`FailureTrackerTest`,
+  `LeaderboardPlaceholderTest`, `NpcActionTest`), `tournament` (`TournamentBracketTest`), `util` (`SuggestTest`),
+  `web` (`ConfigSchemaServiceTest`). 79 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`.
   Only pure logic is unit tested; code that needs a live Bukkit server is not.
-- `target/` and `dist/` are git-ignored build output; never edit them. The old antrun step that
-  copied the jar to a Windows path has been removed.
+- `target/` and `dist/` are git-ignored build output; never edit them.
 - Repositories needed: PaperMC, Spigot snapshots, PurpurMC, EssentialsX, PlaceholderAPI, EngineHub,
   Sonatype, JitPack, Vault. Outbound network may be restricted in sandboxes; builds may need a
-  pre-populated `~/.m2`. Verification status: compilation was verified for all 18 paper, spigot and
+  pre-populated `~/.m2` (`mvn -o`). Verification status: compilation was verified for all 18 paper, spigot and
   bukkit combinations (and the unit tests on paper/mc-26.2); the 6 purpur jars could not be
   verified because repo.purpurmc.org was unreachable. No live-server runtime tests exist.
 
@@ -56,20 +55,19 @@ Platform layer rules (`com.omniarena.platform`):
 - Common code (`src/main/java`) must not use Paper-only API. Anything that differs goes through
   `PlatformAdapter` (`Platform.get()`), implemented by exactly one `PlatformImpl` per jar
   (`src/paper/java` or `src/spigot/java`). Current adapter surface: message/title/action bar/boss bar
-  delivery, item name/lore, inventory title, sign lines (`SignSide` and `SignChangeEvent`),
-  `TextDisplay` text, chat listener, `wasKicked`, `isServerStopping`, `commandMap`, async chunk load
-  and chunk tickets, `getBlockState`, `serializeItems`/`deserializeItems` (container snapshots).
+  delivery, `openBook` (written books, used by the guide books), item name/lore, inventory title, sign lines
+  (`SignSide` and `SignChangeEvent`), `TextDisplay` text, chat listener, `wasKicked`, `isServerStopping`,
+  `commandMap`, async chunk load and chunk tickets, `getBlockState`, `serializeItems`/`deserializeItems`
+  (container snapshots). Adding an adapter method means implementing it in both `PlatformImpl` classes.
 - Paper-only listeners live in `src/paper/java` (`PaperChatListener`, `PaperCombatListener` for
   `PlayerElytraBoostEvent`); Spigot has `SpigotChatListener` (`AsyncPlayerChatEvent`, kick tracking).
 - `Platform.init` is the first thing in `onEnable`; a paper/purpur jar on a non-Paper server
-  disables the plugin with a message. Adding an adapter method means implementing it in both
-  `PlatformImpl` classes.
+  disables the plugin with a message.
 - Java 25 profiles need a JDK 25 toolchain; Java 21 profiles must not use language features above 21
   (write code at Java 21 level everywhere).
-- Run the full test suite per profile; prefer a CI matrix over a local loop.
 - Container items in `snapshots/*.yml` are encoded per flavor (native NBT bytes vs Bukkit object
   streams) and are not interchangeable.
-- When profiles or versions change, update README, DOCS.md section 17, `scripts/build-all.sh` and
+- When profiles or versions change, update README, DOCS.md section 12, `scripts/build-all.sh` and
   this section.
 - Shade plugin: FastBoard and HikariCP relocated under `com.omniarena.shaded`, Gson and MySQL
   connector bundled; the database layer is unused.
@@ -83,43 +81,41 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 
 | Package | Key classes | Responsibility |
 |---------|-------------|----------------|
-| `com.omniarena` | `OmniArena` | Plugin entry. Owns every manager, `stopped` flag (`isStopped()`), command/listener registration, sign refresh task, startup/shutdown banners. |
+| `com.omniarena` | `OmniArena` | Plugin entry. Owns every manager, `stopped` flag (`isStopped()`), command/listener registration, sign refresh task, watchdog, startup/shutdown banners. |
 | `platform` | `Platform`, `PlatformAdapter` | Per-flavor adapter (Paper vs Spigot), see section 1. `PlatformImpl` classes are in `src/paper/java` and `src/spigot/java`. |
-| `arena` | `Arena`, `ArenaManager`, `ArenaRegion`, `ArenaRules`, `ArenaTeamConfig`, `ArenaVisualConfig`, `ArenaState`, `SpawnType`, `ChatMode`, `TeamColor`, `RegionHandler` | Arena model and registry (case-insensitive name map), wand selection points, spawn lists (`getBattleSpawn(i)` wraps modulo), region containment, boundary enforcement. `ArenaManager.applyDefaults` seeds new arenas from `arena.*` / `visual.*`. |
+| `arena` | `Arena`, `ArenaManager`, `ArenaRegion`, `ArenaRules`, `ArenaTeamConfig`, `ArenaVisualConfig`, `ArenaState`, `SpawnType`, `ChatMode`, `TeamColor`, `RegionHandler`, `ArenaSetupService`, `ArenaSettingsService` | Arena model and registry (case-insensitive name map), wand selection points, spawn lists (`getBattleSpawn(i)` wraps modulo), region containment, boundary enforcement, setup requirements, unresolved worlds (section 17). `ArenaManager.applyDefaults` seeds new arenas from `arenas.*` / `visuals.*`. |
 | `arena.regen` | `BlockRestoreModule`, `RegenAnimationType` | Snapshot (palette + vertical RLE + tile entities, file format v2) and animated restore, change log for TIME_REWIND. Active-regen map, queued callbacks, descender cap (90), `cancelAll()`. |
-| `config` | `ConfigManager`, `ArenaConfig` | `config.yml`/`messages.yml` access (`getMessage` adds `prefix`; bundled defaults back-fill missing message keys), batched writes (`setValues`), per-arena YAML load/save (`arenas/<name>.yml`). |
-| `match` | `MatchManager`, `Match`, `MatchResult`, `MatchState`, `MatchTeam`, `GoalType`, `RespawnType`, `EndCommandHandler`, `RewardHandler`, `PlayerStateStore` | Match engine: join/leave, countdown, start, timers, end conditions, forfeit, draws, reset + auto regen, inventory/state save/restore (crash-safe store), rewards, god/freeze/lockdown admin state. |
+| `config` | `ConfigManager`, `ArenaConfig`, `ConfigMigration` | `config.yml`/`messages.yml` access (`getMessage` adds `prefix`; bundled defaults back-fill missing message keys), batched writes (`setValues`), layout migration (section 11), per-arena YAML load/save (`arenas/<name>.yml`). |
+| `match` | `MatchManager`, `Match`, `MatchResult`, `MatchState`, `MatchTeam`, `GoalType`, `RespawnType`, `EndCommandHandler`, `RewardHandler`, `PlayerStateStore` | Match engine: join/leave, countdown, start, timers, end conditions, forfeit, draws, reset + auto regen, inventory/state save/restore (crash-safe store), rewards. There is no admin match control (no force start/win, freeze, god, lockdown); `MatchManager.forceWin` stays for tournaments. |
 | `gamemode` | `GameModeType`, `GameModeKits` | 16 game types: goal type, default target, respawn/regen/ring-out flags, loadouts. |
-| `kit` | `KitManager`, `Kit`/`AdminKit`/`PlayerKit`, `KitGUI`, `KitShareHandler`, `KitMenuHolder` | Preset kits (`admin-kits/`) and personal kits (`player-kits/`), sanitising and power cap, sharing with 60 s expiry. |
+| `kit` | `KitManager`, `Kit`/`AdminKit`/`PlayerKit`, `KitGUI`, `KitShareHandler` | Preset kits (`admin-kits/`) and personal kits (`player-kits/`), sanitising and power cap, sharing with 60 s expiry. |
 | `queue` | `QueueManager` | Per-kit matchmaking queues of solo players and parties; 1 s task. |
 | `rating` | `EloManager`, `EloRating` | ELO storage (`elo.yml`) and math (1v1 and team). |
 | `party` | `PartyManager` | Parties (invites keyed by party id, leader transfer, kick, size limit `ranked.party-max-size`). Feeds the queue. |
 | `betting` | `BettingManager` | Vault-backed bet pools and settlement. |
 | `tournament` | `TournamentManager`, `Tournament`, `TournamentBracket`, `TournamentMatch`, `TournamentState` | Single-elimination tournaments with persistence. |
 | `stats` | `StatsManager`, `PlayerStats` | Lifetime stats (`stats.yml`), top lists, `peekStats` (read-only) vs `getStats` (creates). |
-| `combat` | `CombatManager`, `CombatListener`, `PvpCommandHandler` | Server-wide PvP management (tags, persistent toggles `pvp-toggles.yml`, newbie `newbie.yml`, abuse, border hopping, crystal attribution). |
-| `listener` | 17 listeners | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks). |
-| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `HologramCommand`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
-| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (29, incl. `AccessCommand`, `DoctorCommand`), `commands.player.*` (12, incl. `EloCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
-| `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
-| `listener` | 18 listeners (incl. `WorldListener`) | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks, world load/unload). |
-| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `LeaderboardCommand` = `/oa leaderboard`, `NpcCommand` = `/oa npc`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
+| `combat` | `CombatManager`, `CombatListener`, `PvpCommandHandler` | Server-wide PvP management (tags, persistent toggles `pvp-toggles.yml`, newbie `newbie.yml`, abuse, border hopping, crystal attribution); `/pvp` and its subcommands. |
+| `listener` | 17 listeners | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, world load/unload). |
+| `commands` | `CommandManager`, `SubCommand`, `SmartErrors`, `TabUtil`, `KitCommandExecutor`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `LeaderboardCommand`, `NpcCommand`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`, `DoctorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*` (`JoinCommand`, `LeaveCommand`, `SpectateCommand`, `ListCommand`, `StatsCommand`, `QueueCommand`, `BetCommand`, `TournamentCommand`, `GuideCommand`, `HelpCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `util.Suggest`); standalone commands (`/join`, `/leave`, `/spectate`, `/party`, `/kit`, `/bet`, `/tournament`, `/pvp`) forward to `/oa` subcommands. Final tree: `docs/superpowers/qol-commands-final.md`. |
+| `gui` | `OmniMenu`, `MenuBuilder`, `MenuLayout`, `MenuListener`, `ChatPrompt`, `MainMenu`, `AdminHubMenu`, `ArenaPickerMenu`, `ArenaSetupMenu`, `ArenaEditMenu`, `AdminKitMenu` | Chest menus, see section 12. |
+| `guide` | `GuideBooks`, `GuidePaginator`, `GuideMarkup` | In-game guide books (`/oa guide`), see section 13. Text in the bundled `guides.yml`. |
 | `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars). The built-in hologram system was removed: leaderboards are PlaceholderAPI placeholders plus `/oa leaderboard` (see `integration`). An old `holograms.yml` is ignored and logged once. |
 | `module` | `ModuleManager`, `KillstreakModule`, `ComboModule`, `PowerUpModule` | Optional per-arena modules (names in `Arena.getEnabledModules()`). |
-| `settings` | `SettingsGUI`, `SettingsMenuListener`, `SettingsHolder` | Chest-GUI editor over `ConfigSchemaService`. |
+| `settings` | `SettingsGUI` | Chest-GUI editor over `ConfigSchemaService`, built on `gui.MenuBuilder`. |
 | `sign` | `SignManager`, `ArenaSign` | Join signs, glowstone tracking (`sign-glowstone.yml`). |
-| `integration` | `IntegrationManager` (+ `IntegrationStatus`, `FailureTracker`), `VaultIntegration`, `PlaceholderAPIIntegration`, `WorldGuardIntegration`, `LuckPermsIntegration`, reflection-only `DecentHologramsHook`/`FancyHologramsHook` (`HologramHook`), `CitizensIntegration`, `MultiverseIntegration` (`Reflect` helper), services `LeaderboardCache`/`LeaderboardManager`/`NpcManager` | Soft-dependency hooks (each behind an `integrations.<name>` switch, all isolated by `IntegrationManager.safe`, see section 16c). Code that touches an optional API must stay inside these classes; hooks without an API jar on the build path (holograms, Citizens, Multiverse) are reflection only. |
-| `api` | `OmniArenaAPI`, `api.event.*` (`ArenaMatchStartEvent`, `ArenaMatchEndEvent`, `ArenaPlayerJoinEvent` (cancellable), `ArenaPlayerLeaveEvent`, `ArenaKillEvent`, `ApiEvents`) | Public facade and events for other plugins. Events are fired on the main thread through `ApiEvents.fire` (never lets a listener problem break a match): start in `startMatch`, end in `endMatch` after the effects, join in `joinArena` after all checks and before state changes, leave in `leaveArena`/`leaveSpectator`, kill in `PlayerDeathListener` right after `recordKill`. |
+| `integration` | `IntegrationManager` (+ `IntegrationStatus`, `FailureTracker`), `VaultIntegration`, `PlaceholderAPIIntegration`, `WorldGuardIntegration`, `LuckPermsIntegration`, reflection-only `DecentHologramsHook`/`FancyHologramsHook` (`HologramHook`), `CitizensIntegration`, `MultiverseIntegration` (`Reflect` helper), services `LeaderboardCache`/`LeaderboardManager`/`NpcManager` | Soft-dependency hooks (each behind an `integrations.<name>` switch, all isolated by `IntegrationManager.safe`, section 17). Code that touches an optional API must stay inside these classes; hooks without an API jar on the build path (holograms, Citizens, Multiverse) are reflection only. |
+| `api` | `OmniArenaAPI`, `api.event.*` | Public facade and events for other plugins, section 17. |
 | `permission` | `PermissionChecker` | Permission node constants and `hasAdmin`. |
+| `health` | `ConfigRepair`, `YamlRepair`, `SafeYaml`, `BackupUtil`, `Watchdog`, `ErrorGuard`, `ErrorTracker`, `HealthReport`, `Doctor` | Self-healing, section 16. |
 | `web` | `WebDashboardServer`, `WebSessionManager`, `ConfigSchemaService`, `ConfigApplyService`, `DocsCatalog`, `web.model.*` | Embedded HTTP dashboard, schema (exactly the keys of `config.yml` + `messages.yml`) and validated apply. Static UI in `src/main/resources/web/`. |
-| `health` | `ConfigRepair`, `YamlRepair`, `SafeYaml`, `BackupUtil`, `Watchdog`, `ErrorGuard`, `ErrorTracker`, `HealthReport`, `Doctor` | Self-healing (section 16): config repair, tolerant YAML loading, runtime watchdog, error isolation, `/oa doctor`. |
-| `util` | `AsyncUtil`, `YamlUtil`, `MessageUtil`, `ColorUtil`, `ItemUtil`, `LocationUtil`, `KitYamlLoader` | Scheduling helpers, YAML IO, MiniMessage helpers. |
+| `util` | `AsyncUtil`, `YamlUtil`, `MessageUtil`, `ColorUtil`, `ItemUtil`, `LocationUtil`, `KitYamlLoader`, `Suggest` | Scheduling helpers, YAML IO, MiniMessage helpers, pure did-you-mean (`Suggest.closest`, `click`, `run`). |
 
-Resources: `plugin.yml` (filtered), `config.yml`, `messages.yml`, `arenas/example.yml` (template,
+Resources: `plugin.yml` (filtered), `config.yml` (layout v2), `messages.yml`, `guides.yml`, `arenas/example.yml` (template,
 ignored by loader), `kits/*.yml` (10 default preset kits copied to `admin-kits/`),
 `web/{index.html,app.js,styles.css,docs.md}`.
 
-Data flow of a match (read these in order): `JoinCommand`/sign/tournament/queue ->
+Data flow of a match (read these in order): `JoinCommand`/menu/sign/NPC/tournament/queue ->
 `MatchManager.joinArena` -> countdown task -> `startMatch` -> listeners (`PlayerDeathListener`,
 `EntityDamageListener`, `PlayerMoveListener`) -> `checkEndConditions` / timer -> `endMatch` ->
 delayed `resetMatch` -> `cleanupMatch` -> `startAutoRegen` (arena RESETTING until the restore
@@ -132,63 +128,58 @@ completes).
 ### onEnable (order matters)
 
 1. `Platform.init(this)` (a wrong-flavor jar disables the plugin and returns).
-2. `ConfigManager.load()` (runs `ConfigRepair` first: backfills/repairs config.yml + messages.yml).
-3. Construct: `VisualController` (starts `HologramManager`), `StatsManager`, `KitManager`,
-2. `ConfigManager.load()`.
-3. Construct: `VisualController`, `StatsManager`, `KitManager`,
-   `KitShareHandler`, `SignManager`, `ModuleManager`, `BlockRestoreModule`, `ArenaManager`,
-   `MatchManager`, `KitCommandExecutor`, `CombatManager` (its constructor calls `start()`),
-   `EloManager`, `QueueManager`, `PartyManager`, `BettingManager` (looks up Vault economy once),
-   `TournamentManager`.
+2. `ConfigManager.load()` (layout migration first, then `ConfigRepair`: back-fills/repairs config.yml + messages.yml).
+3. Construct: `VisualController`, `StatsManager`, `KitManager`, `KitShareHandler`, `SignManager`,
+   `ModuleManager`, `BlockRestoreModule`, `ArenaManager`, `MatchManager`, `KitCommandExecutor`,
+   `CombatManager` (its constructor calls `start()`), `EloManager`, `QueueManager`, `PartyManager`,
+   `BettingManager` (looks up Vault economy once), `TournamentManager`.
 4. Load: `statsManager.loadAll()`, `kitManager.loadAll()`, `arenaManager.loadAll()`,
    `eloManager.loadAll()`, `queueManager.start()`, `partyManager.start()`,
    `tournamentManager.start()` (loads and schedules resume of in-progress brackets).
-5. `IntegrationManager.load()` then `WebDashboardServer.start()`.
-6. Commands (`oa`, `kit`, `join`, `leave`, `party`, forwarders for the rest including `bet` and
-   `tournament`), then listeners (plus `Platform.get().registerListeners`), then
-   `startSignUpdateTask()`, then `new Watchdog(this).start()` (self-healing, section 16).
+5. `IntegrationManager.load()` (also starts its tasks) then `WebDashboardServer.start()`.
+6. Commands (`oa`, `kit`, `join`, `leave`, `party`, forwarders for the rest including `bet`,
+   `tournament`, `spectate`, `pvp`; `CommandManager` also installs `guides.yml` through `GuideCommand`), then
+   listeners (plus `MenuListener` and `Platform.get().registerListeners`), then `startSignUpdateTask()`,
+   then `new Watchdog(this).start()`.
 
 ### onDisable (order matters; each step is wrapped so one failure cannot skip the rest)
 
-`stopped = true`; `watchdog.stop()`; cancel sign task; `KitGUI.closeAll()`, `SettingsGUI.closeAll()`; `leaveArena` for
-every online player in every active match (so results land in the saves below);
-`matchManager.shutdownStateStore()`; `BlockRestoreModule.cancelAll()` (finishes regens, including
-those just started by the matches that ended); `combat.shutdown()`; `queue.stop()`, `party.stop()`;
-`tournament.stop()` (save + clear); `betting.refundAll()`; `stats.saveAll()`; `arena.saveAll()`;
-`elo.shutdown(); elo.saveAll()`; `visual.shutdown()`; `module.shutdown()`;
+`stopped = true`; `watchdog.stop()`; cancel sign task; close open GUIs; `leaveArena` for every online player in
+every active match (so results land in the saves below); `matchManager.shutdownStateStore()`;
+`BlockRestoreModule.cancelAll()` (finishes regens, including those just started by the matches that ended);
+`combat.shutdown()`; `queue.stop()`, `party.stop()`; `tournament.stop()` (save + clear); `betting.refundAll()`;
+`stats.saveAll()`; `arena.saveAll()`; `elo.shutdown(); elo.saveAll()`; `visual.shutdown()`; `module.shutdown()`;
 `web.stop()`; `integration.shutdown()`; `Platform.shutdown()`.
 
 ### `/oa plugin stop|start|restart|version` (`LifecycleCommand`)
 
-- **stop**: `setStopped(true)`; `cancelAll()` on regen; `Bukkit.getScheduler().cancelTasks(plugin)`
+- **stop**: `watchdog.stop()`; `setStopped(true)`; `cancelAll()` on regen; `Bukkit.getScheduler().cancelTasks(plugin)`
   (cancels *everything*: matchmaking, sign refresh, combat tasks, tournament tick, countdowns,
   timers); leave all active matches (players and spectators); `cancelAll()` again so regens started
   by those matches finish instantly; close GUIs; save ELO, stats, arenas; refund bets;
-  `tournament.stop()`; stop web; shut down visuals, modules, queue, party. `watchdog.stop()` runs first.
+  `tournament.stop()`; stop web; shut down visuals, modules, queue, party; `IntegrationManager.stop()` (bindings cleared).
 - **start** (only if stopped): `setStopped(false)`; reload config; reload arenas, kits, stats, ELO;
-  restart queue, party, tournaments (which also restarts the tournament tick task), web server,
-  sign task (`resetPending`), combat tasks, `visual.start()` (holograms), `watchdog.start()`. Listeners and command
-  sign task (`resetPending`), combat tasks, `visual.start()`, `IntegrationManager.start()` (leaderboard cache refresh,
-  leaderboard holograms, NPC click handler). Listeners and command
-  executors stay registered; `BettingManager` is not re-initialised.
-- **restart**: stop on the next tick, start 20 ticks later.
-- **reload** (`ReloadCommand`): reload config/messages and kits; reload arenas only when no match is
-  active; `ModuleManager.reload`; restart sign task; re-run `IntegrationManager.shutdown()/load()`
-  (so `integrations.*` switches apply); restart combat tasks; restart the watchdog (new interval); refresh signs. Config repair runs inside `ConfigManager.load()/reload()`.
-  (so `integrations.*` switches apply and tripped hooks are retried; `load()` calls `start()`); restart combat tasks; refresh signs.
-  `/oa plugin stop` also calls `IntegrationManager.stop()` (tasks are cancelled anyway, bindings are cleared).
+  restart queue, party, tournaments (which also restarts the tournament tick task), web server, sign task
+  (`resetPending`), combat tasks, `visual.start()`, `IntegrationManager.start()` (leaderboard cache refresh,
+  leaderboard holograms, NPC click handler), `watchdog.start()`. Listeners and command executors stay registered;
+  `BettingManager` is not re-initialised.
+- **restart**: stop on the next tick, start 20 ticks later. **version**: prints the plugin version.
+- **reload** (`ReloadCommand`): reload config/messages (migration + repair run inside `ConfigManager.reload()`),
+  `GuideBooks.reload()`, kits; reload arenas only when no match is active; `ModuleManager.reload`; restart sign task and
+  watchdog (new interval); re-run `IntegrationManager.shutdown()/load()` (so `integrations.*` switches apply and
+  tripped hooks are retried); restart combat tasks; refresh signs.
 
 ### `isStopped()` gating
 
 When stopped, `CommandManager.onCommand` allows only `/oa plugin ...`; `KitCommandExecutor`,
-`PartyCommand` and `/oa queue` print the stopped message; listeners and repeating tasks return early
+`PartyCommand`, `/oa queue` and the menus print the stopped message; listeners and repeating tasks return early
 on `plugin.isStopped()`. **Every new listener, command entry point and repeating task must check
 `plugin.isStopped()`** (or be cancelled by `stop`). Do not start schedulers outside code paths that
-`/oa stop` can cancel or that `/oa start` re-creates.
+`/oa plugin stop` can cancel or that `/oa plugin start` re-creates.
 
 Anything you add that owns a periodic task must expose `start()`/`stop()` that is idempotent
 (call `stop()` first inside `start()`, like `QueueManager`/`PartyManager`) and must be wired into
-onEnable, onDisable, `/oa stop` and `/oa start`.
+onEnable, onDisable, `/oa plugin stop` and `/oa plugin start` (and, if it can die, the watchdog).
 
 ---
 
@@ -211,21 +202,22 @@ onEnable, onDisable, `/oa stop` and `/oa start`.
 5. **No blocking on the main thread**: no network, no large file reads, no `Future.get()` without a
    timeout. Large block operations must be time-sliced (see `BlockRestoreModule`:
    `SNAPSHOT_BLOCKS_PER_TICK = 30000`, per-tick batches for placement).
-6. Do not force-load chunks (sign refresh checks `isChunkLoaded`; leaderboard placeholders read the `LeaderboardCache` snapshot).
-   Other async writers follow the same snapshot-then-write pattern: `PlayerStateStore` (single
-   writer thread), `CombatManager` (`pvp-toggles.yml`, `newbie.yml`).
+6. Do not force-load chunks (sign refresh checks `isChunkLoaded`; leaderboard placeholders read the
+   `LeaderboardCache` snapshot). Other async writers follow the same snapshot-then-write pattern:
+   `PlayerStateStore` (single writer thread), `CombatManager` (`pvp-toggles.yml`, `newbie.yml`).
 7. Player-facing text: build with MiniMessage via `MessageUtil.send` and `ConfigManager.getMessage`
    (the latter prepends `prefix`). Player chat is built with `Component.text` in `ChatListener.safeText`
    (never parse it as MiniMessage). Never concatenate untrusted user text into MiniMessage tags without
-   considering tag injection. Component-typed Bukkit APIs (item names, sign lines, inventory titles,
-   boss bars, titles) must go through `PlatformAdapter`, never straight to Paper-only methods.
+   escaping (`Suggest.escape`, `MenuBuilder.esc`). Component-typed Bukkit APIs (item names, sign lines,
+   inventory titles, boss bars, titles, books) must go through `PlatformAdapter`, never straight to
+   Paper-only methods.
 
 ---
 
 ## 5. Matchmaking, ratings and ranked flag
 
-`QueueManager` (entry point `/oa queue join [kit]|leave|status`, `QueueCommand`, permission
-`omniarena.queue`):
+`QueueManager` (entry point `/oa queue [kit]`, `queue leave`, `queue status`; `QueueCommand`, permission
+`omniarena.queue`; also the main-menu button and the NPC `queue` action):
 
 - Task: `runTaskTimer(plugin, processMatchmaking, 20L, 20L)` (1 s).
 - Queues keyed by `kitName.toLowerCase()` (`ranked` by default, or an admin kit name; the command
@@ -268,9 +260,10 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   compute from pre-match values; `recordWin/recordLoss` apply the new rating themselves (do not
   also call `setRating`: this double-applied before, commit 79f37fe).
 - `MatchResult.isDraw()` is true for `DRAW` and `TIMEOUT`.
-- `/oa stats [player]` (ELO and rank are part of it) and `/oa stats top elo [n]` (`StatsCommand`, `omniarena.use`) show ratings through the
-  read-only `peekRating`/`getPlayerRank`/`getLeaderboard` paths (never `getRating`, which creates an
-  entry). Ratings also appear in `/oa queue status`, the `%omniarena_elo%`/`%omniarena_rank%`/`top_elo` placeholders and the web Players tab.
+- `/oa stats [player]` (ELO and rank are part of it) and `/oa stats top elo [n]` (`StatsCommand`, `omniarena.use`)
+  show ratings through the read-only `peekRating`/`getPlayerRank`/`getLeaderboard` paths (never `getRating`,
+  which creates an entry). Ratings also appear in `/oa queue status`, the `%omniarena_elo%`/`%omniarena_rank%`/
+  `top_elo` placeholders and the web Players tab.
 
 ---
 
@@ -296,11 +289,12 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   mapping (match gone) still restores state.
 - `joinArena` accepts RUNNING arenas only when `arena.isMidMatchJoin()`, refuses arenas reserved by
   an in-progress tournament (`isArenaReserved`) for anyone not in the current pending match, and
-  refuses outsiders in a ranked match that is underway.
+  refuses outsiders in a ranked match that is underway. It fires `ArenaPlayerJoinEvent` after all checks and
+  before any state changes. Users get specific reasons from `SmartErrors.explainNotJoinable`.
 - Countdown task: below `effectiveMin` players it stays WAITING and counts `matches.lobby-timeout`
   (config, default 120, 0 = never) seconds before closing the lobby.
 - `Arena.lives` (arena file key `lives`, 0 = off, max 100): settable via `/oa edit <arena> set
-  lives <n>` and the dashboard. `PlayerDeathListener` decrements `Match.getLivesMap()`, respawns
+  lives <n>`, the edit menu and the dashboard. `PlayerDeathListener` decrements `Match.getLivesMap()`, respawns
   while > 0, eliminates at 0 (also in modes that normally never respawn); on KILLS goals
   `checkEndConditions` also ends the match when one side is left with lives. `BoardManager` shows
   `Lives:` and `ActionBarManager` shows hearts.
@@ -310,19 +304,25 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - Player *i* spawns at `arena.getBattleSpawn(i)` (index modulo size). Respawns use a random spawn.
 - `cleanupMatch` uses `activeMatches.remove(arenaName, match)`: the delayed `resetMatch` of an old
   match must never tear down a newer one on the same arena (fixed in 79f37fe). After removing the
-  match it calls `startAutoRegen` (section 7); `cleanupMatch` only starts it when the match state is RUNNING/ENDING/RESETTING (a lobby-only match whose last player left directly is not regenerated).
+  match it calls `startAutoRegen` (section 7); `cleanupMatch` only starts it when the match state is
+  RUNNING/ENDING/RESETTING (a lobby-only match whose last player left directly is not regenerated).
 - `endMatch` is guarded by state `ENDING`/`RESETTING` and by identity
   (`activeMatches.get(arena) == match`), so it is idempotent. `endMatchEffects` (wrapped so an
   exception cannot strand the arena in ENDING) runs in order: ELO, betting settlement,
   `TournamentManager.onMatchEnd`, titles/sounds/fireworks, boss bars, end commands, rewards
-  (`RewardHandler.onWin`), stats, arena and global announcements; then the delayed reset. Keep
-  betting/tournament hooks before cleanup.
+  (`RewardHandler.onWin`), stats, arena and global announcements, `ArenaMatchEndEvent`; then the delayed
+  reset. Keep betting/tournament hooks before cleanup.
 - Death handling is in `PlayerDeathListener`; it forces keep-inventory, clears drops unless the arena
   allows item drops, awards `rewards.kill-*` (suppressed by the kill-abuse window), schedules respawn
   or eliminates. Ring-out is in `GameModeRulesListener`.
 - Internal teleports must go through `MatchManager.markInternalTeleport` so
   `PlayerTeleportListener` does not eject the player.
-- There is no admin match control any more (no force start/win, freeze, god, lockdown); `MatchManager.forceWin` stays for tournaments.
+- `RespawnType.WAVE`: dead players are parked in spectator mode (`MatchManager.queueWaveRespawn`,
+  queue in `Match.getWaveQueue()`) and released together by `tickWave` from the match timer every
+  `Arena.respawnWaveInterval` seconds (`respawn.wave-interval`, default 10); the shared respawn
+  body is `MatchManager.completeRespawn`. `respawn.delay` only applies to `DELAYED`.
+- When a match has `getQueueKit()` set, loadouts come from that admin kit, otherwise from
+  `GameModeKits`; respawns call the same `applyLoadout`.
 
 ---
 
@@ -331,21 +331,23 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - Regeneration is **automatic** and can also be run by hand. `MatchManager.startAutoRegen` (called
   from `cleanupMatch`) restores the arena after a match when the region is defined and
   `regen.arenas.<arena-lowercase>.auto` (if set) or `regen.auto` (default true) is true. It is not
-  gated on `isStopped()` (matches ended by `/oa stop` / `onDisable` must still restore; `cancelAll`
+  gated on `isStopped()` (matches ended by `/oa plugin stop` / `onDisable` must still restore; `cancelAll`
   then finalizes them synchronously). The arena is `RESETTING` until the restore callback, which
   sets it back to `WAITING` unless it was disabled or a new match exists; failure and a missing
   snapshot (warning + `notifyAdmins`) also reopen the arena. Manual entry points: `/oa regen
-  <arena>` (refused while a match is active or a regen is running).
+  <arena>` (refused while a match is active or a regen is running) and `/oa regen snapshot <arena>`.
 - Snapshot: `createSnapshot` scans in slices on the main thread into a palette (`MATERIAL|blockdata`)
   plus runs `{x, z, y0, len, paletteIdx}` and a `tiles` list (containers, signs, banners captured
   via `Platform.getBlockState`/`serializeItems`), then `AsyncUtil.runAsyncThenSync` writes
   `snapshots/<arena-lowercase>.yml` atomically with `format: 2`, `palette`, `runs` (strings
-  `"x,z,y0,len,idx"`) and optional `tiles`. `loadEntries` also reads legacy format 1.
+  `"x,z,y0,len,idx"`) and optional `tiles`. `loadEntries` also reads legacy format 1. `/oa setup <arena> region`
+  takes it.
 - Restore: async load + ordering (`orderEntries`), then a repeating sync task places batches without
   physics (tile data applied after the block, containers cleared first); preview blocks one tick
   ahead for animated styles; `clearTransientEntities` removes items/projectiles/XP/TNT/falling
   blocks/clouds; `activeRegens` maps arena -> finalizer so `cancelAll()` can complete instantly; a
-  second restore on the same arena queues only its callback.
+  second restore on the same arena queues only its callback. `BlockRestoreModule` keeps
+  `shuttingDown = true` after `cancelAll()` until the next snapshot or restore resets it.
 - Change log: `RegenChangeListener` records block changes (break, place, explosions, fluid, burn,
   fade, form) of RUNNING arenas through `BlockRestoreModule.recordChange` (max 200k positions,
   ignored while regenerating, cleared by `clearChangeLog` at match start and after a regen). Only
@@ -357,17 +359,18 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   `advanced.regen.batch-size`; animated types use `min(batch-size, 1200)`. `MAX_DESCENDERS = 90`.
 - When adding a style: add the enum value, `orderEntries` case, `buildPreview` case, optional
   sound case, extend `RegenAnimationTypeTest`, and update docs (counts appear in README, DOCS.md and
-  the help guides).
-- `regen.arenas.<name>.auto` is not in `config.yml`, hence not in the settings schema (no GUI or
-  dashboard entry). Set it with `/oa regen auto <arena> <true|false|default>` (`default` unsets it)
-  or by editing the file.
+  the guide books).
+- `regen.arenas.<name>.auto` is not in `config.yml`, hence not in the settings schema. It is set with
+  `/oa edit <arena> set regen-auto <true|false|default>` (`default` unsets it), the edit menu toggle, or by editing
+  the file. The global options (`regen.auto|style|particles|sound|progress-messages`) are in `/oa settings`.
 
 ---
 
 ## 8. Tournaments
 
 - `TournamentManager` (`tournaments.yml`), command `TournamentCommand` registered as `/oa tournament`
-  (in `commands/player`, permissions `omniarena.tournament.create` / `.admin`).
+  (in `commands/player`, permissions `omniarena.tournament.create` / `.admin`); a standalone `/tournament`
+  forwards to it.
 - States: `REGISTRATION -> IN_PROGRESS -> FINISHED` (or `CANCELLED` on delete). Auto-start when full.
 - Bracket: join-order seeding; byes go to the first `nextPow2 - n` seeds; each round pairs winners in
   order; odd leftover gets a safety bye. One live match at a time per arena: `launchPendingMatches`
@@ -394,7 +397,6 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 - Delay between launches: `matches.end-delay + 2` seconds (arena must finish resetting first). With
   automatic regeneration the arena stays `RESETTING` until the rebuild is done, so an early launch
   fails `joinArena` and the 100-tick safety task retries it.
-- A standalone `/tournament` command exists (plugin.yml, forwarded to `/oa tournament`).
 - Arenas used by tournaments need `min-players <= 2`.
 
 ---
@@ -408,7 +410,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   (never destroy money).
 - Else each winning bet gets `floor(totalPool * (bet / winnerPool) * 100) / 100` (offline players
   included); losing bets are forfeited.
-- `onMatchCleanup` refunds still-pending bets (aborted match); `refundAll()` on `/oa stop` and
+- `onMatchCleanup` refunds still-pending bets (aborted match); `refundAll()` on `/oa plugin stop` and
   disable; `cancelBet` only while the window is open and only if the bet is still in `activeBets`
   (`remove(key, value)` prevents double refunds).
 - Window: open until `betting.bet-window-seconds` after `onMatchStart`. **One active bet per player
@@ -423,7 +425,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
 
 ## 10. Persistence formats
 
-All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layouts. Key rules:
+All YAML under `plugins/OmniArena/`. See DOCS.md section 10 for field-level layouts. Key rules:
 
 - Arena files: `arenas/<name>.yml`, loaded by `ArenaConfig` (skips `example.yml`). Locations are
   `world:x:y:z:yaw:pitch` (`LocationUtil`). `enabled` is derived from state != DISABLED. `lives` and
@@ -435,7 +437,9 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
   (`NpcManager`: `npcs.<citizensId>` action/arg). A pre-existing `holograms.yml` is ignored, never deleted.
   `pvp-toggles.yml` (`pvp-off` list), `newbie.yml` (uuid -> expiry millis).
 - `stats.yml`, `elo.yml`, `tournaments.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,
-  `kit-cooldowns.yml`, `player-states/<uuid>.yml`.
+  `kit-cooldowns.yml`, `player-states/<uuid>.yml`, `guides.yml` (editable copy of the bundled guide books).
+- Corrupt files are quarantined by `SafeYaml` into `broken/` (arenas: `arenas/broken/`); config repairs and
+  migrations back up to `backups/`.
 - `YamlUtil.save` swallows `IOException` and logs. Prefer it for new files.
 - Never change a persisted key name without a migration or a fallback read of the old key (for
   `config.yml` add the old name to `ConfigMigration.MOVES`, see section 11).
@@ -454,17 +458,17 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
    must be a node that regular players actually have (declared in `plugin.yml` with `default: true`),
    otherwise non-OP players are denied.
 3. If it should also exist as a standalone command, add it to `plugin.yml` `commands:` and register a
-   `PlayerCommandForwarder` in `OmniArena.onEnable` (and add a permission entry). `bet` and
-   `tournament` are registered through the small loop at the end of that block.
+   `PlayerCommandForwarder` in `OmniArena.onEnable` (and add a permission entry).
 4. Declare every permission node you check in `plugin.yml` (all current nodes are declared,
-   including `omniarena.bet`, `omniarena.queue`, `omniarena.admin.leaderboard` and `omniarena.admin.npc`).
-5. Tab completion goes in `tabComplete`. `/oa <sub> help` is automatic (except `regen`, `kit`,
-   `adminkit`).
-6. Add messages to `messages.yml` and read via `ConfigManager.getMessage(key)`.
-7. Update README command table, DOCS.md sections 15 and 16, and the help guides in `HelpCommand`.
+   including `omniarena.bet`, `omniarena.queue`, `omniarena.admin.leaderboard`, `omniarena.admin.npc`,
+   `omniarena.admin.doctor`).
+5. Tab completion goes in `tabComplete` (helpers in `TabUtil`). `/oa <sub> help` is automatic.
+6. Add messages to `messages.yml` and read via `ConfigManager.getMessage(key)`. Use `SmartErrors`
+   (`wrongArgs`, `arena`, `unknownSubcommand`, `explainNotJoinable`) for user mistakes so errors stay clickable and
+   specific.
+7. Update README command table, DOCS.md section 3 (and the matching guide in section 2), the `HelpCommand`
+   index, `docs/superpowers/qol-commands-final.md` and, if it deserves a topic or a line, `guides.yml`.
 
-Final tree: see `docs/superpowers/qol-commands-final.md`. Use `SmartErrors` (wrongArgs, arena,
-unknownSubcommand, explainNotJoinable) for user mistakes so errors stay clickable and specific.
 `/oa kits` (admin presets) is the only admin-kit entry; `/kit` is the player kit command.
 
 ### Adding a config key
@@ -479,47 +483,74 @@ web Config tab use these section names as categories (in file order, `config-ver
 2. Read it with `ConfigManager.getInstance().getConfig().getXxx(key, default)` at the point of use.
 3. The web/GUI schema derives from the live `config.yml` and `messages.yml` automatically
    (`ConfigSchemaService.settings()`; type is inferred from the value). There is no padding and no
-   `extra(...)` list any more, so only keys that exist in the files appear. Check
+   `extra(...)` list, so only keys that exist in the files appear. Check
    `ConfigSchemaServiceTest` and the web Config tab after changes.
 4. If the key must be validated in the web UI add rules in `ConfigApplyService` (types, ranges, enums).
-5. Document it in DOCS.md section 18 and, if user-facing, the README.
+5. Document it in DOCS.md section 5 (the tables there mirror `config.yml`) and, if user-facing, the README.
 6. Do not add a key nobody reads. Today every key in `config.yml` is read. `general.debug` is read via
    `ConfigManager.debugLog(() -> "...")` (lazy supplier, no cost when off); use it for verbose
    diagnostics (matchmaking, regen timings, web requests) and never log tokens.
 7. **Renaming or moving a key**: add `old -> new` to `ConfigMigration.MOVES` (and bump `CURRENT_VERSION` plus the
-   `config-version` line in `config.yml` for a new layout version), extend `ConfigMigrationTest`. Never leave old names
-   anywhere else in the code.
+   `config-version` line in `config.yml` for a new layout version), extend `ConfigMigrationTest`, update the table in
+   DOCS.md section 5.2. Never leave old names anywhere else in the code.
 
 **Migration** (`com.omniarena.config.ConfigMigration`, pure logic, tested): `ConfigManager.load()/reload()` runs
 `migrateLayout()` BEFORE `ConfigRepair`. If `config-version` < 2 it backs the file up (`BackupUtil`, `backups/config-*.yml`; no
 backup, no migration), moves every old key via `MOVES`, drops `REMOVED` keys, and writes the result on top of the bundled
-commented `config.yml` (`overlay`; the admin's values win, unknown keys are kept, `killstreak.milestones` replaces rather than
-merges). `regen.arenas.<name>.auto` did not move. After every load `applyFallback` runs in memory so old keys still work
-if the file could not be rewritten; this is the only place that knows old key names (the old `legacyBool` fallback in
-`CombatListener` is gone, its old names are in `MOVES`).
-
-Old -> new (v1 -> v2): `plugin.debug` -> `general.debug`; `tools.wand-material` -> `general.wand-material`;
-`arena.default-{min-players,max-players,countdown,match-duration,game-mode}` -> `arenas.{min-players,max-players,countdown,match-duration,game-mode}`;
-`arena.{spectator-allowed,mid-match-join,respawn-delay,spawn-protection,region-protection}` -> `arenas.*`; `signs.glow-effect` -> `arenas.sign-glow`;
-`match.*` -> `matches.*`; `arena.lobby-timeout` / `arena.inventory-restore` -> `matches.*`;
-`regen.animation.{type,particles,sound}` -> `regen.{style,particles,sound}`; `regen.progress.enabled` -> `regen.progress-messages`;
-`party.max-size` -> `ranked.party-max-size`; `tournament.*` -> `tournaments.*`; `pvp.global.pvp-enabled` -> `pvp.server-pvp`;
-`visual.*` -> `visuals.*`; `scoreboard.title` -> `visuals.scoreboard-title`; `boss-bar.{timer,waiting,ending,low-time}-color` ->
-`visuals.boss-bar-colors.{timer,waiting,ending,low-time}`; `boss-bar.low-time-threshold` -> `visuals.boss-bar-colors.low-time-seconds`;
-`killstreak.*` -> `visuals.killstreak.*`; to `advanced.*`: `arena.persist-player-state`, `regen.batch-size` (`advanced.regen.batch-size`),
-`regen.progress.interval-percent` (`advanced.regen.progress-interval-percent`), `signs.update-interval`, `scoreboard.update-interval`,
-`health.{watchdog,stuck-arena}-seconds`, `web.{session-minutes,max-sessions}`. The canonical table is `ConfigMigration.MOVES`.
+commented `config.yml` (`overlay`; the admin's values win, unknown keys are kept, `visuals.killstreak.milestones` replaces
+rather than merges). `regen.arenas.<name>.auto` did not move. After every load `applyFallback` runs in memory so old keys
+still work if the file could not be rewritten; this is the only place that knows old key names. The canonical old -> new
+table is `ConfigMigration.MOVES` (rendered in DOCS.md section 5.2).
 
 ### Messages
 
-All user text goes through `messages.yml` where practical; many commands still hard-code MiniMessage
-strings (`TournamentManager`, `QueueManager`, `QueueCommand`, `BettingManager`,
-`CommandManager`). New code should prefer message keys. `ConfigManager.applyMessageDefaults()` falls
-back to the jar's bundled `messages.yml`.
+All user text goes through `messages.yml` where practical; some commands still hard-code MiniMessage
+strings (`TournamentManager`, `QueueManager`, `QueueCommand`, `BettingManager`, `SmartErrors`, `GuideBooks`).
+New code should prefer message keys. `ConfigManager.applyMessageDefaults()` falls back to the jar's bundled
+`messages.yml`.
 
 ---
 
-## 12. Web dashboard rules
+## 12. GUI menus (`com.omniarena.gui`)
+
+- `MenuBuilder` creates a menu (`new MenuBuilder(titleMiniMessage, rows)`): `set`/`row`/`flow`, `item(Material, name, lore...)`,
+  `toggle(on, ...)`, `button(item, handler)`, `footer(back, helpLines...)` (Back bottom-left, Help BOOK center, Close
+  BARRIER bottom-right), `open(player)`. Every empty slot gets gray stained glass. Slot math is pure (`MenuLayout`, tested).
+  Item names, lore and titles go through `PlatformAdapter`.
+- `OmniMenu` is the `InventoryHolder`; `MenuListener` (registered in onEnable) cancels every click/drag and runs
+  the slot handler one tick later, gated by `isStopped()`.
+- Conventions: green concrete = true/on, red concrete = false/off; every other button is a distinct item with lore
+  ending in a yellow "Click ... to ..." line. Escape player or arena names with `MenuBuilder.esc`.
+- Entry points: `MainMenu.open(Player)` (`/oa`, `/oa menu`, NPC `menu`), `AdminHubMenu.open`, `ArenaPickerMenu.open(Player, Mode)`
+  (`JOIN`/`SPECTATE`), `ArenaSetupMenu.open(Player, Arena)`, `ArenaEditMenu.open(Player, Arena)`, `AdminKitMenu.open`, plus
+  `SettingsGUI` and `KitGUI`. Text input uses `ChatPrompt.suggest` (a clickable chat line that pre-fills a command), never a
+  chat listener. Both hubs have a "Guides" `WRITABLE_BOOK` button that opens the guide index.
+- Every menu action must have a text command twin (menus call the same services as `SetupCommand`/`EditCommand`).
+
+---
+
+## 13. Guide books (`com.omniarena.guide`)
+
+- `/oa guide [topic]` (`GuideCommand`, `omniarena.use`): no topic opens the index book; unknown topics get a did-you-mean
+  through `SmartErrors.unknownSubcommand`; the console gets the pages as chat lines. `PlatformAdapter.openBook(player, title,
+  author, pages)` shows the book (Paper `Player.openBook`, Spigot via the adventure-platform audience).
+- Text lives in the bundled `src/main/resources/guides.yml` (copied to the data folder by `GuideBooks.install` so owners can
+  edit it). `GuideBooks.parse(bundled, user)` is pure: bundled topics first (user keys override per key), topics missing from
+  the user file are back-filled from the jar, user-added topics come last. `GuideBooks.all()` caches by file timestamp;
+  `GuideBooks.reload()` is called by `/oa reload`. Topics: start, arena, play, kits, ranked, tournament, betting, regen,
+  leaderboards, npc, pvp, doctor, config; `admin: true` topics (start, arena, regen, leaderboards, npc, doctor, config) are only
+  listed to `PermissionChecker.hasAdminArena` senders.
+- `GuideMarkup.expand` turns `{{/oa setup <arena>}}` into a hover/suggest-command tag and `{{!/oa menu}}` into run-command; the
+  displayed text is escaped. `GuidePaginator` (pure, tested) splits MiniMessage into pages: 14 rows of 19 columns, bold counts
+  wider, `<page>` forces a break, lines longer than a page are cut at spaces, at most 100 pages. Keep a click/hover tag and its
+  text on one source line.
+- `GuideBooksTest` loads the bundled file and fails when a page is too tall, a page does not parse as MiniMessage, a topic is
+  missing, or a removed command is mentioned. Adding a topic means: entry in `guides.yml`, the id in the test's required list,
+  the matching DOCS.md guide section.
+
+---
+
+## 14. Web dashboard rules
 
 - `WebDashboardServer` registers contexts through `ctx(path, handler)` (wraps errors into JSON
   `{"ok":false,"error":...}` responses: `HttpError` status, 400 for malformed JSON, 503 on a main
@@ -533,20 +564,24 @@ back to the jar's bundled `messages.yml`.
   or read files by user-supplied path.
 - Body limit `MAX_BODY_BYTES = 1 MiB`; keep validation all-or-nothing (`ConfigApplyService`) and
   validate length, charset and ranges for every new field (e.g. `lives` 0-100). Arena names match
-  `[A-Za-z0-9_-]{1,32}` (same rule in `CreateArenaCommand`).
+  `[A-Za-z0-9_-]{1,32}` (same rule in `SetupCommand`).
 - Sessions: `WebSessionManager` tokens (24 random bytes), **sliding** expiry (renewed by each valid
-  request), `max-sessions` cap, `POST /api/logout` revokes one, `stop()` revokes all; the manager is
-  created once in the server constructor (config changes to TTL/cap need a restart).
+  request), `advanced.web.max-sessions` cap, `POST /api/logout` revokes one, `stop()` revokes all; the manager is
+  created once in the server constructor (config changes to `advanced.web.*` need a restart).
 - The UI loads Phosphor icons from unpkg without SRI. To compute the hash:
   `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`
   then add `integrity="sha384-..."` to the `<link>` in `index.html` (keep `crossorigin`).
 - `web/docs.md` is a copy of DOCS.md shown in the Docs tab and must stay byte-identical:
-  `cp DOCS.md src/main/resources/web/docs.md` after every DOCS.md edit.
+  `cp DOCS.md src/main/resources/web/docs.md` after every DOCS.md edit. The renderer in `web/app.js`
+  (`markdownToHtml`) supports headings, bold, italic, inline and fenced code (lifted out first so their content is
+  not reformatted), pipe tables (no `|` inside cells), lists, blockquotes, rules and http(s) links; the sidebar table of
+  contents is built from the h1 to h3 headings. Avoid stray `*` and raw HTML in DOCS.md.
+- `index.html` and the other static files are served from the jar via `plugin.getResource`: changes require a rebuild.
 - The frontend polls `/api/live-matches` every 5 s while that tab is open.
 
 ---
 
-## 13. Coding conventions
+## 15. Coding conventions
 
 - Java 21 language level everywhere (the 1.21.x profiles compile with `--release 21`; no preview
   features). 4-space indent, braces on the same line.
@@ -564,104 +599,22 @@ back to the jar's bundled `messages.yml`.
 - Keep optional-API imports (Vault, PlaceholderAPI, WorldGuard, LuckPerms) inside `integration/`
   classes so the plugin loads when they are absent. DecentHolograms, FancyHolograms, Citizens and
   Multiverse have no Maven dependency: use `Reflect` (no new API jars). Call every hook through
-  `IntegrationManager.safe` (section 16c). `BettingManager` imports Vault types directly:
+  `IntegrationManager.safe` (section 17). `BettingManager` imports Vault types directly:
   keep Vault registration guarded by the `Vault` plugin presence check.
 - Do not add dependencies without discussing shading/relocation.
 - Avoid adding features that are not wired to a user entry point; if infrastructure is added first,
   document it as "no entry point yet".
-- Tests: prefer pure-logic unit tests (bracket, schema, enums); avoid MockBukkit unless it is added to
+- Tests: prefer pure-logic unit tests (bracket, schema, enums, paginator); avoid MockBukkit unless it is added to
   the POM.
-- Commit style: short imperative subject; the repo history uses "Audit fixes: ..." / "Match flow: ..."
-  style prefixes.
-
----
-
-## 14. Pitfalls (learned from the history and from reading the code)
-
-1. `AsyncUtil.*` returns `null` when the plugin is disabled: guard before storing the `BukkitTask`.
-2. Calling `Bukkit.getScheduler().cancelTasks(plugin)` (done by `/oa stop`) kills every periodic task;
-   anything started elsewhere will not return unless `/oa start` restarts it.
-3. Double application of ELO deltas (fixed): never call both `recordWin()` and `setRating()`.
-4. Stale delayed callbacks: always compare identity (`remove(key, value)`, `tournaments.get(name) == t`)
-   in delayed tasks.
-5. Regen is automatic after played matches (`MatchManager.startAutoRegen`): the arena is `RESETTING`
-   until it finishes, so code that waits for `WAITING` (tournament launches, queue) must tolerate
-   that and retry. Arenas without region/snapshot, and lobby matches abandoned before they start, are not restored.
-6. The engine reads `arena.getGoalType()` (override or game type), not the raw `goalType` field;
-   `goal.type` in a file only counts with `goal.type-override: true`.
-7. `LifecycleCommand.start` does not recreate `BettingManager` or listeners; `stop` calls
-   `visual.shutdown()` (clears boards/boss bars) and `IntegrationManager.stop()`; `start` calls
-   `visual.start()` and `IntegrationManager.start()`.
-8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin
-   owns `/kit`.
-9. Admin preset kits are managed only through `/oa kits` (`AdminKitCommand`); `/oa` has no player `kit`
-   subcommand. Player-initiated equips go through
-   `KitManager.tryEquip` (lobby-only inside arenas, permission, persisted cooldown): do not call
-   `equipKit` directly for player actions.
-10. Standalone `/join`, `/leave`, `/spectate` are registered in `plugin.yml` and can clash
-    with other plugins' commands.
-11. Player-map commands are permission-checked by the dispatcher using their constructor node; keep
-    that node declared and default-true for anything regular players should use.
-12. `ConfigSchemaService.settings()` instantiates a lot on each call (`SettingsGUI.grouped()` constructs a
-    new service per call): avoid calling it in hot paths.
-13. `WebSessionManager` is created once; `advanced.web.session-minutes`/`advanced.web.max-sessions` do not live-reload.
-14. Maven profiles: `paper` and `mc-26.2` are `activeByDefault`, which is switched off by any
-    explicit `-P`; always pass `-P<platform>,mc-<version>`.
-15. `target/` and `dist/` are git-ignored; do not force-add build output.
-16. Arena whitelist/blacklist/`whitelist-enabled` are managed by `/oa edit <arena> whitelist|blacklist ...` (`ArenaAccess`,
-    `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena`
-    (blacklist always; whitelist when enabled unless `omniarena.join.bypass`/OP). Do not add join
-    paths that skip `joinArena`.
-16a. Visual channels: `VisualGate` combines the global `visuals.titles|sounds|particles`
-    key with the arena flag. New titles/sounds/particles must go through `TitleManager`,
-    `SoundManager`, `ParticleManager`/`EffectManager` (which gate) or call `VisualGate` themselves.
-16c. Integration isolation (`IntegrationManager`): hooks are `vault`, `placeholderapi`, `worldguard`, `luckperms`,
-    `decentholograms`, `fancyholograms`, `citizens`, `multiverse` (switch `integrations.<name>`, default true;
-    softdepends in `plugin.yml`). `safe(name, Runnable)` / `safe(name, Supplier, fallback)` catch Throwable
-    (incl. `NoClassDefFoundError`/`LinkageError`), log the first failure once, record `lastError` and switch the hook
-    off after 3 consecutive failures (`FailureTracker`, pure and unit tested); a success resets the counter.
-    A hook is also released on `PluginDisableEvent` of its plugin and set up again on `PluginEnableEvent`;
-    `/oa reload` retries everything. `statuses()` returns `List<IntegrationStatus>(name, present, enabled, lastError)`
-    for `/oa doctor`. Convenience wrappers exist for the old call sites (`deposit`, `depositOffline`, `isPvpDenied`);
-    `getVault()`/`getWorldGuard()` return null while the hook is off. New hook code never runs outside `safe`.
-16d. Leaderboards: `LeaderboardCache` (top 10 of kills/wins/kd/elo + ELO rank map) is rebuilt on the main thread about
-    every 30 s by `IntegrationManager` and read lock-free by `PlaceholderAPIIntegration` (never creates stats/ELO
-    entries). Placeholders: `%omniarena_top_<kills|wins|kd|elo>_<1-10>_<name|value>%`, `%omniarena_elo%`,
-    `%omniarena_rank%`, `%omniarena_arena%`, `%omniarena_in_match%` (+ the older lifetime/match ones).
-    `/oa leaderboard create|remove|list` (`omniarena.admin.leaderboard`) builds the hologram in DecentHolograms
-    (preferred) or FancyHolograms with `%` placeholder lines when PlaceholderAPI is live, else static lines pushed
-    every 60 s. Hologram names are `omniarena_lb_<id>`; no hook -> a message pointing to the plugins/placeholders.
-16e. NPCs: `/oa npc create|remove|list` (`omniarena.admin.npc`, needs Citizens, `integrations.citizens`) binds a
-    Citizens NPC id to `NpcAction` (menu, join <arena>, queue [kit], spectate [arena]); a right-click runs the
-    matching `/oa ...` command as the player (all normal checks, 750 ms debounce). Citizens persists the NPC
-    entity itself; `npcs.yml` only keeps the binding.
-16f. Unloaded worlds: arenas whose region/spawn world is not loaded are kept (spawns stay as raw strings in
-    `Arena.getUnresolvedSpawns`, written back on save), `Arena.getMissingWorlds()` is non-empty and `isJoinable()` is
-    false; `joinArena` answers "Arena world 'x' is not loaded". `WorldListener` re-resolves on `WorldLoadEvent`
-    (`ArenaManager.onWorldLoad`) and demotes spawns on `WorldUnloadEvent` (arenas with a running match excepted).
-    `/oa arena tp` and `/oa setup` try `ArenaManager.ensureWorlds`, which loads the world through Multiverse
-    (v5 API, v4 API, then `mv load`) when present.
-16b. A paper/purpur jar and a spigot/bukkit jar write container snapshots differently; do not mix
-    snapshot files between them.
-17. `RespawnType.WAVE`: dead players are parked in spectator mode (`MatchManager.queueWaveRespawn`,
-    queue in `Match.getWaveQueue()`) and released together by `tickWave` from the match timer every
-    `Arena.respawnWaveInterval` seconds (`respawn.wave-interval`, default 10); the shared respawn
-    body is `MatchManager.completeRespawn`. `respawn.delay` only applies to `DELAYED`.
-18. `BlockRestoreModule` keeps `shuttingDown = true` after `cancelAll()` until the next snapshot or
-    restore resets it; `/oa start` therefore works for regen again on the next call.
-19. When a match has `getQueueKit()` set, loadouts come from that admin kit, otherwise from
-    `GameModeKits`; respawns call the same `applyLoadout`.
-20. `isModuleEnabled` (`modules.*`) is unused. Check DOCS.md section 18 before assuming a key works.
-    The `/oa edit` keys `module-killstreak|module-combo|module-power-up` are the only module switches.
-21. `index.html` is a resource under `src/main/resources/web`: changes require a rebuild to be served
-    (served from the jar via `plugin.getResource`).
+- Commit style: short imperative subject; the repo history uses "Audit fixes: ..." / "Match flow: ..." /
+  "QoL: ..." style prefixes.
 
 ---
 
 ## 16. Self-healing (`com.omniarena.health`)
 
 - **Config repair** (`ConfigRepair`, called from `ConfigManager.load()/reload()`, so onEnable, `/oa reload`,
-  `/oa start`): for config.yml and messages.yml `YamlRepair` (pure, works on any `ConfigurationSection`)
+  `/oa plugin start`): for config.yml and messages.yml `YamlRepair` (pure, works on any `ConfigurationSection`)
   back-fills keys missing versus the bundled default and restores the default for wrong-typed values
   (numbers accept any number or numeric string, booleans accept "true"/"false", lists must be lists, a scalar
   where the default is a section is replaced). Unknown keys are never touched. Before writing, the original goes to
@@ -672,9 +625,9 @@ back to the jar's bundled `messages.yml`.
   later save then overwrites the data). Use `SafeYaml.loadData(file)` (or `SafeYaml.load(file, brokenDir, log)`) for
   persistent data: a corrupt file is moved to `broken/` (arenas: `arenas/broken/`) with a timestamp and loading
   continues empty. Used by `ArenaConfig.loadAll` (also on any exception while building the arena), `StatsManager`,
-  `EloManager`, `TournamentManager`, player kits. New persistent files should use it too.
-- **Watchdog** (`Watchdog`, every `advanced.health.watchdog-seconds`, default 30; `health.enabled` switch; start/stop idempotent, wired
-  into onEnable/onDisable/`/oa stop|start|reload`, gated by `isStopped()`): arenas in ENDING/RESETTING longer than
+  `EloManager`, `TournamentManager`, player kits, `GuideBooks`. New persistent files should use it too.
+- **Watchdog** (`Watchdog`, every `advanced.health.watchdog-seconds`, default 30; `health.enabled` switch; start/stop idempotent,
+  wired into onEnable/onDisable/`/oa plugin stop|start`/`/oa reload`, gated by `isStopped()`): arenas in ENDING/RESETTING longer than
   `advanced.health.stuck-arena-seconds` (default 180; RESETTING with an active regen is never stuck) are force-cleaned via
   `MatchManager.forceCleanup(match)` and reset to WAITING; RUNNING/STARTING arenas without a match are reset; matches whose arena
   was deleted are cleaned (`startAutoRegen` skips regen for an arena that is no longer registered); players mapped to a vanished match
@@ -685,21 +638,101 @@ back to the jar's bundled `messages.yml`.
 - **Error isolation** (`ErrorGuard.run/wrap(component, runnable)`, `ErrorTracker`): repeating task bodies (queue, party,
   tournament, combat, signs, match countdown/timer, watchdog) and the hot listeners (move, damage, pvp, death, respawn)
   run through it: one log per distinct stack per 5 minutes, per-component counters, a component with more than 20 errors
-  in a minute is reported. Wrap new repeating tasks the same way.
+  in a minute is reported. Wrap new repeating tasks the same way. `CommandManager.runSafely` does the same for commands.
 - **`HealthReport`**: in-memory ring (100) of repairs/errors; admins (`PermissionChecker.hasAdmin(.., ADMIN_DOCTOR)`) get a
   clickable "OmniArena fixed N problems" line on join when repairs happened since restart (`health.notify-admins`).
 - **`/oa doctor [fix]`** (`DoctorCommand`/`Doctor`, `omniarena.admin.doctor`; messages `doctor-*` in messages.yml): prints config/file repairs,
   quarantined files, arena setup gaps (region, battle spawn, snapshot; clickable fix commands), stuck state, task status,
   integration statuses (`IntegrationManager.statuses()`), recent errors. `fix` runs `Watchdog.runChecks()` now (refused while stopped).
-- Keys: `health.enabled|watchdog-seconds|stuck-arena-seconds|notify-admins|backups-to-keep` (not yet in DOCS.md).
+- Keys: `health.enabled|notify-admins|backups-to-keep`, `advanced.health.watchdog-seconds|stuck-arena-seconds`.
 
 ---
 
-## 15. Documentation upkeep
+## 17. Integrations, leaderboards, NPCs, worlds and the event API
 
-Update, in the same change as code: README.md (features, commands, config), DOCS.md (the matching
-section, plus section 21 if you add/remove a limitation) and then `cp DOCS.md
-src/main/resources/web/docs.md` (the two files must be identical), this file (architecture, rules),
-AGENTS.md (if a key rule changes), and for tournament/betting/web work the notes at the bottom of the
-matching file in `docs/superpowers/`. Never describe a feature that is not reachable from a command,
-sign, GUI or the web UI without saying so.
+- **Isolation** (`IntegrationManager`): hooks are `vault`, `placeholderapi`, `worldguard`, `luckperms`,
+  `decentholograms`, `fancyholograms`, `citizens`, `multiverse` (switch `integrations.<name>`, default true; softdepends in
+  `plugin.yml`); `integrations.tab.takeover` is a plain flag read by the visual layer. `safe(name, Runnable)` /
+  `safe(name, Supplier, fallback)` catch Throwable (incl. `NoClassDefFoundError`/`LinkageError`), log the first failure
+  once, record `lastError` and switch the hook off after 3 consecutive failures (`FailureTracker`, pure and unit tested);
+  a success resets the counter. A hook is also released on `PluginDisableEvent` of its plugin and set up again on
+  `PluginEnableEvent`; `/oa reload` retries everything. `statuses()` returns `List<IntegrationStatus>(name, present,
+  enabled, lastError)` for `/oa doctor`. Convenience wrappers exist for old call sites (`deposit`, `depositOffline`,
+  `isPvpDenied`); `getVault()`/`getWorldGuard()` return null while the hook is off. New hook code never runs outside `safe`.
+- **Leaderboards**: `LeaderboardCache` (top 10 of kills/wins/kd/elo + ELO rank map) is rebuilt on the main thread about
+  every 30 s by `IntegrationManager` and read lock-free by `PlaceholderAPIIntegration` (never creates stats/ELO entries).
+  Placeholders: `%omniarena_top_<kills|wins|kd|elo>_<1-10>_<name|value>%`, `%omniarena_elo%`, `%omniarena_rank%`,
+  `%omniarena_arena%`, `%omniarena_in_match%` (+ the lifetime and live-match ones, listed in DOCS.md section 6).
+  `/oa leaderboard create|remove|list` (`omniarena.admin.leaderboard`) builds the hologram in DecentHolograms (preferred) or
+  FancyHolograms with `%` placeholder lines when PlaceholderAPI is live, else static lines pushed every 60 s. Hologram names
+  are `omniarena_lb_<id>`; no hook -> a message pointing to the plugins/placeholders.
+- **NPCs**: `/oa npc create|remove|list` (`omniarena.admin.npc`, needs Citizens, `integrations.citizens`) binds a Citizens NPC
+  id to `NpcAction` (menu, join <arena>, queue [kit], spectate [arena]); a right-click runs the matching `/oa ...` command as
+  the player (all normal checks, 750 ms debounce). Citizens persists the NPC entity itself; `npcs.yml` only keeps the binding.
+- **Unloaded worlds**: arenas whose region/spawn world is not loaded are kept (spawns stay as raw strings in
+  `Arena.getUnresolvedSpawns`, written back on save), `Arena.getMissingWorlds()` is non-empty and `isJoinable()` is false;
+  `joinArena` answers "Arena world 'x' is not loaded". `WorldListener` re-resolves on `WorldLoadEvent`
+  (`ArenaManager.onWorldLoad`) and demotes spawns on `WorldUnloadEvent` (arenas with a running match excepted).
+  `/oa arena tp` and `/oa setup` try `ArenaManager.ensureWorlds`, which loads the world through Multiverse (v5 API, v4 API,
+  then `mv load`) when present.
+- **Event API** (`com.omniarena.api`): `OmniArenaAPI` (static, main thread, safe when stopped: `getArenaNames`, `isInMatch`,
+  `getArenaOf`, `getElo`, `joinArena`) and `api.event.*` (`ArenaMatchStartEvent`, `ArenaMatchEndEvent`, `ArenaPlayerJoinEvent`
+  (cancellable), `ArenaPlayerLeaveEvent`, `ArenaKillEvent`). Events are fired on the main thread through `ApiEvents.fire`
+  (a listener problem never breaks a match): start in `startMatch`, end in `endMatch` after the effects, join in `joinArena`
+  after all checks and before state changes, leave in `leaveArena`/`leaveSpectator`, kill in `PlayerDeathListener` right after
+  `recordKill`. Treat these classes as public API: do not rename or remove members. Documented in DOCS.md section 9.
+
+---
+
+## 18. Pitfalls (learned from the history and from reading the code)
+
+1. `AsyncUtil.*` returns `null` when the plugin is disabled: guard before storing the `BukkitTask`.
+2. Calling `Bukkit.getScheduler().cancelTasks(plugin)` (done by `/oa plugin stop`) kills every periodic task;
+   anything started elsewhere will not return unless `/oa plugin start` restarts it.
+3. Double application of ELO deltas (fixed): never call both `recordWin()` and `setRating()`.
+4. Stale delayed callbacks: always compare identity (`remove(key, value)`, `tournaments.get(name) == t`)
+   in delayed tasks.
+5. Regen is automatic after played matches (`MatchManager.startAutoRegen`): the arena is `RESETTING`
+   until it finishes, so code that waits for `WAITING` (tournament launches, queue) must tolerate
+   that and retry. Arenas without region/snapshot, and lobby matches abandoned before they start, are not restored.
+6. The engine reads `arena.getGoalType()` (override or game type), not the raw `goalType` field;
+   `goal.type` in a file only counts with `goal.type-override: true`.
+7. `LifecycleCommand.start` does not recreate `BettingManager` or listeners; `stop` calls `visual.shutdown()` (clears
+   boards/boss bars) and `IntegrationManager.stop()`; `start` calls `visual.start()` and `IntegrationManager.start()`.
+8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin owns `/kit`.
+9. Admin preset kits are managed only through `/oa kits` (`AdminKitCommand`); `/oa` has no player `kit` subcommand.
+   Player-initiated equips go through `KitManager.tryEquip` (lobby-only inside arenas, permission, persisted
+   cooldown): do not call `equipKit` directly for player actions.
+10. Standalone `/join`, `/leave`, `/spectate` are registered in `plugin.yml` and can clash with other plugins' commands.
+11. Player-map commands are permission-checked by the dispatcher using their constructor node; keep that node declared
+    and default-true for anything regular players should use.
+12. `ConfigSchemaService.settings()` instantiates a lot on each call (`SettingsGUI.grouped()` constructs a new service per
+    call): avoid calling it in hot paths.
+13. `WebSessionManager` is created once; `advanced.web.session-minutes`/`advanced.web.max-sessions` do not live-reload.
+14. Maven profiles: `paper` and `mc-26.2` are `activeByDefault`, which is switched off by any explicit `-P`; always pass
+    `-P<platform>,mc-<version>`.
+15. `target/` and `dist/` are git-ignored; do not force-add build output.
+16. Arena whitelist/blacklist/`whitelist-enabled` are managed by `/oa edit <arena> whitelist|blacklist ...` (`ArenaAccess`,
+    `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena` (blacklist always; whitelist
+    when enabled unless `omniarena.join.bypass`/OP). Do not add join paths that skip `joinArena`.
+17. Visual channels: `VisualGate` combines the global `visuals.titles|sounds|particles` key with the arena flag. New
+    titles/sounds/particles must go through `TitleManager`, `SoundManager`, `ParticleManager`/`EffectManager` (which gate)
+    or call `VisualGate` themselves.
+18. A paper/purpur jar and a spigot/bukkit jar write container snapshots differently; do not mix snapshot files between them.
+19. `isModuleEnabled` (`modules.*`) is unused. The `/oa edit` keys `module-killstreak|module-combo|module-power-up` are the
+    only module switches.
+20. `ColorUtil.parse` translates `&` colour codes; never put `&1`-style text into MiniMessage that is not meant as a colour
+    (guide books therefore avoid `&` codes).
+21. `guides.yml` is read through `SafeYaml` (a corrupt copy is moved to `broken/` and the bundled guides are used); topics
+    are matched by lower-case id.
+
+---
+
+## 19. Documentation upkeep
+
+Update, in the same change as code: README.md (features, commands), DOCS.md (the matching section and the guide of the same
+topic, plus section 13 if you add/remove a limitation) and then `cp DOCS.md src/main/resources/web/docs.md` (the two files
+must be identical), `guides.yml` when a player- or admin-facing flow changes, this file (architecture, rules), AGENTS.md (if
+a key rule changes), `docs/superpowers/qol-commands-final.md` (command tree) and, for tournament/betting/web work, the
+notes at the bottom of the matching file in `docs/superpowers/`. Never describe a feature that is not reachable from a
+command, sign, GUI or the web UI without saying so.

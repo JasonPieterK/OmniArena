@@ -61,3 +61,15 @@ missing setup -> say exactly what to do. Messages in messages.yml.
   - `AdminKitMenu.open(Player)`
   - `SettingsGUI` / `KitGUI` keep their existing public open methods but are redesigned onto MenuBuilder.
 - Text through PlatformAdapter (item name/lore, inventory title).
+
+## Final phase (guide books and docs)
+- `/oa guide [topic]` (`omniarena.use`): in-game written books built from MiniMessage pages. Topics: start, arena, play, kits,
+  ranked, tournament, betting, regen, leaderboards, npc, pvp, doctor, config; the admin ones (start, arena, regen, leaderboards,
+  npc, doctor, config) are only listed to admins. No topic opens an index book with clickable topic links. A "Guides" button
+  exists in the main menu and the admin hub, and `/oa help` links to it.
+- `PlatformAdapter.openBook(Player, String title, String author, List<Component> pages)` is implemented in both
+  `PlatformImpl` classes. Book text lives in the bundled `guides.yml` (copied to the data folder, missing topics back-filled
+  from the jar); `GuidePaginator` (pure, tested) splits long text into 14 x 19 pages.
+- `DOCS.md` was rewritten for the new plugin and is mirrored byte-identically to `src/main/resources/web/docs.md`; README,
+  AGENTS.md and CLAUDE.md were updated and CLAUDE.md was deduplicated. All references to removed commands and old config paths
+  were fixed (the old forms appear only in `ConfigMigration`, its test and the migration table in DOCS.md section 5.2).
