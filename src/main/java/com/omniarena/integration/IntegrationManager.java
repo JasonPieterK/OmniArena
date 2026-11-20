@@ -61,6 +61,15 @@ public class IntegrationManager {
     public boolean hasWorldGuard()     { return worldGuard != null; }
     public boolean hasLuckPerms()      { return luckPerms != null; }
 
+    // TEMPORARY (self-healing branch): minimal status list for /oa doctor; superseded by the integration rework.
+    public java.util.List<IntegrationStatus> statuses() {
+        return java.util.List.of(
+                new IntegrationStatus("Vault", isPresent("Vault"), vault != null, null),
+                new IntegrationStatus("PlaceholderAPI", isPresent("PlaceholderAPI"), placeholderAPI != null, null),
+                new IntegrationStatus("WorldGuard", isPresent("WorldGuard"), worldGuard != null, null),
+                new IntegrationStatus("LuckPerms", isPresent("LuckPerms"), luckPerms != null, null));
+    }
+
     /** Honours the integrations.<name> toggle in config.yml (default true). */
     private boolean enabled(String key) {
         var cm = com.omniarena.config.ConfigManager.getInstance();

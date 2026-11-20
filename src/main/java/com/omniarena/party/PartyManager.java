@@ -42,7 +42,12 @@ public class PartyManager {
     public void start() {
         // Clean up expired invites every 30 seconds
         stop();
-        inviteCleanupTask = Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupExpiredInvites, 600L, 600L);
+        inviteCleanupTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                com.omniarena.health.ErrorGuard.wrap("party", this::cleanupExpiredInvites), 600L, 600L);
+    }
+
+    public boolean isRunning() {
+        return inviteCleanupTask != null && !inviteCleanupTask.isCancelled();
     }
 
     public void stop() {

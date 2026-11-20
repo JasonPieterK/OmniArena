@@ -23,6 +23,7 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
 
 - Tests live in `src/test/java` (`RegenAnimationTypeTest`, `TournamentBracketTest`,
   `ConfigSchemaServiceTest`, `SuggestTest`; 17 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
+  `ConfigSchemaServiceTest`, `health/*Test`; 25 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
   Only pure logic is unit tested; code that needs a live Bukkit server is not.
 - `target/` and `dist/` are git-ignored build output; never edit them. The old antrun step that
   copied the jar to a Windows path has been removed.
@@ -97,6 +98,7 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `combat` | `CombatManager`, `CombatListener`, `PvpCommandHandler` | Server-wide PvP management (tags, persistent toggles `pvp-toggles.yml`, newbie `newbie.yml`, abuse, border hopping, crystal attribution). |
 | `listener` | 17 listeners | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks). |
 | `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `HologramCommand`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
+| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (29, incl. `AccessCommand`, `DoctorCommand`), `commands.player.*` (12, incl. `EloCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
 | `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
 | `module` | `ModuleManager`, `KillstreakModule`, `ComboModule`, `PowerUpModule` | Optional per-arena modules (names in `Arena.getEnabledModules()`). |
 | `settings` | `SettingsGUI`, `SettingsMenuListener`, `SettingsHolder` | Chest-GUI editor over `ConfigSchemaService`. |
@@ -104,6 +106,7 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `integration` | `IntegrationManager`, `VaultIntegration`, `PlaceholderAPIIntegration`, `WorldGuardIntegration`, `LuckPermsIntegration` | Soft-dependency hooks (each behind an `integrations.<name>` switch). Code that touches an optional API must stay inside these classes (or use reflection like `CombatManager` does for LibsDisguises). |
 | `permission` | `PermissionChecker` | Permission node constants and `hasAdmin`. |
 | `web` | `WebDashboardServer`, `WebSessionManager`, `ConfigSchemaService`, `ConfigApplyService`, `DocsCatalog`, `web.model.*` | Embedded HTTP dashboard, schema (exactly the keys of `config.yml` + `messages.yml`) and validated apply. Static UI in `src/main/resources/web/`. |
+| `health` | `ConfigRepair`, `YamlRepair`, `SafeYaml`, `BackupUtil`, `Watchdog`, `ErrorGuard`, `ErrorTracker`, `HealthReport`, `Doctor` | Self-healing (section 16): config repair, tolerant YAML loading, runtime watchdog, error isolation, `/oa doctor`. |
 | `util` | `AsyncUtil`, `YamlUtil`, `MessageUtil`, `ColorUtil`, `ItemUtil`, `LocationUtil`, `KitYamlLoader` | Scheduling helpers, YAML IO, MiniMessage helpers. |
 
 Resources: `plugin.yml` (filtered), `config.yml`, `messages.yml`, `arenas/example.yml` (template,
@@ -123,7 +126,7 @@ completes).
 ### onEnable (order matters)
 
 1. `Platform.init(this)` (a wrong-flavor jar disables the plugin and returns).
-2. `ConfigManager.load()`.
+2. `ConfigManager.load()` (runs `ConfigRepair` first: backfills/repairs config.yml + messages.yml).
 3. Construct: `VisualController` (starts `HologramManager`), `StatsManager`, `KitManager`,
    `KitShareHandler`, `SignManager`, `ModuleManager`, `BlockRestoreModule`, `ArenaManager`,
    `MatchManager`, `KitCommandExecutor`, `CombatManager` (its constructor calls `start()`),
@@ -135,11 +138,11 @@ completes).
 5. `IntegrationManager.load()` then `WebDashboardServer.start()`.
 6. Commands (`oa`, `kit`, `join`, `leave`, `party`, forwarders for the rest including `bet` and
    `tournament`), then listeners (plus `Platform.get().registerListeners`), then
-   `startSignUpdateTask()`.
+   `startSignUpdateTask()`, then `new Watchdog(this).start()` (self-healing, section 16).
 
 ### onDisable (order matters; each step is wrapped so one failure cannot skip the rest)
 
-`stopped = true`; cancel sign task; `KitGUI.closeAll()`, `SettingsGUI.closeAll()`; `leaveArena` for
+`stopped = true`; `watchdog.stop()`; cancel sign task; `KitGUI.closeAll()`, `SettingsGUI.closeAll()`; `leaveArena` for
 every online player in every active match (so results land in the saves below);
 `matchManager.shutdownStateStore()`; `BlockRestoreModule.cancelAll()` (finishes regens, including
 those just started by the matches that ended); `combat.shutdown()`; `queue.stop()`, `party.stop()`;
@@ -153,15 +156,15 @@ those just started by the matches that ended); `combat.shutdown()`; `queue.stop(
   (cancels *everything*: matchmaking, sign refresh, combat tasks, tournament tick, countdowns,
   timers); leave all active matches (players and spectators); `cancelAll()` again so regens started
   by those matches finish instantly; close GUIs; save ELO, stats, arenas; refund bets;
-  `tournament.stop()`; stop web; shut down visuals, modules, queue, party.
+  `tournament.stop()`; stop web; shut down visuals, modules, queue, party. `watchdog.stop()` runs first.
 - **start** (only if stopped): `setStopped(false)`; reload config; reload arenas, kits, stats, ELO;
   restart queue, party, tournaments (which also restarts the tournament tick task), web server,
-  sign task (`resetPending`), combat tasks, `visual.start()` (holograms). Listeners and command
+  sign task (`resetPending`), combat tasks, `visual.start()` (holograms), `watchdog.start()`. Listeners and command
   executors stay registered; `BettingManager` is not re-initialised.
 - **restart**: stop on the next tick, start 20 ticks later.
 - **reload** (`ReloadCommand`): reload config/messages and kits; reload arenas only when no match is
   active; `ModuleManager.reload`; restart sign task; re-run `IntegrationManager.shutdown()/load()`
-  (so `integrations.*` switches apply); restart combat tasks; refresh signs.
+  (so `integrations.*` switches apply); restart combat tasks; restart the watchdog (new interval); refresh signs. Config repair runs inside `ConfigManager.load()/reload()`.
 
 ### `isStopped()` gating
 
@@ -583,6 +586,43 @@ back to the jar's bundled `messages.yml`.
     The `/oa edit` keys `module-killstreak|module-combo|module-power-up` are the only module switches.
 21. `index.html` is a resource under `src/main/resources/web`: changes require a rebuild to be served
     (served from the jar via `plugin.getResource`).
+
+---
+
+## 16. Self-healing (`com.omniarena.health`)
+
+- **Config repair** (`ConfigRepair`, called from `ConfigManager.load()/reload()`, so onEnable, `/oa reload`,
+  `/oa start`): for config.yml and messages.yml `YamlRepair` (pure, works on any `ConfigurationSection`)
+  back-fills keys missing versus the bundled default and restores the default for wrong-typed values
+  (numbers accept any number or numeric string, booleans accept "true"/"false", lists must be lists, a scalar
+  where the default is a section is replaced). Unknown keys are never touched. Before writing, the original goes to
+  `backups/<file>-<timestamp>.yml` (`health.backups-to-keep`, default 10 per file). A file that does not
+  parse is backed up and regenerated from the jar default (logged SEVERE). Every repair is a `HealthReport` entry.
+  Note: a key a user deliberately deleted is back-filled on the next start.
+- **Tolerant loading** (`SafeYaml`): Bukkit's `loadConfiguration` returns an empty config for corrupt YAML (and a
+  later save then overwrites the data). Use `SafeYaml.loadData(file)` (or `SafeYaml.load(file, brokenDir, log)`) for
+  persistent data: a corrupt file is moved to `broken/` (arenas: `arenas/broken/`) with a timestamp and loading
+  continues empty. Used by `ArenaConfig.loadAll` (also on any exception while building the arena), `StatsManager`,
+  `EloManager`, `TournamentManager`, player kits. New persistent files should use it too.
+- **Watchdog** (`Watchdog`, every `health.watchdog-seconds`, default 30; `health.enabled` switch; start/stop idempotent, wired
+  into onEnable/onDisable/`/oa stop|start|reload`, gated by `isStopped()`): arenas in ENDING/RESETTING longer than
+  `health.stuck-arena-seconds` (default 180; RESETTING with an active regen is never stuck) are force-cleaned via
+  `MatchManager.forceCleanup(match)` and reset to WAITING; RUNNING/STARTING arenas without a match are reset; matches whose arena
+  was deleted are cleaned (`startAutoRegen` skips regen for an arena that is no longer registered); players mapped to a vanished match
+  (`MatchManager.findOrphanedPlayers/healOrphanedPlayers`) get their state back through the stale-mapping paths of
+  `leaveArena/leaveSpectator`; queue, party, tournament tick, sign refresh and combat tasks are restarted when their
+  `BukkitTask` is null/cancelled (`isRunning()` accessors; `TournamentManager.scheduleTick()` restarts only the tick, not a data reload).
+  Every fix is recorded and logged.
+- **Error isolation** (`ErrorGuard.run/wrap(component, runnable)`, `ErrorTracker`): repeating task bodies (queue, party,
+  tournament, combat, signs, match countdown/timer, watchdog) and the hot listeners (move, damage, pvp, death, respawn)
+  run through it: one log per distinct stack per 5 minutes, per-component counters, a component with more than 20 errors
+  in a minute is reported. Wrap new repeating tasks the same way.
+- **`HealthReport`**: in-memory ring (100) of repairs/errors; admins (`PermissionChecker.hasAdmin(.., ADMIN_DOCTOR)`) get a
+  clickable "OmniArena fixed N problems" line on join when repairs happened since restart (`health.notify-admins`).
+- **`/oa doctor [fix]`** (`DoctorCommand`/`Doctor`, `omniarena.admin.doctor`; messages `doctor-*` in messages.yml): prints config/file repairs,
+  quarantined files, arena setup gaps (region, battle spawn, snapshot; clickable fix commands), stuck state, task status,
+  integration statuses (`IntegrationManager.statuses()`), recent errors. `fix` runs `Watchdog.runChecks()` now (refused while stopped).
+- Keys: `health.enabled|watchdog-seconds|stuck-arena-seconds|notify-admins|backups-to-keep` (not yet in DOCS.md).
 
 ---
 

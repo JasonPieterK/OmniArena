@@ -34,6 +34,7 @@ public class ReloadCommand extends SubCommand {
             }
             plugin.getModuleManager().reload();
             plugin.startSignUpdateTask();
+            if (plugin.getWatchdog() != null) plugin.getWatchdog().start();
             if (plugin.getIntegrationManager() != null) {
                 plugin.getIntegrationManager().shutdown();
                 plugin.getIntegrationManager().load();

@@ -55,6 +55,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "reload",   new ReloadCommand(plugin));
         reg(adminCommands, "plugin",   new LifecycleCommand(plugin));
         reg(adminCommands, "web",      new WebEditorCommand(plugin));
+        reg(adminCommands, "doctor",   new DoctorCommand(plugin));
 
         // ── Player ──
         reg(playerCommands, "menu", new SubCommand(PermissionChecker.PLAYER_USE, "/oa menu", "Open the main menu") {

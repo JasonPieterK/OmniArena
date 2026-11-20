@@ -25,6 +25,10 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
+        com.omniarena.health.ErrorGuard.run("listener-damage", () -> onDamageGuarded(event));
+    }
+
+    private void onDamageGuarded(EntityDamageEvent event) {
         if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
 
@@ -79,6 +83,10 @@ public class EntityDamageListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPvP(EntityDamageByEntityEvent event) {
+        com.omniarena.health.ErrorGuard.run("listener-pvp", () -> onPvPGuarded(event));
+    }
+
+    private void onPvPGuarded(EntityDamageByEntityEvent event) {
         if (plugin.isStopped()) return;
         if (!(event.getEntity() instanceof Player victim)) return;
 

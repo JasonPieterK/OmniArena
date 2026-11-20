@@ -14,6 +14,7 @@ public final class PermissionChecker {
     public static final String ADMIN_STATS   = "omniarena.admin.stats";
     public static final String ADMIN_RELOAD  = "omniarena.admin.reload";
     public static final String ADMIN_ACCESS  = "omniarena.admin.access";
+    public static final String ADMIN_DOCTOR  = "omniarena.admin.doctor";
 
     public static final String PLAYER_USE    = "omniarena.use";
     public static final String PLAYER_KIT    = "omniarena.kit.use";

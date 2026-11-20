@@ -14,10 +14,24 @@ public class PlayerJoinListener implements Listener {
         this.plugin = plugin;
     }
 
+    /** Self-healing: tells admins once per join that repairs happened since the last restart. */
+    private void notifyAdminOfRepairs(org.bukkit.entity.Player player) {
+        com.omniarena.health.ErrorGuard.run("join-notice", () -> {
+            var cfg = com.omniarena.config.ConfigManager.getInstance().getConfig();
+            if (!cfg.getBoolean("health.enabled", true) || !cfg.getBoolean("health.notify-admins", true)) return;
+            int fixed = com.omniarena.health.HealthReport.get().repairCount();
+            if (fixed <= 0 || !com.omniarena.permission.PermissionChecker.hasAdmin(player,
+                    com.omniarena.permission.PermissionChecker.ADMIN_DOCTOR)) return;
+            com.omniarena.util.MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance()
+                    .getMessage("health-admin-notice").replace("{count}", String.valueOf(fixed)));
+        });
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         // Pre-load stats cache for this player
         StatsManager.getInstance().getStats(event.getPlayer().getUniqueId());
+        notifyAdminOfRepairs(event.getPlayer());
 
         // Crash recovery: a leftover pre-arena state file means the server died mid-match
         final org.bukkit.entity.Player player = event.getPlayer();
