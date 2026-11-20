@@ -11,6 +11,8 @@ final class Tone {
     static final int LIME = 0xA6FF00;
     static final int WHITE = 0xFFFFFF;
     static final int SHADOW = 0x6E6E6E;
+    /** Dark plum: a hard logo shadow that stays clearly separate from the yellow letters. */
+    static final int LOGO_SHADOW = 0x5C1A3E;
 
     static final int[] CYCLE = {YELLOW, PINK, CYAN, LIME};
 
@@ -24,6 +26,7 @@ final class Tone {
             case LIME -> 10;
             case WHITE -> 15;
             case SHADOW -> 8;
+            case LOGO_SHADOW -> 5;
             default -> Canvas.nearest16(rgb);
         };
     }

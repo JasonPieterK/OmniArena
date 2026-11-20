@@ -41,7 +41,7 @@ public final class BannerRenderer {
             // A
             {" ███ ", "█   █", "█████", "█   █", "█   █", "█   █"},
     };
-    private static final int LOGO_WIDTH = LOGO.length * 6 - 1; // 53
+    private static final int LOGO_WIDTH = LOGO.length * 7 - 2; // 61 (2-column gaps keep letters apart)
     private static final String TAGLINE = "PVP ARENAS  ·  KITS  ·  RANKED  ·  TOURNAMENTS";
 
     private final ColorMode mode;
@@ -122,8 +122,6 @@ public final class BannerRenderer {
             int bar = fs == 1 ? Tone.WHITE : Tone.LIME;
             c.fill(1, 29, 70, 1, bar);
             c.text(2, 29, " TIP  run /oa guide start", Tone.BLACK, bar, true);
-            String by = "by Jason P ";
-            c.text(70 - by.length(), 29, by, Tone.BLACK, bar, true);
         }
         return c.render(mode);
     }
@@ -143,11 +141,11 @@ public final class BannerRenderer {
                     String row = LOGO[li][gy];
                     for (int k = 0; k < 5; k++) {
                         if (row.charAt(k) != '█') continue;
-                        int col = li * 6 + k;
+                        int col = li * 7 + k;
                         int x = lx + off + col + (pass == 0 ? 1 : 0);
                         int y = 2 + gy + (pass == 0 ? 1 : 0);
                         if (x < 2 || x > 68) continue;
-                        if (pass == 0) c.put(x, y, shadowGlyph(), Tone.PINK, Tone.BLACK, false);
+                        if (pass == 0) c.put(x, y, shadowGlyph(), Tone.LOGO_SHADOW, Tone.BLACK, false);
                         else c.put(x, y, '█', waveColour(wave - col), Tone.BLACK, true);
                     }
                 }
