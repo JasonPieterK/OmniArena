@@ -54,11 +54,9 @@ public class RewardHandler {
 
     private void give(Player p, double money, int xp, String reason) {
         if (money > 0) {
-            var vault = plugin.getIntegrationManager() != null ? plugin.getIntegrationManager().getVault() : null;
-            if (vault != null) {
-                vault.deposit(p, money);
-                MessageUtil.send(p, "<green>+" + vault.format(money) + " <gray>(" + reason + " reward)");
-            }
+            var im = plugin.getIntegrationManager();
+            String paid = im != null ? im.deposit(p, money) : null;
+            if (paid != null) MessageUtil.send(p, "<green>+" + paid + " <gray>(" + reason + " reward)");
         }
         if (xp > 0) {
             p.giveExp(xp);

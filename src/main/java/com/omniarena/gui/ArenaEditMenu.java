@@ -40,8 +40,7 @@ public final class ArenaEditMenu {
             new Toggle("visual-particles", "Particles", "Show particles."),
             new Toggle("visual-scoreboard", "Scoreboard", "Show the sidebar."),
             new Toggle("visual-boss-bar", "Boss bar", "Show the boss bar."),
-            new Toggle("visual-action-bar", "Action bar", "Show the action bar."),
-            new Toggle("visual-holograms", "Holograms", "Show holograms."));
+            new Toggle("visual-action-bar", "Action bar", "Show the action bar."));
 
     private static final List<Toggle> MODULES = List.of(
             new Toggle("module-killstreak", "Killstreaks", "Streak announcements and rewards."),

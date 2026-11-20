@@ -55,12 +55,14 @@ public class SetupCommand extends SubCommand {
         if (args.length >= 2) {
             // shortcuts never create arenas: a typo would silently make a new one
             if (existing.isEmpty()) { SmartErrors.unknownArena(sender, name, "/oa setup "); return; }
+            SmartErrors.ensureWorldsOrExplain(player, existing.get());
             step(player, existing.get(), args[1].toLowerCase(Locale.ROOT));
             return;
         }
         Arena arena;
         if (existing.isPresent()) {
             arena = existing.get();
+            SmartErrors.ensureWorldsOrExplain(player, arena);
         } else {
             if (!name.matches("[A-Za-z0-9_-]{1,32}")) {
                 MessageUtil.send(sender, "<red>Invalid arena name <yellow>" + Suggest.escape(name)

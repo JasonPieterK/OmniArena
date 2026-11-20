@@ -120,8 +120,7 @@ public class ConfigSchemaService {
                     visual.isParticles(),
                     visual.isScoreboard(),
                     visual.isBossBar(),
-                    visual.isActionBar(),
-                    visual.isHolograms()
+                    visual.isActionBar()
             ));
         }
         return list;

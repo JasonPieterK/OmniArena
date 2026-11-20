@@ -84,7 +84,6 @@ public class ArenaManager {
         v.setScoreboard(c.getBoolean("visual.scoreboard", v.isScoreboard()));
         v.setBossBar(c.getBoolean("visual.boss-bar", v.isBossBar()));
         v.setActionBar(c.getBoolean("visual.action-bar", v.isActionBar()));
-        v.setHolograms(c.getBoolean("visual.holograms", v.isHolograms()));
     }
 
     public boolean delete(String name) {
@@ -109,6 +108,97 @@ public class ArenaManager {
 
     public List<Arena> getEnabled() {
         return arenas.values().stream().filter(Arena::isEnabled).toList();
+    }
+
+    // ── Worlds that are not loaded (Multiverse, late-loading worlds) ──
+
+    /**
+     * Re-resolves the raw spawns and signs of this arena whose worlds are loaded now and recomputes which
+     * worlds are still missing. Returns true when the arena just became available (it had a missing world before).
+     */
+    public boolean resolveWorlds(Arena arena) {
+        boolean hadMissing = arena.hasMissingWorld();
+        for (SpawnType type : SpawnType.values()) {
+            var raws = arena.getUnresolvedSpawns(type);
+            for (var it = raws.iterator(); it.hasNext(); ) {
+                Location loc = com.omniarena.util.LocationUtil.deserialize(it.next());
+                if (loc != null) {
+                    arena.addSpawn(type, loc);
+                    it.remove();
+                }
+            }
+        }
+        boolean signsChanged = false;
+        for (var it = arena.getUnparsedSigns().iterator(); it.hasNext(); ) {
+            Location loc = com.omniarena.util.LocationUtil.deserialize(it.next());
+            if (loc != null) {
+                arena.getSigns().add(new com.omniarena.sign.ArenaSign(loc, arena.getName()));
+                it.remove();
+                signsChanged = true;
+            }
+        }
+        arena.recomputeMissingWorlds(w -> org.bukkit.Bukkit.getWorld(w) != null);
+        var sm = com.omniarena.sign.SignManager.getInstance();
+        if (sm != null && (signsChanged || (hadMissing && !arena.hasMissingWorld()))) sm.requestUpdate(arena);
+        return hadMissing && !arena.hasMissingWorld();
+    }
+
+    /** WorldLoadEvent: every arena that was waiting for a world gets its locations back and becomes available again. */
+    public void onWorldLoad(org.bukkit.World world) {
+        for (Arena a : arenas.values()) {
+            boolean relevant = a.hasMissingWorld() || !a.getUnparsedSigns().isEmpty();
+            if (!relevant) continue;
+            if (resolveWorlds(a)) {
+                plugin.getLogger().info("Arena '" + a.getName() + "' is available again: world '" + world.getName() + "' loaded.");
+            }
+        }
+    }
+
+    /**
+     * WorldUnloadEvent: spawns in that world go back to raw form (so no stale World object is ever teleported
+     * to) and the arena is unavailable until the world loads again. Arenas with a running match are left alone.
+     */
+    public void onWorldUnload(org.bukkit.World world) {
+        var mm = com.omniarena.match.MatchManager.getInstance();
+        for (Arena a : arenas.values()) {
+            if (mm != null && mm.getMatch(a).isPresent()) continue;
+            boolean touched = false;
+            for (SpawnType type : SpawnType.values()) {
+                var live = a.getSpawns(type);
+                for (var it = live.iterator(); it.hasNext(); ) {
+                    Location l = it.next();
+                    if (l.getWorld() != null && l.getWorld().equals(world)) {
+                        String raw = com.omniarena.util.LocationUtil.serialize(l);
+                        if (raw != null) a.getUnresolvedSpawns(type).add(raw);
+                        it.remove();
+                        touched = true;
+                    }
+                }
+            }
+            boolean regionHere = a.getRegion().isDefined() && world.getName().equals(a.getRegion().getWorldName());
+            if (touched || regionHere) {
+                a.recomputeMissingWorlds(w -> !w.equals(world.getName()) && org.bukkit.Bukkit.getWorld(w) != null);
+                plugin.getLogger().warning("World '" + world.getName() + "' was unloaded: arena '" + a.getName() + "' is unavailable until it is loaded again.");
+            }
+        }
+    }
+
+    /**
+     * Admin action (teleport, setup): tries to load the missing worlds of the arena, through Multiverse-Core
+     * when it is installed. Returns true when the arena has no missing world afterwards.
+     */
+    public boolean ensureWorlds(Arena arena) {
+        resolveWorlds(arena);
+        if (!arena.hasMissingWorld()) return true;
+        var im = plugin.getIntegrationManager();
+        if (im != null && im.hasMultiverse()) {
+            var mv = im.multiverse();
+            for (String w : new ArrayList<>(arena.getMissingWorlds())) {
+                im.safe("multiverse", () -> mv.loadWorld(w), false);
+            }
+            resolveWorlds(arena);
+        }
+        return !arena.hasMissingWorld();
     }
 
     // ── Region selection ──────────────────────────────────────────

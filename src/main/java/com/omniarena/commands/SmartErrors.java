@@ -99,6 +99,22 @@ public final class SmartErrors {
         return s.isEmpty() ? "name" : s;
     }
 
+    /**
+     * Admin action (teleport, setup): tries to load the arena's missing worlds (through Multiverse-Core when
+     * installed). Tells the admin when a world still is not loaded. Returns true when the arena is fully available.
+     */
+    public static boolean ensureWorldsOrExplain(CommandSender sender, Arena arena) {
+        if (!arena.hasMissingWorld()) return true;
+        if (ArenaManager.getInstance().ensureWorlds(arena)) {
+            MessageUtil.send(sender, msg("arena-world-loaded", "arena", Suggest.escape(arena.getName())));
+            return true;
+        }
+        String w = Suggest.escape(arena.getMissingWorlds().iterator().next());
+        MessageUtil.send(sender, msg("arena-world-missing", "world", w)
+                + raw("arena-world-missing-hint", "world", w));
+        return false;
+    }
+
     /** What is missing before this arena can be played in (admin-facing facts; empty when ready). */
     public static List<String> setupProblems(Arena arena) {
         List<String> missing = new ArrayList<>();
@@ -132,6 +148,16 @@ public final class SmartErrors {
         String n = arena.getName();
         boolean admin = PermissionChecker.hasAdmin(sender, PermissionChecker.ADMIN_ARENA);
         List<String> reasons = new ArrayList<>();
+        if (arena.hasMissingWorld()) {
+            String w = Suggest.escape(arena.getMissingWorlds().iterator().next());
+            reasons.add("its world '" + w + "' is not loaded" + (admin
+                    ? " - load it (e.g. <white>/mv load " + w + "</white> with Multiverse) or run " + Suggest.click("/oa arena tp " + n) + " to try loading it"
+                    : " (an admin has to load it)"));
+            // nothing else can be judged reliably while the arena's locations are unresolved
+            MessageUtil.send(sender, msg("arena-not-ready", "arena", Suggest.escape(n)));
+            for (String r : reasons) MessageUtil.send(sender, msg("arena-not-ready-line", "reason", r));
+            return false;
+        }
         if (!arena.isEnabled()) {
             reasons.add("it is disabled" + (admin ? " - enable it with " + Suggest.click("/oa arena enable " + n) : " (an admin has to enable it)"));
         }

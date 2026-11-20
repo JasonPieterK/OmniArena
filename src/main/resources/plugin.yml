@@ -17,7 +17,10 @@ softdepend:
   - PermissionsEx
   - EssentialsX
   - DiscordSRV
-  - HolographicDisplays
+  - DecentHolograms
+  - FancyHolograms
+  - Citizens
+  - Multiverse-Core
   - LibsDisguises
 
 commands:
@@ -83,7 +86,8 @@ permissions:
       omniarena.admin.arena: true
       omniarena.admin.kit: true
       omniarena.admin.sign: true
-      omniarena.admin.hologram: true
+      omniarena.admin.leaderboard: true
+      omniarena.admin.npc: true
       omniarena.admin.stats: true
       omniarena.admin.reload: true
       omniarena.admin.access: true
@@ -103,8 +107,12 @@ permissions:
     description: Create/remove arena signs
     default: op
 
-  omniarena.admin.hologram:
-    description: Create/remove/move leaderboard holograms
+  omniarena.admin.leaderboard:
+    description: Create/remove leaderboard holograms (/oa leaderboard)
+    default: op
+
+  omniarena.admin.npc:
+    description: Create/remove Citizens NPCs bound to menus, join, queue, spectate (/oa npc)
     default: op
 
   omniarena.admin.stats:

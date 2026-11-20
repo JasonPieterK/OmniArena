@@ -75,6 +75,7 @@ public class LifecycleCommand extends SubCommand {
             plugin.startSignUpdateTask();
             plugin.getCombatManager().start();
             plugin.getVisual().start();
+            if (plugin.getIntegrationManager() != null) plugin.getIntegrationManager().start(); // leaderboard cache/holograms, NPC clicks
 
             MessageUtil.send(sender, "<green>✓ OmniArena started successfully");
             MessageUtil.send(sender, "<gray>Loaded: <yellow>" + plugin.getArenaManager().getAll().size() + " arena(s), "
@@ -135,6 +136,7 @@ public class LifecycleCommand extends SubCommand {
 
             // Stop web and visuals
             plugin.getWebDashboardServer().stop();
+            if (plugin.getIntegrationManager() != null) plugin.getIntegrationManager().stop();
             plugin.getVisual().shutdown();
             plugin.getModuleManager().shutdown();
             plugin.getQueueManager().stop();

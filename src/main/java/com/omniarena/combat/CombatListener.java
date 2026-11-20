@@ -286,11 +286,11 @@ public class CombatListener implements Listener {
         if (!enabled() || !cm().isTagged(player)) return;
         if (!cfg().getConfig().getBoolean("pvp.border-hopping.prevent", true)) return;
 
-        var wg = plugin.getIntegrationManager() != null ? plugin.getIntegrationManager().getWorldGuard() : null;
-        if (wg == null) return;
+        var im = plugin.getIntegrationManager();
+        if (im == null || !im.hasWorldGuard()) return;
 
-        // Blocked only when stepping INTO a safe zone from a non-safe spot.
-        if (wg.isPvpDenied(event.getTo()) && !wg.isPvpDenied(event.getFrom())) {
+        // Blocked only when stepping INTO a safe zone from a non-safe spot (calls are isolated by the manager).
+        if (im.isPvpDenied(event.getTo()) && !im.isPvpDenied(event.getFrom())) {
             event.setTo(event.getFrom().clone());
             MessageUtil.send(player, cfg().getMessage("combat-no-safezone"));
         }

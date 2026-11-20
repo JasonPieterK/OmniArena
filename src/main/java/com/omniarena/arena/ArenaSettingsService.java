@@ -26,7 +26,7 @@ public final class ArenaSettingsService {
         for (String k : new String[]{"enabled", "announcements", "mid-match-join", "spectator-allowed", "whitelist-enabled",
                 "team-enabled", "fall-damage", "fire-damage", "drowning", "suffocation", "friendly-fire", "block-break",
                 "block-place", "item-drop", "hunger-drain", "visual-titles", "visual-sounds", "visual-particles",
-                "visual-scoreboard", "visual-boss-bar", "visual-action-bar", "visual-holograms",
+                "visual-scoreboard", "visual-boss-bar", "visual-action-bar",
                 "module-killstreak", "module-combo", "module-power-up"}) KEYS.put(k, "BOOL");
         for (String k : new String[]{"min-players", "max-players", "match-duration", "countdown", "goal-value", "respawn-delay",
                 "respawn-wave-interval", "spawn-protection", "lives", "team-count", "region-min-x", "region-min-y",
@@ -98,7 +98,6 @@ public final class ArenaSettingsService {
             case "visual-scoreboard" -> a.getVisual().isScoreboard();
             case "visual-boss-bar" -> a.getVisual().isBossBar();
             case "visual-action-bar" -> a.getVisual().isActionBar();
-            case "visual-holograms" -> a.getVisual().isHolograms();
             case "module-killstreak" -> a.hasModule("killstreak");
             case "module-combo" -> a.hasModule("combo");
             case "module-power-up" -> a.hasModule("power-up");
@@ -220,7 +219,6 @@ public final class ArenaSettingsService {
             case "visual-scoreboard" -> a.getVisual().setScoreboard(bool(v));
             case "visual-boss-bar" -> a.getVisual().setBossBar(bool(v));
             case "visual-action-bar" -> a.getVisual().setActionBar(bool(v));
-            case "visual-holograms" -> a.getVisual().setHolograms(bool(v));
             case "module-killstreak" -> module(a, "killstreak", bool(v));
             case "module-combo" -> module(a, "combo", bool(v));
             case "module-power-up" -> module(a, "power-up", bool(v));

@@ -336,7 +336,6 @@
         ${cfgToggle('visual.scoreboard', 'Scoreboard', d.visual?.scoreboard)}
         ${cfgToggle('visual.bossBar', 'Boss bar', d.visual?.bossBar)}
         ${cfgToggle('visual.actionBar', 'Action bar', d.visual?.actionBar)}
-        ${cfgToggle('visual.holograms', 'Holograms', d.visual?.holograms)}
       `)}
 
       ${section('Region', 'ph-cube', false, `
@@ -595,7 +594,7 @@
       },
       visual: {
         titles: a.titles, sounds: a.sounds, particles: a.particles,
-        scoreboard: a.scoreboard, bossBar: a.bossBar, actionBar: a.actionBar, holograms: a.holograms,
+        scoreboard: a.scoreboard, bossBar: a.bossBar, actionBar: a.actionBar,
       },
     };
   }

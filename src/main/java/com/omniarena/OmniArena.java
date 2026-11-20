@@ -183,6 +183,7 @@ public final class OmniArena extends JavaPlugin {
         pm.registerEvents(new GameModeRulesListener(this),   this);
         pm.registerEvents(new com.omniarena.combat.CombatListener(this), this);
         pm.registerEvents(new com.omniarena.gui.MenuListener(this), this);
+        pm.registerEvents(new WorldListener(this),           this);
         com.omniarena.platform.Platform.get().registerListeners(this); // chat (+ Paper-only elytra boost)
 
         // ── Sign update task ──────────────────────────────────────

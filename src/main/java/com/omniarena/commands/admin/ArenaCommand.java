@@ -68,6 +68,7 @@ public class ArenaCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only"));
             return;
         }
+        if (!SmartErrors.ensureWorldsOrExplain(player, arena)) return;
         Location dest = arena.getLobbySpawn();
         if (dest == null) dest = arena.getRandomBattleSpawn();
         if (dest == null) {

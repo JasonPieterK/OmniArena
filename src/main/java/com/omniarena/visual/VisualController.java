@@ -10,7 +10,6 @@ public class VisualController {
     private final BoardManager scoreboardManager;
     private final BossBarManager bossBarManager;
     private final ActionBarManager actionBarManager;
-    private final HologramManager hologramManager;
     private final EffectManager effectManager;
 
     public VisualController(OmniArena plugin) {
@@ -20,9 +19,11 @@ public class VisualController {
         this.scoreboardManager = new BoardManager();
         this.bossBarManager    = new BossBarManager();
         this.actionBarManager  = new ActionBarManager();
-        this.hologramManager   = new HologramManager(plugin);
         this.effectManager     = new EffectManager();
-        this.hologramManager.start();
+        // Built-in holograms were replaced by PlaceholderAPI leaderboard placeholders + /oa leaderboard.
+        if (new java.io.File(plugin.getDataFolder(), "holograms.yml").exists()) {
+            plugin.getLogger().info("Old holograms.yml found and ignored: the built-in holograms were removed. Use the %omniarena_top_<kills|wins|kd|elo>_<1-10>_name% / _value% placeholders in any hologram plugin, or /oa leaderboard create (DecentHolograms/FancyHolograms).");
+        }
     }
 
     public TitleManager getTitleManager() { return titleManager; }
@@ -31,16 +32,13 @@ public class VisualController {
     public BoardManager getScoreboardManager() { return scoreboardManager; }
     public BossBarManager getBossBarManager() { return bossBarManager; }
     public ActionBarManager getActionBarManager() { return actionBarManager; }
-    public HologramManager getHologramManager() { return hologramManager; }
     public EffectManager getEffectManager() { return effectManager; }
 
-    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa start). */
+    /** Re-enables the periodic visuals after {@link #shutdown()} (used by /oa start). Nothing periodic is owned here any more. */
     public void start() {
-        hologramManager.start();
     }
 
     public void shutdown() {
-        hologramManager.removeAll();
         scoreboardManager.removeAllBoards();
         bossBarManager.removeAll();
     }

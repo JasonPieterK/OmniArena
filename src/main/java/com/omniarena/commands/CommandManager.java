@@ -32,7 +32,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
     private final Map<String, SubCommand> adminCommands = new LinkedHashMap<>();
     private final Map<String, SubCommand> playerCommands = new LinkedHashMap<>();
     /** Names that work but are not advertised in tab completion or suggestions (shorter forms exist). */
-    private static final Set<String> HIDDEN = Set.of("hologram", "pvp");
+    private static final Set<String> HIDDEN = Set.of("pvp");
     private HelpCommand help;
 
     public CommandManager(OmniArena plugin) {
@@ -48,9 +48,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         reg(adminCommands, "regen",    new RegenCommand(plugin));
         reg(adminCommands, "kits",     new AdminKitCommand(plugin));
         reg(adminCommands, "sign",     new SignCommand(plugin));
-        HologramCommand holo = new HologramCommand(plugin);
-        reg(adminCommands, "holo",     holo);
-        reg(adminCommands, "hologram", holo);
+        reg(adminCommands, "leaderboard", new LeaderboardCommand(plugin));
+        reg(adminCommands, "npc",      new NpcCommand(plugin));
         reg(adminCommands, "settings", new SettingsCommand());
         reg(adminCommands, "reload",   new ReloadCommand(plugin));
         reg(adminCommands, "plugin",   new LifecycleCommand(plugin));

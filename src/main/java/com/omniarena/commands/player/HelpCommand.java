@@ -51,7 +51,8 @@ public class HelpCommand extends SubCommand {
                 new Line("/oa sign <create|remove|list>", "arena join signs")));
         ADMIN.put("Server", List.of(
                 new Line("/oa kits", "admin preset kits (menu or text actions)"),
-                new Line("/oa holo <create|list|move|remove>", "leaderboard holograms"),
+                new Line("/oa leaderboard <create|remove|list> <id> [kills|wins|kd|elo] [size]", "leaderboard holograms (DecentHolograms/FancyHolograms)"),
+                new Line("/oa npc <create|remove|list> <menu|join|queue|spectate>", "Citizens NPCs that open menus / join / queue"),
                 new Line("/oa settings", "plugin settings"),
                 new Line("/oa web", "open the web dashboard"),
                 new Line("/oa reload", "reload configs"),
