@@ -38,7 +38,7 @@ public class ArenaConfig {
                 Arena arena = load(file);
                 if (arena != null) arenas.add(arena);
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to load arena file plugins/OmniArena/arenas/" + file.getName() + " (" + e + "). The arena was skipped. Fix: open that file and correct the YAML (indentation, quotes, valid world/enum names) or delete it, then run /oa reload; recreate with /oa create <name> if needed.");
+                plugin.getLogger().warning("Failed to load arena file plugins/OmniArena/arenas/" + file.getName() + " (" + e + "). The arena was skipped. Fix: open that file and correct the YAML (indentation, quotes, valid world/enum names) or delete it, then run /oa reload; recreate with /oa setup <name> if needed.");
             }
         }
         return arenas;
@@ -160,7 +160,7 @@ public class ArenaConfig {
         for (String s : raw) {
             try { into.add(java.util.UUID.fromString(s.trim())); }
             catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Arena '" + arena + "': ignoring invalid UUID '" + s + "' in access." + what + ". Fix: remove it from arenas/" + arena + ".yml or re-add the player with /oa access " + arena + " " + what + " add <player>.");
+                plugin.getLogger().warning("Arena '" + arena + "': ignoring invalid UUID '" + s + "' in access." + what + ". Fix: remove it from arenas/" + arena + ".yml or re-add the player with /oa edit " + arena + " " + what + " add <player>.");
             }
         }
     }

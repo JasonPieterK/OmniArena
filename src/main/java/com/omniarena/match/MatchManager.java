@@ -27,9 +27,6 @@ public class MatchManager {
     private final Map<UUID, String> playerArena    = new ConcurrentHashMap<>();
     private final EndCommandHandler endCommandHandler;
     private final RewardHandler rewardHandler;
-    private final Set<String> frozenArenas = ConcurrentHashMap.newKeySet();
-    private final Set<UUID> godModePlayers = ConcurrentHashMap.newKeySet();
-    private volatile boolean lockdown = false;
     /** Players mid plugin-initiated teleport; PlayerTeleportListener ignores them. */
     private final Set<UUID> internalTeleports = ConcurrentHashMap.newKeySet();
 
@@ -145,34 +142,6 @@ public class MatchManager {
         finally { internalTeleports.remove(player.getUniqueId()); }
     }
 
-    public void setLockdown(boolean lockdown) { this.lockdown = lockdown; }
-    public boolean isLockdown() { return lockdown; }
-
-    public void setArenaFrozen(String arenaName, boolean frozen) {
-        if (arenaName == null || arenaName.isBlank()) return;
-        String key = arenaName.toLowerCase(Locale.ROOT);
-        if (frozen) frozenArenas.add(key);
-        else frozenArenas.remove(key);
-    }
-
-    public boolean isArenaFrozen(String arenaName) {
-        return arenaName != null && frozenArenas.contains(arenaName.toLowerCase(Locale.ROOT));
-    }
-
-    public void setGodMode(UUID uuid, boolean enabled) {
-        if (uuid == null) return;
-        if (enabled) godModePlayers.add(uuid);
-        else godModePlayers.remove(uuid);
-    }
-
-    public boolean isGodMode(UUID uuid) {
-        return uuid != null && godModePlayers.contains(uuid);
-    }
-
-    public void clearGodMode(UUID uuid) {
-        if (uuid != null) godModePlayers.remove(uuid);
-    }
-
     /** True when an in-progress tournament uses this arena and the player is not in one of its pending matches. */
     public boolean isArenaReserved(String arenaName, UUID uuid) {
         var tm = plugin.getTournamentManager();
@@ -196,10 +165,6 @@ public class MatchManager {
     }
 
     public boolean joinArena(Player player, Arena arena) {
-        if (lockdown) {
-            MessageUtil.send(player, "<red>Arenas are currently locked down by an administrator.");
-            return false;
-        }
         if (playerArena.containsKey(player.getUniqueId())) return false;
         if (!arena.isJoinable() && !(arena.isRunning() && arena.isMidMatchJoin())) return false;
         if (isArenaReserved(arena.getName(), player.getUniqueId())) {
@@ -751,14 +716,6 @@ public class MatchManager {
     public void forceWin(Match match, UUID winnerId) {
         MatchResult result = new MatchResult(
                 match.getArena().getName(), winnerId, null, null,
-                MatchResult.Outcome.WIN, match.getDurationSeconds(),
-                new ArrayList<>(match.getPlayers()));
-        endMatch(match, result);
-    }
-
-    public void forceWinTeam(Match match, String teamName) {
-        MatchResult result = new MatchResult(
-                match.getArena().getName(), null, null, teamName,
                 MatchResult.Outcome.WIN, match.getDurationSeconds(),
                 new ArrayList<>(match.getPlayers()));
         endMatch(match, result);

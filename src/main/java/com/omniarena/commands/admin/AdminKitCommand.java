@@ -3,6 +3,7 @@ package com.omniarena.commands.admin;
 import java.util.Locale;
 import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
+import com.omniarena.commands.SmartErrors;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.kit.AdminKit;
@@ -17,32 +18,35 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Reachable as "/oa kit admin <action>" or "/oa adminkit <action>" (plain "/oa kit" is the player kit menu).
- * /oa kit admin create <name>
- * /oa kit delete <name>
- * /oa kit equip <name>
- * /oa kit rename <old> <new>
- * /oa kit setpublic <name>
- * /oa kit setprivate <name>
- * /oa kit icon <name> <material>
- * /oa kit description <name> <text>
- * /oa kit cooldown <name> <seconds>
- * /oa kit permission <name> <node>
- * /oa kit list
+ * /oa kits opens the admin kit menu; /oa kits <action> runs a text action (/kit is the player kit command).
+ * /oa kits create <name>
+ * /oa kits delete <name>
+ * /oa kits equip <name>
+ * /oa kits rename <old> <new>
+ * /oa kits setpublic <name>
+ * /oa kits setprivate <name>
+ * /oa kits icon <name> <material>
+ * /oa kits description <name> <text>
+ * /oa kits cooldown <name> <seconds>
+ * /oa kits permission <name> <node>
+ * /oa kits list
  */
 public class AdminKitCommand extends SubCommand {
+
+    private static final List<String> ACTIONS = List.of("create", "delete", "equip", "setpublic", "setprivate", "icon", "description", "cooldown", "permission", "rename", "list");
 
     private final OmniArena plugin;
 
     public AdminKitCommand(OmniArena plugin) {
-        super(PermissionChecker.ADMIN_KIT, "/oa kit admin <action> [name] [args]  (alias: /oa adminkit <action> ...)", "Admin preset kit management");
+        super(PermissionChecker.ADMIN_KIT, "/oa kits [create|delete|rename|equip|list|setpublic|setprivate|icon|description|cooldown|permission] ...", "Admin preset kits (menu or text)");
         this.plugin = plugin;
     }
 
     @Override
     public void execute(CommandSender sender, String[] args) {
         if (args.length < 1) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            if (sender instanceof Player p) com.omniarena.gui.AdminKitMenu.open(p);
+            else SmartErrors.wrongArgs(sender, getUsage(), "/oa kits list");
             return;
         }
 
@@ -59,7 +63,7 @@ public class AdminKitCommand extends SubCommand {
         switch (action) {
             case "create" -> {
                 if (!(sender instanceof Player player)) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only")); return; }
-                if (args.length < 2) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin create <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/oa kits create <name>", "/oa kits create <name>"); return; }
                 String name = args[1];
                 if (!KitManager.isValidName(name)) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", args[1]));
@@ -69,7 +73,7 @@ public class AdminKitCommand extends SubCommand {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-created").replace("{kit}", name));
             }
             case "delete" -> {
-                if (args.length < 2) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin delete <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/oa kits delete <name>", "/oa kits delete <name>"); return; }
                 if (!km.deleteAdminKit(args[1])) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", args[1]));
                 } else {
@@ -77,19 +81,19 @@ public class AdminKitCommand extends SubCommand {
                 }
             }
             case "rename" -> {
-                if (args.length < 3) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin rename <old> <new>")); return; }
+                if (args.length < 3) { SmartErrors.wrongArgs(sender, "/oa kits rename <old> <new>", "/oa kits rename <old> <new>"); return; }
                 switch (km.renameAdminKit(args[1], args[2])) {
                     case OK -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-renamed")
                             .replace("{old}", args[1]).replace("{new}", args[2]));
                     case NOT_FOUND -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", args[1]));
                     case INVALID_NAME -> MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-name").replace("{input}", args[2]));
-                    case EXISTS -> MessageUtil.send(sender, "<red>An admin kit named <yellow>" + args[2] + "</yellow> already exists, so <yellow>" + args[1] + "</yellow> can't be renamed to it. <gray>Pick a different name or delete it first: <white>/oa kit admin delete " + args[2] + "</white>.");
+                    case EXISTS -> MessageUtil.send(sender, "<red>An admin kit named <yellow>" + args[2] + "</yellow> already exists, so <yellow>" + args[1] + "</yellow> can't be renamed to it. <gray>Pick a different name or delete it first: <white>/oa kits delete " + args[2] + "</white>.");
                     case FAILED -> MessageUtil.send(sender, "<red>Could not rename the kit file for <yellow>" + args[1] + "</yellow> (the server could not write to plugins/OmniArena/kits). <gray>Check the console for the exact IO error, make sure the folder is writable, then retry.");
                 }
             }
             case "equip" -> {
                 if (!(sender instanceof Player player)) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only")); return; }
-                if (args.length < 2) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin equip <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/oa kits equip <name>", "/oa kits equip <name>"); return; }
                 Optional<AdminKit> kitOpt = km.getAdminKit(args[1]);
                 if (kitOpt.isEmpty()) {
                     MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-not-found").replace("{kit}", args[1]));
@@ -99,17 +103,17 @@ public class AdminKitCommand extends SubCommand {
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-equipped").replace("{kit}", args[1]));
             }
             case "setpublic" -> {
-                if (args.length < 2) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin setpublic <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/oa kits setpublic <name>", "/oa kits setpublic <name>"); return; }
                 km.setAdminKitPublic(args[1], true);
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-admin-set-public").replace("{kit}", args[1]));
             }
             case "setprivate" -> {
-                if (args.length < 2) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin setprivate <name>")); return; }
+                if (args.length < 2) { SmartErrors.wrongArgs(sender, "/oa kits setprivate <name>", "/oa kits setprivate <name>"); return; }
                 km.setAdminKitPublic(args[1], false);
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-admin-set-private").replace("{kit}", args[1]));
             }
             case "icon" -> {
-                if (args.length < 3) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin icon <name> <material>")); return; }
+                if (args.length < 3) { SmartErrors.wrongArgs(sender, "/oa kits icon <name> <material>", "/oa kits icon <name> <material>"); return; }
                 try {
                     Material mat = Material.valueOf(args[2].toUpperCase());
                     if (!mat.isItem() || mat.isAir()) throw new IllegalArgumentException("not an item");
@@ -120,13 +124,13 @@ public class AdminKitCommand extends SubCommand {
                 }
             }
             case "description" -> {
-                if (args.length < 3) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin description <name> <text>")); return; }
+                if (args.length < 3) { SmartErrors.wrongArgs(sender, "/oa kits description <name> <text>", "/oa kits description <name> <text>"); return; }
                 String desc = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
                 km.setAdminKitDescription(args[1], desc);
                 MessageUtil.send(sender, ConfigManager.getInstance().getMessage("kit-desc-set").replace("{kit}", args[1]));
             }
             case "cooldown" -> {
-                if (args.length < 3) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin cooldown <name> <seconds>")); return; }
+                if (args.length < 3) { SmartErrors.wrongArgs(sender, "/oa kits cooldown <name> <seconds>", "/oa kits cooldown <name> <seconds>"); return; }
                 try {
                     int cd = Integer.parseInt(args[2]);
                     if (cd < 0) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("negative-number").replace("{input}", args[2])); return; }
@@ -135,7 +139,7 @@ public class AdminKitCommand extends SubCommand {
                 } catch (NumberFormatException e) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-number").replace("{input}", args[2])); }
             }
             case "permission" -> {
-                if (args.length < 3) { MessageUtil.send(sender, ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/oa kit admin permission <name> <node>")); return; }
+                if (args.length < 3) { SmartErrors.wrongArgs(sender, "/oa kits permission <name> <node>", "/oa kits permission <name> <node>"); return; }
                 boolean clear = args[2].equalsIgnoreCase("none") || args[2].equals("-");
                 km.setAdminKitPermission(args[1], clear ? "" : args[2]);
                 MessageUtil.send(sender, clear
@@ -149,14 +153,14 @@ public class AdminKitCommand extends SubCommand {
                             + " <dark_gray>[" + (kit.isPublic() ? "<green>PUBLIC" : "<red>PRIVATE") + "<dark_gray>]");
                 }
             }
-            default -> MessageUtil.send(sender, "<red>Unknown admin kit action <yellow>" + action + "</yellow>. <gray>Valid: <white>create, delete, equip, rename, setpublic, setprivate, icon, description, cooldown, permission, list</white>. Usage: <yellow>" + getUsage() + "</yellow>");
+            default -> SmartErrors.unknownSubcommand(sender, "/oa kits", args[0], ACTIONS);
         }
     }
 
     @Override
     public List<String> tabComplete(CommandSender sender, String[] args) {
         String cur = args.length == 0 ? "" : args[args.length - 1];
-        if (args.length == 1) return TabUtil.filter(List.of("create", "delete", "equip", "setpublic", "setprivate", "icon", "description", "cooldown", "permission", "rename", "list"), cur);
+        if (args.length == 1) return TabUtil.filter(ACTIONS, cur);
         String a = args[0].toLowerCase(java.util.Locale.ROOT);
         if (args.length == 2) {
             if (a.equals("create")) return TabUtil.hint("<name>", cur);

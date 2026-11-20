@@ -4,6 +4,7 @@ import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
+import com.omniarena.commands.SmartErrors;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.match.MatchManager;
@@ -18,7 +19,7 @@ import java.util.Optional;
 public class JoinCommand extends SubCommand {
 
     public JoinCommand(OmniArena plugin) {
-        super(PermissionChecker.PLAYER_USE, "/oa join <arena>", "Join an arena");
+        super(PermissionChecker.PLAYER_USE, "/oa join [arena]", "Join an arena (no name opens the arena picker)");
     }
 
     @Override
@@ -27,24 +28,18 @@ public class JoinCommand extends SubCommand {
             MessageUtil.send(sender, ConfigManager.getInstance().getMessage("player-only"));
             return;
         }
-        if (args.length < 1) {
-            MessageUtil.send(sender, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
-            return;
-        }
         if (MatchManager.getInstance().isInArena(player)) {
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("already-in-arena"));
             return;
         }
-        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[0]);
-        if (arenaOpt.isEmpty()) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[0]));
+        if (args.length < 1) {
+            com.omniarena.gui.ArenaPickerMenu.open(player, com.omniarena.gui.ArenaPickerMenu.Mode.JOIN);
             return;
         }
+        Optional<Arena> arenaOpt = SmartErrors.arena(player, args[0], "/oa join ");
+        if (arenaOpt.isEmpty()) return;
         Arena arena = arenaOpt.get();
-        if (!arena.isEnabled()) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-disabled-join").replace("{arena}", args[0]));
-            return;
-        }
+        if (!SmartErrors.explainNotJoinable(player, arena)) return;
         if (com.omniarena.queue.QueueManager.getInstance().isQueued(player)) {
             MessageUtil.send(player, "<red>You are in a queue, so you can't join an arena directly. <gray>Leave the queue first with <white>/oa queue leave</white>.");
             return;
@@ -52,10 +47,6 @@ public class JoinCommand extends SubCommand {
         boolean bypass = PermissionChecker.canBypassJoin(player);
         if (!bypass && !arena.isWhitelisted(player.getUniqueId())) {
             MessageUtil.send(player, "<red>This arena is whitelist-only and you are not on its whitelist. <gray>Ask an admin to add you, or join another arena (<white>/oa list</white>).");
-            return;
-        }
-        if (!arena.isJoinable()) {
-            MessageUtil.send(player, "<red>Arena <yellow>" + arena.getName() + "</yellow> is not joinable right now (state: " + arena.getState().name().toLowerCase() + "). <gray>Wait for it to reopen, pick another arena with <white>/oa list</white>, or spectate with <white>/oa spectate " + arena.getName() + "</white>.");
             return;
         }
         int current = MatchManager.getInstance().getMatch(arena).map(com.omniarena.match.Match::getPlayerCount).orElse(0);

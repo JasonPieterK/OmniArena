@@ -4,6 +4,7 @@ import com.omniarena.commands.TabUtil;
 import com.omniarena.OmniArena;
 import com.omniarena.arena.Arena;
 import com.omniarena.arena.ArenaManager;
+import com.omniarena.commands.SmartErrors;
 import com.omniarena.commands.SubCommand;
 import com.omniarena.config.ConfigManager;
 import com.omniarena.match.MatchManager;
@@ -18,7 +19,7 @@ import java.util.Optional;
 public class SpectateCommand extends SubCommand {
 
     public SpectateCommand(OmniArena plugin) {
-        super(PermissionChecker.PLAYER_SPEC, "/oa spectate <arena>", "Spectate an arena");
+        super(PermissionChecker.PLAYER_SPEC, "/oa spectate [arena]", "Spectate an arena (no name opens the arena picker)");
     }
 
     @Override
@@ -32,14 +33,11 @@ public class SpectateCommand extends SubCommand {
             return;
         }
         if (args.length < 1) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("invalid-args").replace("{usage}", getUsage()));
+            com.omniarena.gui.ArenaPickerMenu.open(player, com.omniarena.gui.ArenaPickerMenu.Mode.SPECTATE);
             return;
         }
-        Optional<Arena> arenaOpt = ArenaManager.getInstance().get(args[0]);
-        if (arenaOpt.isEmpty()) {
-            MessageUtil.send(player, ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", args[0]));
-            return;
-        }
+        Optional<Arena> arenaOpt = SmartErrors.arena(player, args[0], "/oa spectate ");
+        if (arenaOpt.isEmpty()) return;
         if (!MatchManager.getInstance().joinSpectator(player, arenaOpt.get())) {
             MessageUtil.send(player, ConfigManager.getInstance().getMessage("spectate-not-allowed").replace("{arena}", arenaOpt.get().getName()));
         }

@@ -13,9 +13,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Handles all the PvP / combat player + admin commands. Wired into /oa as
- * subcommands (pvp, pvpstatus, pvptag, untag, pvpglobal, newbie, pvpinfo,
- * pvplist, pvpoverride) — the old PvPManager /pmr prefix is now /oa.
+ * The /pvp command: toggle, status, newbie (players) and tag, untag, global, list, override (admins).
  */
 public class PvpCommandHandler {
 
@@ -24,48 +22,54 @@ public class PvpCommandHandler {
     private CombatManager cm() { return CombatManager.getInstance(); }
     private ConfigManager cfg() { return ConfigManager.getInstance(); }
 
-    public void dispatch(String name, CommandSender sender, String[] args) {
-        switch (name) {
-            case "pvp"        -> pvp(sender, args);
-            case "pvpstatus"  -> pvpstatus(sender, args);
-            case "pvptag"     -> pvptag(sender, args);
-            case "untag"      -> untag(sender, args);
-            case "pvpglobal"  -> pvpglobal(sender, args);
-            case "newbie"     -> newbie(sender, args);
-            case "pvpinfo"    -> pvpinfo(sender, args);
-            case "pvplist"    -> pvplist(sender, args);
-            case "pvpoverride"-> pvpoverride(sender, args);
-            default -> MessageUtil.send(sender, "<red>Unknown PvP command. <gray>Valid: <white>/oa pvp, pvpstatus, pvptag, untag, pvpglobal, newbie, pvpinfo, pvplist, pvpoverride</white>.");
+    private static final List<String> PLAYER_SUBS = List.of("status", "newbie");
+    private static final List<String> ADMIN_SUBS = List.of("tag", "untag", "global", "list", "override");
+
+    /** /pvp (toggle) and its subcommands. */
+    public void handle(CommandSender sender, String[] args) {
+        if (args.length == 0) { toggle(sender); return; }
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
+        switch (sub) {
+            case "status" -> status(sender, rest);
+            case "newbie" -> newbie(sender, rest);
+            case "tag" -> tag(sender, rest);
+            case "untag" -> untag(sender, rest);
+            case "global" -> global(sender, rest);
+            case "list" -> list(sender);
+            case "override" -> override(sender);
+            default -> com.omniarena.commands.SmartErrors.unknownSubcommand(sender, "/pvp", args[0], available(sender));
         }
     }
 
-    // /oa pvp [player]
-    private void pvp(CommandSender sender, String[] args) {
-        if (args.length >= 1 && sender.hasPermission(ADMIN)) {
-            Player target = Bukkit.getPlayerExact(args[0]);
-            if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
-            boolean now = cm().togglePvp(target);
-            MessageUtil.send(sender, "<green>" + target.getName() + " PvP: " + onOff(now));
-            MessageUtil.send(target, cfg().getMessage(now ? "pvp-enabled-self" : "pvp-disabled-self"));
-            return;
-        }
+    private List<String> available(CommandSender sender) {
+        List<String> all = new java.util.ArrayList<>(PLAYER_SUBS);
+        if (isAdminSender(sender)) all.addAll(ADMIN_SUBS);
+        return all;
+    }
+
+    // /pvp
+    private void toggle(CommandSender sender) {
         if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
         Boolean res = cm().selfTogglePvp(p);
         if (res == null) return;
-        boolean now = res;
-        MessageUtil.send(p, cfg().getMessage(now ? "pvp-enabled-self" : "pvp-disabled-self"));
+        MessageUtil.send(p, cfg().getMessage(res ? "pvp-enabled-self" : "pvp-disabled-self"));
     }
 
-    // /oa pvpstatus [player]
-    private void pvpstatus(CommandSender sender, String[] args) {
+    // /pvp status [player]: full info (PvP state, combat tag, newbie protection, world)
+    private void status(CommandSender sender, String[] args) {
         Player target = resolveTarget(sender, args, 0);
         if (target == null) return;
-        MessageUtil.send(sender, "<gray>" + target.getName() + " PvP is " + onOff(cm().isPvpEnabled(target))
-                + "<gray>. Combat: " + (cm().isTagged(target) ? "<red>tagged (" + cm().getTagSeconds(target.getUniqueId()) + "s)" : "<green>clear"));
+        UUID id = target.getUniqueId();
+        MessageUtil.send(sender, "<gold>=== PvP: " + target.getName() + " ===");
+        MessageUtil.send(sender, "<gray>PvP: " + onOff(cm().isPvpEnabled(target)));
+        MessageUtil.send(sender, "<gray>Combat tag: " + (cm().isTagged(id) ? "<red>" + cm().getTagSeconds(id) + "s" : "<green>none"));
+        MessageUtil.send(sender, "<gray>Newbie protection: " + (cm().isNewbie(id) ? "<aqua>" + cm().getNewbieSeconds(id) + "s left" : "<gray>no"));
+        MessageUtil.send(sender, "<gray>World PvP: " + (cm().isWorldDisabled(target) ? "<red>disabled" : "<green>enabled"));
     }
 
-    // /oa pvptag [player] [seconds]
-    private void pvptag(CommandSender sender, String[] args) {
+    // /pvp tag <player> [seconds]
+    private void tag(CommandSender sender, String[] args) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         Player target = args.length >= 1 ? Bukkit.getPlayerExact(args[0]) : (sender instanceof Player p ? p : null);
         if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
@@ -73,7 +77,7 @@ public class PvpCommandHandler {
         if (args.length >= 2) {
             try { seconds = Integer.parseInt(args[1]); } catch (NumberFormatException e) { seconds = -1; }
             if (seconds < 1 || seconds > 3600) {
-                MessageUtil.send(sender, "<red>Invalid duration '" + args[1] + "'. Use a whole number of seconds from 1 to 3600, e.g. <white>/oa pvptag " + target.getName() + " 30");
+                MessageUtil.send(sender, "<red>Invalid duration '" + args[1] + "'. Use a whole number of seconds from 1 to 3600, e.g. <white>/pvp tag " + target.getName() + " 30");
                 return;
             }
         }
@@ -81,7 +85,7 @@ public class PvpCommandHandler {
         MessageUtil.send(sender, "<green>Combat-tagged " + target.getName() + " for " + seconds + "s.");
     }
 
-    // /oa untag [player]
+    // /pvp untag <player>
     private void untag(CommandSender sender, String[] args) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         Player target = args.length >= 1 ? Bukkit.getPlayerExact(args[0]) : (sender instanceof Player p ? p : null);
@@ -90,11 +94,11 @@ public class PvpCommandHandler {
         MessageUtil.send(sender, "<green>Untagged " + target.getName() + ".");
     }
 
-    // /oa pvpglobal <on|off>
-    private void pvpglobal(CommandSender sender, String[] args) {
+    // /pvp global <on|off>
+    private void global(CommandSender sender, String[] args) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         if (args.length < 1) {
-            MessageUtil.send(sender, "<gray>Global PvP is " + onOff(cm().isGlobalPvp()) + "<gray>. Use /oa pvpglobal <on|off>.");
+            MessageUtil.send(sender, "<gray>Global PvP is " + onOff(cm().isGlobalPvp()) + "<gray>. Use /pvp global <on|off>.");
             return;
         }
         boolean on = args[0].equalsIgnoreCase("on") || args[0].equalsIgnoreCase("true");
@@ -103,7 +107,7 @@ public class PvpCommandHandler {
                 cfg().getMessage(on ? "pvp-global-on-broadcast" : "pvp-global-off-broadcast")));
     }
 
-    // /oa newbie [add/remove/checktime] [player] [seconds]
+    // /pvp newbie [checktime|disable] | add|remove <player> [seconds]
     private void newbie(CommandSender sender, String[] args) {
         if (args.length == 0) {
             if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
@@ -116,6 +120,17 @@ public class PvpCommandHandler {
             if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
             cm().removeNewbie(p.getUniqueId());
             MessageUtil.send(p, cfg().getMessage("newbie-disabled"));
+            return;
+        }
+        if (sub.equals("checktime") && args.length == 1) {
+            if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
+            int s = cm().getNewbieSeconds(p.getUniqueId());
+            MessageUtil.send(p, s > 0 ? "<green>Newbie protection: " + s + "s left." : "<gray>No newbie protection active.");
+            return;
+        }
+        if (!List.of("add", "remove", "checktime").contains(sub)) {
+            com.omniarena.commands.SmartErrors.unknownSubcommand(sender, "/pvp newbie", args[0],
+                    isAdminSender(sender) ? List.of("add", "remove", "checktime", "disable") : List.of("checktime", "disable"));
             return;
         }
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
@@ -136,25 +151,12 @@ public class PvpCommandHandler {
                 if (target == null) { MessageUtil.send(sender, "<red>That player is not online (or the name is misspelled). <gray>Names are exact; use tab-complete after the command."); return; }
                 MessageUtil.send(sender, "<gray>" + target.getName() + " newbie: " + cm().getNewbieSeconds(target.getUniqueId()) + "s left.");
             }
-            default -> MessageUtil.send(sender, "<red>Usage: <yellow>/oa newbie <add|remove|checktime|disable> [player] [seconds]</yellow> <gray>- pick one action, e.g. <white>/oa newbie checktime</white>.");
+            default -> MessageUtil.send(sender, "<red>Usage: <yellow>/pvp newbie [checktime|disable]</yellow> <gray>(admins: add|remove <player> [seconds]), e.g. <white>/pvp newbie checktime</white>.");
         }
     }
 
-    // /oa pvpinfo [player]
-    private void pvpinfo(CommandSender sender, String[] args) {
-        Player target = resolveTarget(sender, args, 0);
-        if (target == null) return;
-        UUID id = target.getUniqueId();
-        MessageUtil.send(sender, "<gold>=== PvP info: " + target.getName() + " ===");
-        MessageUtil.send(sender, "<gray>PvP: " + onOff(cm().isPvpEnabled(target)));
-        MessageUtil.send(sender, "<gray>Combat tag: " + (cm().isTagged(id) ? "<red>" + cm().getTagSeconds(id) + "s" : "<green>none"));
-        MessageUtil.send(sender, "<gray>Newbie: " + (cm().isNewbie(id) ? "<aqua>" + cm().getNewbieSeconds(id) + "s" : "<gray>no"));
-        MessageUtil.send(sender, "<gray>Override: " + onOff(cm().isOverriding(target)));
-        MessageUtil.send(sender, "<gray>World PvP: " + (cm().isWorldDisabled(target) ? "<red>disabled" : "<green>enabled"));
-    }
-
-    // /oa pvplist
-    private void pvplist(CommandSender sender, String[] args) {
+    // /pvp list
+    private void list(CommandSender sender) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         MessageUtil.send(sender, "<gold>=== Online PvP states ===");
         for (Player p : Bukkit.getOnlinePlayers()) {
@@ -163,8 +165,8 @@ public class PvpCommandHandler {
         }
     }
 
-    // /oa pvpoverride
-    private void pvpoverride(CommandSender sender, String[] args) {
+    // /pvp override
+    private void override(CommandSender sender) {
         if (!sender.hasPermission(ADMIN)) { noPerm(sender); return; }
         if (!(sender instanceof Player p)) { MessageUtil.send(sender, cfg().getMessage("player-only")); return; }
         boolean now = cm().toggleOverride(p);
@@ -177,29 +179,34 @@ public class PvpCommandHandler {
         return sender.hasPermission(ADMIN) || sender.isOp();
     }
 
-    public List<String> tabComplete(String name, CommandSender sender, String[] args) {
+    public List<String> tabComplete(CommandSender sender, String[] args) {
         String cur = args.length == 0 ? "" : args[args.length - 1];
         boolean admin = isAdminSender(sender);
-        switch (name) {
-            case "pvp", "pvpstatus", "pvpinfo", "untag" -> {
-                if (args.length == 1 && admin) return TabUtil.players(sender, cur);
+        if (args.length == 1) return TabUtil.filter(available(sender), cur);
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        switch (sub) {
+            case "status" -> {
+                if (args.length == 2 && admin) return TabUtil.players(sender, cur);
             }
-            case "pvptag" -> {
+            case "tag" -> {
                 if (!admin) return List.of();
-                if (args.length == 1) return TabUtil.players(sender, cur);
-                if (args.length == 2) return TabUtil.hint("<seconds>", cur);
+                if (args.length == 2) return TabUtil.players(sender, cur);
+                if (args.length == 3) return TabUtil.hint("<seconds>", cur);
             }
-            case "pvpglobal" -> {
-                if (admin && args.length == 1) return TabUtil.filter(List.of("on", "off"), cur);
+            case "untag" -> {
+                if (admin && args.length == 2) return TabUtil.players(sender, cur);
+            }
+            case "global" -> {
+                if (admin && args.length == 2) return TabUtil.filter(List.of("on", "off"), cur);
             }
             case "newbie" -> {
-                if (args.length == 1) {
-                    return TabUtil.filter(admin ? List.of("add", "remove", "checktime", "disable") : List.of("disable"), cur);
+                if (args.length == 2) {
+                    return TabUtil.filter(admin ? List.of("add", "remove", "checktime", "disable") : List.of("checktime", "disable"), cur);
                 }
                 if (!admin) return List.of();
-                String sub = args[0].toLowerCase(Locale.ROOT);
-                if (args.length == 2 && List.of("add", "remove", "checktime").contains(sub)) return TabUtil.players(sender, cur);
-                if (args.length == 3 && sub.equals("add")) return TabUtil.hint("<seconds>", cur);
+                String a = args[1].toLowerCase(Locale.ROOT);
+                if (args.length == 3 && List.of("add", "remove", "checktime").contains(a)) return TabUtil.players(sender, cur);
+                if (args.length == 4 && a.equals("add")) return TabUtil.hint("<seconds>", cur);
             }
             default -> { }
         }

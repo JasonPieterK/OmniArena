@@ -23,7 +23,7 @@ softdepend:
 commands:
   oa:
     description: OmniArena main command
-    usage: /oa <subcommand> [args]
+    usage: /oa [subcommand] [args] (no arguments opens the menu)
     aliases: [omniarena, arena]
     permission: omniarena.use
   kit:
@@ -32,7 +32,7 @@ commands:
     permission: omniarena.kit.use
   join:
     description: Join an arena
-    usage: /join <arena>
+    usage: /join [arena]
     permission: omniarena.use
   leave:
     description: Leave current arena
@@ -44,28 +44,8 @@ commands:
     permission: omniarena.use
   spectate:
     description: Spectate an arena
-    usage: /spectate <arena>
+    usage: /spectate [arena]
     permission: omniarena.spectate
-  stats:
-    description: View your statistics
-    usage: /stats
-    permission: omniarena.use
-  list:
-    description: List available arenas
-    usage: /list
-    permission: omniarena.use
-  info:
-    description: Get arena information
-    usage: /info <arena>
-    permission: omniarena.use
-  ready:
-    description: Mark yourself ready for match
-    usage: /ready
-    permission: omniarena.use
-  help:
-    description: Get OmniArena help
-    usage: /help [guide]
-    permission: omniarena.use
   bet:
     description: Bet on arena match outcomes (same as /oa bet)
     usage: /bet <place|cancel|info> [arena] [player] [amount]
@@ -75,28 +55,8 @@ commands:
     usage: /tournament <create|join|leave|start|status|list|delete|setprize> [args]
     permission: omniarena.use
   pvp:
-    description: Toggle PvP status
-    usage: /pvp [player]
-    permission: omniarena.pvp
-  pvpstatus:
-    description: Check PvP status
-    usage: /pvpstatus [player]
-    permission: omniarena.pvp
-  pvptag:
-    description: Tag player for PvP
-    usage: /pvptag [player] [seconds]
-    permission: omniarena.pvp.admin
-  untag:
-    description: Remove PvP tag from player
-    usage: /untag [player]
-    permission: omniarena.pvp.admin
-  pvpglobal:
-    description: Toggle global PvP
-    usage: /pvpglobal <on|off>
-    permission: omniarena.pvp.admin
-  newbie:
-    description: Newbie protection management
-    usage: /newbie <add|remove|checktime|disable> [player]
+    description: Toggle PvP, check status and newbie protection
+    usage: /pvp [status|newbie|tag|untag|global|list]
     permission: omniarena.pvp
 
 permissions:
@@ -122,27 +82,21 @@ permissions:
     children:
       omniarena.admin.arena: true
       omniarena.admin.kit: true
-      omniarena.admin.match: true
       omniarena.admin.sign: true
       omniarena.admin.hologram: true
       omniarena.admin.stats: true
       omniarena.admin.reload: true
-      omniarena.admin.override: true
       omniarena.admin.access: true
       omniarena.pvp.admin: true
       omniarena.tournament.admin: true
       omniarena.join.bypass: true
 
   omniarena.admin.arena:
-    description: Arena create/delete/config
+    description: Arena setup, edit, enable/disable, delete, regen
     default: op
 
   omniarena.admin.kit:
     description: Admin kit management
-    default: op
-
-  omniarena.admin.match:
-    description: Force start/stop/win matches
     default: op
 
   omniarena.admin.sign:
@@ -157,16 +111,12 @@ permissions:
     description: Reset/view all player stats
     default: op
 
-  omniarena.admin.override:
-    description: Powerful admin overrides (/oa override ...)
-    default: op
-
   omniarena.admin.reload:
     description: Reload plugin config
     default: op
 
   omniarena.admin.access:
-    description: Manage per-arena whitelist/blacklist (/oa access)
+    description: Manage per-arena whitelist/blacklist (/oa edit <arena> whitelist|blacklist)
     default: op
 
   omniarena.kit.slots.5:
@@ -190,11 +140,11 @@ permissions:
     default: op
 
   omniarena.pvp:
-    description: Use player PvP/combat commands (/oa pvp, pvpstatus, newbie...)
+    description: Use player PvP/combat commands (/pvp, /pvp status, /pvp newbie)
     default: true
 
   omniarena.pvp.admin:
-    description: Admin PvP commands (tag, untag, global, override, force-toggle others)
+    description: Admin PvP commands (/pvp tag, untag, global, list, override; view others)
     default: op
 
   omniarena.join.bypass:

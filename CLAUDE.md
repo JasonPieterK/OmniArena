@@ -22,7 +22,7 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
 ```
 
 - Tests live in `src/test/java` (`RegenAnimationTypeTest`, `TournamentBracketTest`,
-  `ConfigSchemaServiceTest`; 12 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
+  `ConfigSchemaServiceTest`, `SuggestTest`; 17 `@Test` methods: check with `grep -r "@Test" src/test | wc -l`).
   Only pure logic is unit tested; code that needs a live Bukkit server is not.
 - `target/` and `dist/` are git-ignored build output; never edit them. The old antrun step that
   copied the jar to a Windows path has been removed.
@@ -96,7 +96,7 @@ Singletons are reachable via `OmniArena.getInstance().getXxx()` and (most of the
 | `stats` | `StatsManager`, `PlayerStats` | Lifetime stats (`stats.yml`), top lists, `peekStats` (read-only) vs `getStats` (creates). |
 | `combat` | `CombatManager`, `CombatListener`, `PvpCommandHandler` | Server-wide PvP management (tags, persistent toggles `pvp-toggles.yml`, newbie `newbie.yml`, abuse, border hopping, crystal attribution). |
 | `listener` | 17 listeners | Bukkit event glue (death, damage, interact/wand/signs, sign creation/protection, movement/region, teleport, chat routing, quit/join, blocks and fluid containment, regen change log, food, drops, `/kit` interception, game-mode rules, inventory clicks). |
-| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `commands.admin.*` (28, incl. `AccessCommand`), `commands.player.*` (12, incl. `EloCommand`), `commands.standalone.*` | `/oa` dispatcher with two maps (admin, player); standalone commands forward to `/oa` subcommands. |
+| `commands` | `CommandManager`, `SubCommand`, `KitCommandExecutor`, `SmartErrors`, `commands.admin.*` (`SetupCommand`, `EditCommand`, `ArenaCommand`, `RegenCommand`, `AdminKitCommand` = `/oa kits`, `SignCommand`, `HologramCommand`, `SettingsCommand`, `ReloadCommand`, `LifecycleCommand` = `/oa plugin`, `WebEditorCommand`; `ArenaSettings`/`ArenaAccess` are the `/oa edit` helpers), `commands.player.*`, `commands.standalone.*`; `util.Suggest` | `/oa` dispatcher with two maps (admin, player); `/oa` alone opens `gui.MainMenu`; unknown input gets a did-you-mean (`SmartErrors`, `Suggest`); standalone commands forward to `/oa` subcommands. |
 | `visual` | `VisualController`, `Title/Sound/Particle/Board/BossBar/ActionBar/Hologram/EffectManager`, `VisualGate` | Per-match presentation (FastBoard sidebars) and `HologramManager` (`TextDisplay` leaderboards, `holograms.yml`). |
 | `module` | `ModuleManager`, `KillstreakModule`, `ComboModule`, `PowerUpModule` | Optional per-arena modules (names in `Arena.getEnabledModules()`). |
 | `settings` | `SettingsGUI`, `SettingsMenuListener`, `SettingsHolder` | Chest-GUI editor over `ConfigSchemaService`. |
@@ -147,7 +147,7 @@ those just started by the matches that ended); `combat.shutdown()`; `queue.stop(
 `elo.shutdown(); elo.saveAll()`; `visual.shutdown()` (removes holograms); `module.shutdown()`;
 `web.stop()`; `integration.shutdown()`; `Platform.shutdown()`.
 
-### `/oa stop`, `/oa start`, `/oa restart` (`LifecycleCommand`)
+### `/oa plugin stop|start|restart|version` (`LifecycleCommand`)
 
 - **stop**: `setStopped(true)`; `cancelAll()` on regen; `Bukkit.getScheduler().cancelTasks(plugin)`
   (cancels *everything*: matchmaking, sign refresh, combat tasks, tournament tick, countdowns,
@@ -165,7 +165,7 @@ those just started by the matches that ended); `combat.shutdown()`; `queue.stop(
 
 ### `isStopped()` gating
 
-When stopped, `CommandManager.onCommand` allows only `/oa start`; `KitCommandExecutor`,
+When stopped, `CommandManager.onCommand` allows only `/oa plugin ...`; `KitCommandExecutor`,
 `PartyCommand` and `/oa queue` print the stopped message; listeners and repeating tasks return early
 on `plugin.isStopped()`. **Every new listener, command entry point and repeating task must check
 `plugin.isStopped()`** (or be cancelled by `stop`). Do not start schedulers outside code paths that
@@ -227,7 +227,7 @@ onEnable, onDisable, `/oa stop` and `/oa start`.
   cap.
 - Needs a free arena (`findFreeArena(perSide)`): enabled, `WAITING`, `isJoinable()`, not reserved by
   a tournament, no active match, and `arenaFits` (max-players >= 2 * perSide; teams required beyond
-  1v1). No arena: keep everyone queued. Nothing happens during a lockdown.
+  1v1). No arena: keep everyone queued.
 - `createMatch`: everyone is removed from the queue first; join side 1 (the first join marks the
   match `setRanked(true)`, `setQueueName(kit)` and `setQueueKit(kit)` if an admin kit by that name
   exists), then side 2; on failure everyone leaves and is `requeue`d (keeps `queueTime`). Team sides
@@ -253,7 +253,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   compute from pre-match values; `recordWin/recordLoss` apply the new rating themselves (do not
   also call `setRating`: this double-applied before, commit 79f37fe).
 - `MatchResult.isDraw()` is true for `DRAW` and `TIMEOUT`.
-- `/oa elo [player]` / `/oa elo top [n]` (`EloCommand`, `omniarena.use`) show ratings through the
+- `/oa stats [player]` (ELO and rank are part of it) and `/oa stats top elo [n]` (`StatsCommand`, `omniarena.use`) show ratings through the
   read-only `peekRating`/`getPlayerRank`/`getLeaderboard` paths (never `getRating`, which creates an
   entry). Ratings also appear in `/oa queue status`, the `elo` hologram type and the web Players tab.
 
@@ -284,7 +284,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   refuses outsiders in a ranked match that is underway.
 - Countdown task: below `effectiveMin` players it stays WAITING and counts `arena.lobby-timeout`
   (config, default 120, 0 = never) seconds before closing the lobby.
-- `Arena.lives` (arena file key `lives`, 0 = off, max 100): settable via `/oa config set <arena>
+- `Arena.lives` (arena file key `lives`, 0 = off, max 100): settable via `/oa edit <arena> set
   lives <n>` and the dashboard. `PlayerDeathListener` decrements `Match.getLivesMap()`, respawns
   while > 0, eliminates at 0 (also in modes that normally never respawn); on KILLS goals
   `checkEndConditions` also ends the match when one side is left with lives. `BoardManager` shows
@@ -307,7 +307,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   or eliminates. Ring-out is in `GameModeRulesListener`.
 - Internal teleports must go through `MatchManager.markInternalTeleport` so
   `PlayerTeleportListener` does not eject the player.
-- `/oa override` state (freeze, god, lockdown) lives in `MatchManager`.
+- There is no admin match control any more (no force start/win, freeze, god, lockdown); `MatchManager.forceWin` stays for tournaments.
 
 ---
 
@@ -320,7 +320,7 @@ Ranked flag and ELO (`MatchManager.endMatchEffects`):
   then finalizes them synchronously). The arena is `RESETTING` until the restore callback, which
   sets it back to `WAITING` unless it was disabled or a new match exists; failure and a missing
   snapshot (warning + `notifyAdmins`) also reopen the arena. Manual entry points: `/oa regen
-  <arena>` (refused while a match is active or a regen is running), `/oa override purge <arena>`.
+  <arena>` (refused while a match is active or a regen is running).
 - Snapshot: `createSnapshot` scans in slices on the main thread into a palette (`MATERIAL|blockdata`)
   plus runs `{x, z, y0, len, paletteIdx}` and a `tiles` list (containers, signs, banners captured
   via `Platform.getBlockState`/`serializeItems`), then `AsyncUtil.runAsyncThenSync` writes
@@ -448,10 +448,9 @@ All YAML under `plugins/OmniArena/`. See DOCS.md section 19 for field-level layo
 6. Add messages to `messages.yml` and read via `ConfigManager.getMessage(key)`.
 7. Update README command table, DOCS.md sections 15 and 16, and the help guides in `HelpCommand`.
 
-`/oa force start <arena>` (`ForceStartCommand`), `/oa forcewin <arena> <player|team>`
-(`ForceWinCommand`) and the `/oa override forcestart|forcewin|startarena` variants all exist.
-`/oa kit admin <action>` and `/oa adminkit <action>` both reach `AdminKitCommand`; the dispatcher
-also still routes `setpublic|setprivate|icon|description|cooldown|permission` for admins there.
+Final tree: see `docs/superpowers/qol-commands-final.md`. Use `SmartErrors` (wrongArgs, arena,
+unknownSubcommand, explainNotJoinable) for user mistakes so errors stay clickable and specific.
+`/oa kits` (admin presets) is the only admin-kit entry; `/kit` is the player kit command.
 
 ### Adding a config key
 
@@ -470,7 +469,7 @@ also still routes `setpublic|setprivate|icon|description|cooldown|permission` fo
 ### Messages
 
 All user text goes through `messages.yml` where practical; many commands still hard-code MiniMessage
-strings (`TournamentManager`, `QueueManager`, `QueueCommand`, `BettingManager`, `OverrideCommand`,
+strings (`TournamentManager`, `QueueManager`, `QueueCommand`, `BettingManager`,
 `CommandManager`). New code should prefer message keys. `ConfigManager.applyMessageDefaults()` falls
 back to the jar's bundled `messages.yml`.
 
@@ -549,14 +548,11 @@ back to the jar's bundled `messages.yml`.
    respawn the holograms.
 8. `PlayerCommandPreprocessListener` intercepts `/kit` for players in arenas even when another plugin
    owns `/kit`.
-9. `CommandManager.shouldUsePlayerCommand` routes plain `/oa kit <action>` for admins to the *player*
-   command unless the action is one of `setpublic|setprivate|icon|description|cooldown|permission`
-   (legacy shortcut; the dispatcher's set is the authority). The unambiguous routes to every
-   `AdminKitCommand` action (`create`, `delete`, `rename`, `equip`, `list`, ...) are
-   `/oa kit admin <action>` and `/oa adminkit <action>`. Player-initiated equips go through
+9. Admin preset kits are managed only through `/oa kits` (`AdminKitCommand`); `/oa` has no player `kit`
+   subcommand. Player-initiated equips go through
    `KitManager.tryEquip` (lobby-only inside arenas, permission, persisted cooldown): do not call
    `equipKit` directly for player actions.
-10. Standalone `/list`, `/info`, `/help`, `/join`, `/leave` are registered in `plugin.yml` and can clash
+10. Standalone `/join`, `/leave`, `/spectate` are registered in `plugin.yml` and can clash
     with other plugins' commands.
 11. Player-map commands are permission-checked by the dispatcher using their constructor node; keep
     that node declared and default-true for anything regular players should use.
@@ -566,7 +562,7 @@ back to the jar's bundled `messages.yml`.
 14. Maven profiles: `paper` and `mc-26.2` are `activeByDefault`, which is switched off by any
     explicit `-P`; always pass `-P<platform>,mc-<version>`.
 15. `target/` and `dist/` are git-ignored; do not force-add build output.
-16. Arena whitelist/blacklist/`whitelist-enabled` are managed by `/oa access` (`AccessCommand`,
+16. Arena whitelist/blacklist/`whitelist-enabled` are managed by `/oa edit <arena> whitelist|blacklist ...` (`ArenaAccess`,
     `omniarena.admin.access`), saved in the arena file and enforced in `MatchManager.joinArena`
     (blacklist always; whitelist when enabled unless `omniarena.join.bypass`/OP). Do not add join
     paths that skip `joinArena`.
@@ -584,7 +580,7 @@ back to the jar's bundled `messages.yml`.
 19. When a match has `getQueueKit()` set, loadouts come from that admin kit, otherwise from
     `GameModeKits`; respawns call the same `applyLoadout`.
 20. `isModuleEnabled` (`modules.*`) is unused. Check DOCS.md section 18 before assuming a key works.
-    `/oa module` accepts only `killstreak`, `combo`, `power-up` (`ModuleCommand.KNOWN_MODULES`).
+    The `/oa edit` keys `module-killstreak|module-combo|module-power-up` are the only module switches.
 21. `index.html` is a resource under `src/main/resources/web`: changes require a rebuild to be served
     (served from the jar via `plugin.getResource`).
 

@@ -148,49 +148,9 @@ public final class OmniArena extends JavaPlugin {
         Objects.requireNonNull(getCommand("spectate")).setExecutor(forwarder);
         Objects.requireNonNull(getCommand("spectate")).setTabCompleter(forwarder);
 
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "stats");
-        Objects.requireNonNull(getCommand("stats")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("stats")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "list");
-        Objects.requireNonNull(getCommand("list")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("list")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "info");
-        Objects.requireNonNull(getCommand("info")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("info")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "ready");
-        Objects.requireNonNull(getCommand("ready")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("ready")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "help");
-        Objects.requireNonNull(getCommand("help")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("help")).setTabCompleter(forwarder);
-
         forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "pvp");
         Objects.requireNonNull(getCommand("pvp")).setExecutor(forwarder);
         Objects.requireNonNull(getCommand("pvp")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "pvpstatus");
-        Objects.requireNonNull(getCommand("pvpstatus")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("pvpstatus")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "pvptag");
-        Objects.requireNonNull(getCommand("pvptag")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("pvptag")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "untag");
-        Objects.requireNonNull(getCommand("untag")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("untag")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "pvpglobal");
-        Objects.requireNonNull(getCommand("pvpglobal")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("pvpglobal")).setTabCompleter(forwarder);
-
-        forwarder = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, "newbie");
-        Objects.requireNonNull(getCommand("newbie")).setExecutor(forwarder);
-        Objects.requireNonNull(getCommand("newbie")).setTabCompleter(forwarder);
 
         for (String standalone : new String[]{"bet", "tournament"}) {
             var fwd = new com.omniarena.commands.standalone.PlayerCommandForwarder(this, standalone);

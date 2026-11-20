@@ -163,7 +163,7 @@ public class WebDashboardServer {
         } catch (java.net.BindException e) {
             plugin.getLogger().severe("[Web] Cannot start dashboard: " + bindAddress + ":" + port + " is unavailable ("
                     + e.getMessage() + "). Another program (or another server) is using that port. "
-                    + "Fix: set web.port in config.yml to a free port (or web.bind-address to a local address) and run /oa restart.");
+                    + "Fix: set web.port in config.yml to a free port (or web.bind-address to a local address) and run /oa plugin restart.");
             abortStart();
         } catch (IOException | IllegalArgumentException | SecurityException e) {
             plugin.getLogger().severe("[Web] Failed to start dashboard on " + bindAddress + ":" + port + ": " + e
@@ -288,7 +288,7 @@ public class WebDashboardServer {
             if (arena == null) return "No arena named '" + arenaName + "'.";
             var mm = com.omniarena.match.MatchManager.getInstance();
             if (mm != null && mm.getMatch(arena).isPresent())
-                return "Arena '" + arenaName + "' has a match in progress; end it first (/oa match stop " + arenaName + ").";
+                return "Arena '" + arenaName + "' has a match in progress; end it first (wait for it to finish or have the players leave).";
             return plugin.getArenaManager().delete(arenaName) ? null : "Could not delete '" + arenaName + "'.";
         });
         if (problem != null) { err(exchange, problem.startsWith("No arena") ? 404 : 409, problem); return; }
@@ -429,7 +429,7 @@ public class WebDashboardServer {
 
     private boolean authorize(HttpExchange exchange) throws IOException {
         if (sessions.isValid(extractToken(exchange))) return true;
-        err(exchange, 401, "Invalid or expired session. Run /oa website in-game for a new link.");
+        err(exchange, 401, "Invalid or expired session. Run /oa web in-game for a new link.");
         return false;
     }
 

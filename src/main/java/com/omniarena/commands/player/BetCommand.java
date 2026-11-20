@@ -45,21 +45,18 @@ public class BetCommand extends SubCommand {
             case "place" -> handlePlace(player, bm, args);
             case "cancel" -> bm.cancelBet(player);
             case "info" -> handleInfo(player, bm, args);
-            default -> sendUsage(player);
+            default -> com.omniarena.commands.SmartErrors.unknownSubcommand(player, "/bet", args[0], List.of("place", "cancel", "info"));
         }
     }
 
     private void handlePlace(Player player, BettingManager bm, String[] args) {
         if (args.length < 4) {
-            MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance().getMessage("usage-line").replace("{usage}", "/bet place <arena> <player> <amount>  (e.g. /bet place duel1 Steve 100)"));
+            com.omniarena.commands.SmartErrors.wrongArgs(player, "/bet place <arena> <player> <amount>", "/bet place duel1 Steve 100");
             return;
         }
         String arenaName = args[1];
-        Arena arena = plugin.getArenaManager().get(arenaName).orElse(null);
-        if (arena == null) {
-            MessageUtil.send(player, com.omniarena.config.ConfigManager.getInstance().getMessage("arena-not-found").replace("{arena}", arenaName));
-            return;
-        }
+        Arena arena = com.omniarena.commands.SmartErrors.arena(player, arenaName, "/bet place ").orElse(null);
+        if (arena == null) return;
 
         Player target = Bukkit.getPlayerExact(args[2]);
         if (target == null) {
@@ -83,7 +80,7 @@ public class BetCommand extends SubCommand {
         var liveMatch = plugin.getMatchManager().getMatch(arena);
         if (liveMatch.isEmpty() || liveMatch.get().getState() == com.omniarena.match.MatchState.ENDING
                 || liveMatch.get().getState() == com.omniarena.match.MatchState.RESETTING) {
-            MessageUtil.send(player, "<red>The match in <yellow>" + arena.getName() + "</yellow> is not open for betting (it is not running, or already ending/resetting). <gray>Check <white>/oa info " + arena.getName() + "</white> and bet on a live match.");
+            MessageUtil.send(player, "<red>The match in <yellow>" + arena.getName() + "</yellow> is not open for betting (it is not running, or already ending/resetting). <gray>Check <white>/oa list " + arena.getName() + "</white> and bet on a live match.");
             return;
         }
 

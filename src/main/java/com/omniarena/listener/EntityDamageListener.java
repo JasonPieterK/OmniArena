@@ -56,11 +56,6 @@ public class EntityDamageListener implements Listener {
 
         Match match = matchOpt.get();
 
-        if (mm.isGodMode(victim.getUniqueId())) {
-            event.setCancelled(true);
-            return;
-        }
-
         // Spawn protection
         if (match.hasSpawnProtection(victim.getUniqueId())) {
             event.setCancelled(true);
@@ -118,11 +113,6 @@ public class EntityDamageListener implements Listener {
         }
 
         Match match = matchOpt.get();
-
-        if (mm.isGodMode(victim.getUniqueId())) {
-            event.setCancelled(true);
-            return;
-        }
 
         // Friendly fire check
         if (!arena.getRules().isFriendlyFire() && arena.getTeamConfig().isEnabled()) {
