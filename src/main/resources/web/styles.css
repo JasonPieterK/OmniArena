@@ -409,3 +409,7 @@ select.input{cursor:pointer;appearance:none;
 .no-icons .totop::after{content:'\2191';font-weight:800;}
 .btn-icon{padding:8px 11px;}
 body.busy{cursor:progress;}
+
+/* Icons inside nav links, stat labels and toasts (Phosphor Bold) */
+.nav-link i,.eyebrow i{font-size:1.1em;vertical-align:-0.15em;margin-right:2px;}
+.toast-ico i{font-size:13px;}

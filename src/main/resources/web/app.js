@@ -73,7 +73,7 @@
   function toast(msg, type = 'success') {
     const t = document.createElement('div');
     t.className = `toast ${type}`;
-    t.innerHTML = `<span class="toast-ico">${type === 'success' ? '✓' : '✕'}</span><span>${esc(msg)}</span>`;
+    t.innerHTML = `<span class="toast-ico"><i class="ph-bold ${type === 'success' ? 'ph-check' : 'ph-x'}"></i></span><span>${esc(msg)}</span>`;
     $('toastContainer').appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, type === 'error' ? 6000 : 3000);
   }
@@ -206,14 +206,14 @@
     const players = arenas.reduce((n, a) => n + arenaPlayers(a), 0);
     const cfgCount = sn ? Object.keys(sn.globals || {}).length : 0;
     const cards = [
-      { cls: 's-mean',   label: 'Arenas',      val: arenas.length, foot: 'configured' },
-      { cls: 's-median', label: 'Live now',    val: live,          foot: 'matches running' },
-      { cls: 's-mode',   label: 'Players',     val: players,       foot: 'in arenas' },
-      { cls: 's-sun',    label: 'Settings',    val: cfgCount,      foot: 'config keys' },
+      { cls: 's-mean',   label: 'Arenas',      icon: 'ph-flag-checkered', val: arenas.length, foot: 'configured' },
+      { cls: 's-median', label: 'Live now',    icon: 'ph-broadcast', val: live,          foot: 'matches running' },
+      { cls: 's-mode',   label: 'Players',     icon: 'ph-users', val: players,       foot: 'in arenas' },
+      { cls: 's-sun',    label: 'Settings',    icon: 'ph-sliders-horizontal', val: cfgCount,      foot: 'config keys' },
     ];
     $('statGrid').innerHTML = cards.map(c => `
       <div class="stat ${esc(c.cls)}">
-        <div class="eyebrow">${esc(c.label)}</div>
+        <div class="eyebrow"><i class="ph-bold ${esc(c.icon)}"></i> ${esc(c.label)}</div>
         <div class="num" data-count="${esc(c.val)}">0</div>
         <div class="foot">${esc(c.foot)}</div>
       </div>`).join('');
@@ -268,7 +268,7 @@
         <div class="arena-list-item-name">${esc(a.name)}</div>
         <div class="arena-list-item-meta">
           <span>${esc(a.gameMode || '—')}</span>
-          <span>${a.enabled !== false ? '● on' : '○ off'}</span>
+          <span><i class="ph-bold ${a.enabled !== false ? 'ph-check-circle' : 'ph-x-circle'}"></i> ${a.enabled !== false ? 'on' : 'off'}</span>
         </div>
       </div>`;
     }).join('');

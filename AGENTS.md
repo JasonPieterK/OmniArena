@@ -24,8 +24,7 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   `PlatformImpl` per jar is in `src/paper/java` (paper, purpur) or `src/spigot/java` (spigot, bukkit,
   with shaded + relocated Adventure and `adventure-platform-bukkit`). Never call Paper-only API from
   common code: add a method to `PlatformAdapter` and implement it in both `PlatformImpl` classes
-  (e.g. `openBook` for the guide books). Code stays at Java 21 level. Only the paper/mc-26.2 jar was compiled (and unit tested) after the 1.0 QoL rework; the other 23 profiles
-  (spigot/bukkit/purpur and the other versions) were not compiled since; Purpur's repo was also unreachable earlier.
+  (e.g. `openBook` for the guide books). Code stays at Java 21 level. All 24 profile combinations compile (checked with `mvn test-compile`, 0 errors; no jars built); the unit tests run on paper/mc-26.2. Nothing has run on a live server.
 - `target/` and `dist/` are git-ignored.
 - Tests: 79 `@Test` methods (`grep -r "@Test" src/test | wc -l`): regen enum, bracket logic, config schema and
   migration, YAML repair and backups, error tracking, integration helpers, menu layout, did-you-mean, guide paginator and
@@ -157,8 +156,7 @@ The command tree is in `docs/superpowers/qol-commands-final.md`; the redesign ru
   every `/api/*` call; sessions slide on use, are capped (`advanced.web.max-sessions`) and revocable
   (`POST /api/logout`); JSON errors and security headers on every response; body limit 1 MiB; all-or-nothing validation in `ConfigApplyService`;
   arena names `[A-Za-z0-9_-]{1,32}`. Static assets are public: never embed secrets. Do not add
-  endpoints that run commands or touch arbitrary paths. Phosphor icon CSS is loaded from unpkg without
-  SRI; hash command: `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`.
+  endpoints that run commands or touch arbitrary paths. Phosphor icon CSS (Bold weight only) is loaded from unpkg with an SRI hash in `index.html`; recompute it on a version bump: `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`.
 
 **Storage** (YAML under `plugins/OmniArena/`): `config.yml`, `messages.yml`, `guides.yml`, `arenas/<name>.yml`,
 `snapshots/<arena>.yml`, `sign-glowstone.yml`, `leaderboards.yml`, `npcs.yml`, `admin-kits/`, `player-kits/<uuid>.yml`,

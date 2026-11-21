@@ -30,8 +30,8 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
 - `target/` and `dist/` are git-ignored build output; never edit them.
 - Repositories needed: PaperMC, Spigot snapshots, PurpurMC, EssentialsX, PlaceholderAPI, EngineHub,
   Sonatype, JitPack, Vault. Outbound network may be restricted in sandboxes; builds may need a
-  pre-populated `~/.m2` (`mvn -o`). Verification status: Only the paper/mc-26.2 jar was compiled (and unit tested) after the 1.0 QoL rework; the other 23 profiles were not compiled since
-  (spigot-api is not in the offline `~/.m2`; Purpur's repo was unreachable earlier). No live-server runtime tests exist.
+  pre-populated `~/.m2` (`mvn -o`). Verification status: all 24 combinations compile (checked with `mvn test-compile`, 0 errors, no jars
+  built) and the unit tests (92) run on paper/mc-26.2. No live-server runtime tests exist; nothing has run on a live server.
 
 ### The 24-jar matrix
 
@@ -43,7 +43,7 @@ turns off as soon as any other profile is passed with `-P`: hence "always pass b
 | Profile | Effect |
 |---------|--------|
 | `paper` | `paper-api`; adds `src/paper/java` (native Adventure, Paper events) |
-| `purpur` | `purpur-api` (repo.purpurmc.org); adds `src/paper/java` (coordinates unverified: repo unreachable when checked) |
+| `purpur` | `purpur-api` (repo.purpurmc.org); adds `src/paper/java` (compiles, checked with `mvn test-compile`) |
 | `spigot` | `spigot-api`; adds `src/spigot/java`; shades and relocates Adventure (`net.kyori` -> `com.omniarena.libs.kyori`) + `adventure-platform-bukkit` |
 | `bukkit` | identical to `spigot` (only the jar name differs) |
 | `mc-*` | sets `mc.version`, `java.version`/`maven.compiler.release` (25 or 21), `api.version` (the `plugin.yml` `api-version`, `1.21` for all 1.21.x) and the three API versions |
@@ -568,9 +568,9 @@ New code should prefer message keys. `ConfigManager.applyMessageDefaults()` fall
 - Sessions: `WebSessionManager` tokens (24 random bytes), **sliding** expiry (renewed by each valid
   request), `advanced.web.max-sessions` cap, `POST /api/logout` revokes one, `stop()` revokes all; the manager is
   created once in the server constructor (config changes to `advanced.web.*` need a restart).
-- The UI loads Phosphor icons from unpkg without SRI. To compute the hash:
-  `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`
-  then add `integrity="sha384-..."` to the `<link>` in `index.html` (keep `crossorigin`).
+- The UI loads one Phosphor icon weight (Bold, `ph-bold ph-*`, no other icon set or emoji) from unpkg, pinned to 2.1.1 with an
+  `integrity="sha384-..."` hash on the `<link>` in `index.html` (keep `crossorigin`). When bumping the version, recompute it:
+  `curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css | openssl dgst -sha384 -binary | openssl base64 -A`.
 - `web/docs.md` is a copy of DOCS.md shown in the Docs tab and must stay byte-identical:
   `cp DOCS.md src/main/resources/web/docs.md` after every DOCS.md edit. The renderer in `web/app.js`
   (`markdownToHtml`) supports headings, bold, italic, inline and fenced code (lifted out first so their content is

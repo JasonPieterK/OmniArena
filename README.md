@@ -9,9 +9,8 @@
 Players join arenas from a menu, a command or a sign and fight in *16 game types*. Admins build an arena with a short
 wizard; the plugin rebuilds it after every match and repairs itself when something goes wrong.
 
-> **Honest status.** Version 1.0.0. The unit tests pass (pure logic only); only the Paper 26.2 jar has been compiled for 1.0, the other 23 are not compiled yet.
-> The six Purpur jars could not be verified (their repository was unreachable). ***It has never been run on a live
-> server.*** The DecentHolograms, FancyHolograms, Citizens and Multiverse hooks are reflection-only and untested.
+> **Honest status.** Version 1.0.0. The unit tests pass (pure logic only, run on paper/26.2); all 24 build combinations compile (checked with `mvn test-compile`, no jars built).
+> ***It has never been run on a live server.*** The DecentHolograms, FancyHolograms, Citizens and Multiverse hooks are reflection-only and untested.
 > Try it on a copy of your server first. Details: [Status](#status).
 
 **Modrinth page:** *link follows after the first upload.* | **Full reference:** [DOCS.md](DOCS.md) | **In game:** `/oa guide`
@@ -135,8 +134,8 @@ JAVA25_HOME=/path/to/jdk25 JAVA21_HOME=/path/to/jdk21 scripts/build-all.sh   # a
 ```
 
 Profiles: `paper`, `purpur`, `spigot`, `bukkit` x `mc-26.3`, `mc-26.2`, `mc-26.1`, `mc-1.21.11`, `mc-1.21.10`, `mc-1.21.9`.
-Only the paper/26.2 jar has been compiled for 1.0; the other 23 use the same code but are not compiled yet,
-and there are no automated tests against a live server. Details: [DOCS.md](DOCS.md#12-building).
+All 24 combinations compile (checked with `mvn test-compile`, 0 errors); the 92 unit tests run on paper/26.2.
+There are no automated tests against a live server. Details: [DOCS.md](DOCS.md#12-building).
 
 ## Troubleshooting
 
@@ -160,8 +159,8 @@ combat-tagged works only on paper/purpur. See [DOCS.md](DOCS.md#13-known-limitat
 
 ## Status
 
-***Version 1.0.0.*** Unit tests (`mvn -q -Ppaper,mc-26.2 test`) cover pure logic only. Compilation is verified for the paper,
-spigot and bukkit jars; the six Purpur jars could not be verified. There are no tests against a live server, and nobody has
+***Version 1.0.0.*** Unit tests (`mvn -q -Ppaper,mc-26.2 test`) cover pure logic only. All 24 build combinations compile
+(checked with `mvn test-compile`). There are no tests against a live server, and nobody has
 run the plugin on one yet. Please report problems with the console log and the output of `/oa doctor`.
 
 ![Platforms and versions](docs/modrinth/images/09-matrix.png)

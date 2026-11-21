@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OmniArena Control</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <!-- Phosphor Icons, Bold weight only (MIT). Pinned version + SRI hash; to recompute: curl -s URL | openssl dgst -sha384 -binary | openssl base64 -A -->
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css" integrity="sha384-nblAP2mo2pVPyMQZDw9Xy9Cwgs9lowushAYep4w5+Q9kF4Ibf3n0B/gCMVdR+Vqy" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -16,16 +17,16 @@
       <span class="brand-name">OmniArena.</span>
     </div>
     <nav class="nav" id="mainNav">
-      <button class="nav-link active" data-tab="dashboard">Dashboard<span class="ul"></span></button>
-      <button class="nav-link" data-tab="live">Live Matches<span class="ul"></span></button>
-      <button class="nav-link" data-tab="arenas">Arenas<span class="ul"></span></button>
-      <button class="nav-link" data-tab="players">Players<span class="ul"></span></button>
-      <button class="nav-link" data-tab="config">Config<span class="ul"></span></button>
-      <button class="nav-link" data-tab="docs">Docs<span class="ul"></span></button>
+      <button class="nav-link active" data-tab="dashboard"><i class="ph-bold ph-squares-four"></i> Dashboard<span class="ul"></span></button>
+      <button class="nav-link" data-tab="live"><i class="ph-bold ph-broadcast"></i> Live Matches<span class="ul"></span></button>
+      <button class="nav-link" data-tab="arenas"><i class="ph-bold ph-flag-checkered"></i> Arenas<span class="ul"></span></button>
+      <button class="nav-link" data-tab="players"><i class="ph-bold ph-users"></i> Players<span class="ul"></span></button>
+      <button class="nav-link" data-tab="config"><i class="ph-bold ph-sliders-horizontal"></i> Config<span class="ul"></span></button>
+      <button class="nav-link" data-tab="docs"><i class="ph-bold ph-book-open"></i> Docs<span class="ul"></span></button>
     </nav>
     <div class="session"><span class="status-dot" id="statusDot"></span><span id="sessionText">Connecting…</span></div>
     <button class="btn btn-ink btn-sm" id="applyBtn" disabled><i class="ph-bold ph-check-circle"></i> Apply</button>
-    <button class="btn btn-ghost btn-sm" id="logoutBtn" title="End this dashboard session">Log out</button>
+    <button class="btn btn-ghost btn-sm" id="logoutBtn" title="End this dashboard session"><i class="ph-bold ph-sign-out"></i> Log out</button>
   </header>
 
   <main class="wrap">

@@ -21,11 +21,24 @@ the links break. (Alternative: the Gallery way below.)
 
 ## Icon
 
+The icon is the Quartered mark (a disc split by an X into four Bauhaus colour fields) on a paper tile with the black frame.
+Rationale and the other concepts: `logo/brief.md`.
+
 | File | Use |
 |---|---|
-| `images/00-icon.png` | 512 x 512 project icon (upload this one) |
+| `images/00-icon.png` | 512 x 512 project icon (upload this one). 3,962 bytes, 16-colour palette PNG, no metadata. Modrinth's limit is 256 KiB. |
 | `images/00-icon-256.png`, `images/00-icon-64.png` | smaller copies, for the README and other places |
-| `images/00-icon.svg` | the source drawing |
+| `images/00-icon.svg` | the source drawing (same as `logo/omniarena-icon.svg`) |
+| `logo/` | the whole logo kit: mark, black and white versions, small-size cut, horizontal lockup, PNG exports 512 to 16 |
+
+Check the size before upload: `stat -c %s images/00-icon.png` (must be below 262144).
+
+## Credits
+
+- Icons in the pictures (`graphics-src/phosphor/`, Bold weight, one `check-circle` in Fill weight) and in the web dashboard are
+  [Phosphor Icons](https://phosphoricons.com), MIT licence, Copyright (c) 2023 Phosphor Icons (`@phosphor-icons/core` 2.1.1). The
+  licence text is in `graphics-src/phosphor/LICENSE`.
+- Logo wordmark letters are constructed from plain shapes in `logo/build-logo.py`; no font is embedded.
 
 ## Gallery list (title and caption)
 
@@ -90,9 +103,10 @@ Build them again before you publish them, or leave them out until they compile.
 
 ## If you change a picture later
 
-Edit `graphics-src/gen.py` (or `icon.svg` / `common.css`), then:
+Edit `graphics-src/gen.py` (or `common.css`; the icon comes from `logo/build-logo.py`), then:
 
 ```
+python3 logo/build-logo.py          # only if the logo changed; rewrites graphics-src/icon.svg and images/00-icon*
 python3 graphics-src/gen.py
 NODE_PATH=<your global node_modules> node graphics-src/render.js
 pip install markdown
