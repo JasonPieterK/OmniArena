@@ -1,0 +1,38 @@
+SHORT SUMMARY (Modrinth "Summary" field, max 256 characters)
+
+PvP arena plugin: 16 game types, 5-minute setup wizard, auto-rebuilding arenas, ranked ELO queue, tournaments, betting, kits, menus and in-game guides. Paper, Purpur, Spigot, Bukkit.
+
+(Length: 182 characters)
+
+PROJECT NAME
+OmniArena
+
+SUGGESTED CATEGORIES (Modrinth picks up to 3 "featured" ones)
+- Game mechanics
+- Minigame
+- Management
+(Also fit, if you want more: Social, Utility)
+
+SUGGESTED TAGS / FEATURES TO MENTION
+pvp, arena, duels, minigame, ranked, elo, tournament, kits, betting, leaderboard, placeholderapi
+
+LOADERS
+Bukkit, Spigot, Paper, Purpur
+(Tick all four. The paper and purpur jars need a Paper-family server; the spigot and bukkit jars also run on Paper.)
+
+GAME VERSIONS
+26.3, 26.2, 26.1, 1.21.11, 1.21.10, 1.21.9
+(Per upload: set the version that is in the jar name.)
+
+ENVIRONMENT
+Server-side only. Clients need nothing.
+
+LICENSE
+The repository has no LICENSE file at the time of writing, so no licence is chosen here. Decide this before publishing.
+On Modrinth pick a listed licence, or "Custom" and link a LICENSE file you add to the repository. Moderra uses
+"All Rights Reserved"; copy that choice only if it is what you want.
+
+LINKS (Modrinth "External resources")
+Source:        https://github.com/JasonPieterK/OmniArena
+Issues:        https://github.com/JasonPieterK/OmniArena/issues
+Wiki / docs:   https://github.com/JasonPieterK/OmniArena/blob/main/DOCS.md

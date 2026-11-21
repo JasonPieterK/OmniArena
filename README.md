@@ -1,40 +1,56 @@
+<p align="center"><img src="docs/modrinth/images/00-icon-256.png" alt="OmniArena icon" width="128" height="128"></p>
+
+![OmniArena: PvP arenas, zero hassle](docs/modrinth/images/01-hero.png)
+
 # OmniArena
 
-OmniArena is a PvP arena plugin for Paper, Purpur, Spigot and Bukkit servers (Minecraft 1.21.9 to 26.3).
-Players join arenas from a menu, a command or a sign and fight in 16 game types; admins set an arena up in a few
-clicks, and the plugin rebuilds it after every match and repairs itself when something goes wrong.
+**A PvP arena plugin for Paper, Purpur, Spigot and Bukkit (Minecraft 1.21.9 to 26.3) that sets up in five minutes and looks after itself.**
 
-Full reference with step-by-step guides: [DOCS.md](DOCS.md). The same guides are in game as books: `/oa guide`.
-Developer and AI-agent notes: [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md).
+Players join arenas from a menu, a command or a sign and fight in *16 game types*. Admins build an arena with a short
+wizard; the plugin rebuilds it after every match and repairs itself when something goes wrong.
+
+> **Honest status.** Version 1.0.0. The unit tests pass (pure logic only) and the Paper, Spigot and Bukkit jars compile.
+> The six Purpur jars could not be verified (their repository was unreachable). ***It has never been run on a live
+> server.*** The DecentHolograms, FancyHolograms, Citizens and Multiverse hooks are reflection-only and untested.
+> Try it on a copy of your server first. Details: [Status](#status).
+
+**Modrinth page:** *link follows after the first upload.* | **Full reference:** [DOCS.md](DOCS.md) | **In game:** `/oa guide`
+
+![The 12 main features](docs/modrinth/images/02-recap.png)
 
 ---
 
-## Features
+## Feature highlights
 
-- **Menu first.** `/oa` opens a main menu; arena setup, editing, kits and settings are button menus, and every action also has
-  a text command with tab completion. Typos get a did-you-mean with a clickable fix.
-- **Arenas and matches.** 16 game types (Deathmatch, Team Deathmatch, Last One Standing, Sumo, Classic PvP, Crystal PvP, Mace,
-  Sword Duel, Axe and Shield, UHC, Potion PvP, NoDebuff, Archer, Netherite OP, Spleef, Gladiator), lives, teams, respawn
-  waves, spectating, join signs, per-arena rules, whitelist and blacklist, full state save and restore around a match
-  (also after a crash).
-- **Automatic regeneration.** Every arena is rebuilt from a snapshot after each match with 10 animated styles.
-- **Ranked.** Per-kit queues, ELO, party-aware matchmaking; **tournaments** and **betting** (Vault).
+### Play
+
+- **Menu first.** `/oa` opens a main menu; setup, editing, kits and settings are button menus, and every action also has a
+  text command with tab completion. Typos get a did-you-mean with a clickable fix.
+- **16 game types:** Deathmatch, Team Deathmatch, Last One Standing, Sumo, Classic PvP, Crystal PvP, Mace, Sword Duel, Axe and
+  Shield, UHC, Potion PvP, NoDebuff, Archer, Netherite OP, Spleef, Gladiator. Plus lives, teams, respawn waves, spectating,
+  join signs, per-arena rules, whitelist and blacklist.
+- **Ranked.** Per-kit queues, ELO and party-aware matchmaking. **Tournaments** (single elimination) and **betting** (Vault).
 - **Kits.** Personal kits with sharing, preset kits with cooldowns and permissions, a power cap.
-- **PvP management.** Combat tag, PvP toggle, newbie and respawn protection, anti kill-abuse (server-wide).
-- **Leaderboards without built-in holograms.** PlaceholderAPI placeholders for everything (stats, ELO, live match data,
-  top 10 lists) plus ready-made leaderboards for DecentHolograms and FancyHolograms, Citizens NPCs, Multiverse world loading
-  and TAB support.
-- **Self-healing.** Config repair with backups, automatic migration of old configs, a watchdog for stuck arenas and
-  tasks, and `/oa doctor`.
-- **Animated console banner** on startup (`general.startup-banner: full | compact | off`; plain consoles and panels get a static frame).
-- **In-game guide books** (`/oa guide`), a **web dashboard**, and an **event API** for other plugins.
+- **PvP management** server-wide: combat tag, PvP toggle, newbie and respawn protection, anti kill-abuse.
+
+### Run
+
+- **Automatic regeneration.** Every arena is rebuilt from a snapshot after each match, with 10 animated styles.
+- **Self-healing.** Config repair with backups, automatic migration of old configs, a watchdog for stuck arenas and tasks,
+  and `/oa doctor`.
+- **Leaderboards without built-in holograms.** PlaceholderAPI placeholders for everything, plus ready-made leaderboards for
+  DecentHolograms and FancyHolograms, Citizens NPCs, Multiverse world loading and TAB support.
+- **Guide books** in game (`/oa guide`), a **web dashboard**, an **event API** for other plugins, and an animated console
+  banner (`general.startup-banner: full | compact | off`).
+
+![Setup in 3 steps](docs/modrinth/images/03-setup.png)
 
 ---
 
-## Install
+## Quick install
 
-1. Pick the jar for your server and version: `OmniArena-<platform>-<mcversion>.jar` with platform `paper`, `purpur`, `spigot` or
-   `bukkit` and version `26.3`, `26.2`, `26.1`, `1.21.11`, `1.21.10` or `1.21.9` (Java 25 for 26.x, Java 21 for 1.21.x).
+1. Pick the jar for your server and version: `OmniArena-<platform>-<mcversion>.jar` with platform `paper`, `purpur`, `spigot`
+   or `bukkit` and version `26.3`, `26.2`, `26.1`, `1.21.11`, `1.21.10` or `1.21.9` (Java 25 for 26.x, Java 21 for 1.21.x).
    `paper` and `purpur` jars need a Paper-family server; `spigot` and `bukkit` jars run on Spigot, Bukkit and Paper.
 2. Put it in `plugins/` and restart. Optional, detected automatically: Vault with an economy plugin, PlaceholderAPI,
    WorldGuard, LuckPerms, DecentHolograms or FancyHolograms, Citizens, Multiverse-Core, TAB.
@@ -139,3 +155,15 @@ unreachable), and there are no automated tests against a live server. Details: [
 Everything is stored as YAML (no database). Regeneration snapshots that contain containers are not portable between paper/purpur
 and spigot/bukkit jars (re-take them with `/oa regen snapshot <arena>`), and blocking the elytra firework boost while
 combat-tagged works only on paper/purpur. See [DOCS.md](DOCS.md#13-known-limitations).
+
+---
+
+## Status
+
+***Version 1.0.0.*** Unit tests (`mvn -q -Ppaper,mc-26.2 test`) cover pure logic only. Compilation is verified for the paper,
+spigot and bukkit jars; the six Purpur jars could not be verified. There are no tests against a live server, and nobody has
+run the plugin on one yet. Please report problems with the console log and the output of `/oa doctor`.
+
+![Platforms and versions](docs/modrinth/images/09-matrix.png)
+
+*Modrinth page text and graphics sources: [docs/modrinth/](docs/modrinth/).*

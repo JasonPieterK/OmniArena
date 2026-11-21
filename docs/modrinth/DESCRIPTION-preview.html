@@ -1,0 +1,414 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OmniArena - description preview</title><style>body{margin:0;background:#1b1b1b;font:16px/1.55 system-ui,sans-serif;color:#e6e6e6}
+.page{max-width:900px;margin:0 auto;padding:24px 16px 80px}
+h1,h2{border-bottom:3px solid #F2C230;padding-bottom:4px;margin-top:2em}
+img{max-width:100%;height:auto;display:block;margin:16px 0}
+table{border-collapse:collapse;width:100%;margin:12px 0;display:block;overflow-x:auto}
+td,th{border:1px solid #555;padding:6px 10px;text-align:left}th{background:#2c2c2c}
+code{background:#2c2c2c;padding:1px 5px;border-radius:4px}pre{background:#2c2c2c;padding:12px;overflow-x:auto}pre code{padding:0}
+blockquote{border-left:6px solid #D6352B;margin:12px 0;padding:2px 14px;background:#262626}
+a{color:#7fb0ff}</style></head><body><div class="page"><p><img alt="OmniArena: PvP arenas, zero hassle. Ranked, tournaments, 4 server types." src="images/01-hero.png" /></p>
+<p><strong>OmniArena is a PvP arena plugin that sets up in five minutes and looks after itself.</strong> Players join from a menu, a command or a sign and fight in 16 game types. Admins build an arena with a short wizard, and the plugin rebuilds it after every match.</p>
+<blockquote>
+<p><strong>Please read the honest status first.</strong> Version 1.0.0 has passing unit tests (they cover pure logic only), and the Paper, Spigot and Bukkit jars compile for all six Minecraft versions. The six Purpur jars could not be verified, because the Purpur repository was unreachable when they were built. <strong>Nobody has run OmniArena on a live server yet.</strong> The links to DecentHolograms, FancyHolograms, Citizens and Multiverse use reflection and are untested against the real plugins. Please try it on a copy of your server first. Details: <a href="#honest-status">Honest status</a>.</p>
+</blockquote>
+<p><img alt="" src="images/10-divider.png" /></p>
+<h1 id="summary">Summary</h1>
+<ul>
+<li><strong>16 game types.</strong> Deathmatch, Sumo, Crystal PvP, Mace, UHC, Spleef and more, with lives, teams and respawn waves.</li>
+<li><strong>Fast setup.</strong> A wizard with a wand, spawn pads and one <code>finish</code> command.</li>
+<li><strong>Auto regeneration.</strong> Every arena is rebuilt after each match, with 10 animated styles.</li>
+<li><strong>Ranked.</strong> Per-kit queues, ELO, parties.</li>
+<li><strong>Tournaments and betting.</strong> Single-elimination brackets, Vault prizes and bet pools.</li>
+<li><strong>Menu first.</strong> Chest menus for everything. Every button also has a text command.</li>
+<li><strong>In-game guides.</strong> Books you open with <code>/oa guide</code>.</li>
+<li><strong>Leaderboards.</strong> PlaceholderAPI placeholders and ready-made holograms.</li>
+<li><strong>Self-healing.</strong> Config repair, a watchdog and <code>/oa doctor</code>.</li>
+<li><strong>For developers.</strong> A web dashboard and an event API.</li>
+</ul>
+<p><img alt="The 12 main features of OmniArena" src="images/02-recap.png" /></p>
+<h1 id="quick-start">Quick start</h1>
+<h2 id="install">Install</h2>
+<ol>
+<li>Download the jar for your server type and Minecraft version: <code>OmniArena-&lt;platform&gt;-&lt;mcversion&gt;.jar</code>.</li>
+<li>Put it in <code>plugins/</code> and restart.</li>
+<li>Optional and detected automatically: Vault, PlaceholderAPI, WorldGuard, LuckPerms, DecentHolograms or FancyHolograms, Citizens, Multiverse-Core, TAB.</li>
+</ol>
+<p>Use <strong>Java 25</strong> for 26.x servers and <strong>Java 21</strong> for 1.21.x servers. Everything is stored as YAML in <code>plugins/OmniArena/</code>.</p>
+<h2 id="your-first-arena">Your first arena</h2>
+<p><img alt="Setup in 3 steps: setup, spawns, finish" src="images/03-setup.png" /></p>
+<pre><code>/oa setup duel_1            creates the arena, gives you the wand
+(wand: left-click one corner, right-click the opposite corner)
+/oa setup duel_1 region     saves the region and takes the rebuild snapshot
+/oa setup duel_1 spawn      run on each start pad
+/oa setup duel_1 finish     checks everything and enables the arena
+</code></pre>
+<p>Then players type <code>/oa join duel_1</code>, use <code>/oa menu</code>, or click a sign (<code>/oa sign create duel_1</code>).</p>
+<blockquote>
+<p><em>Tip:</em> run <code>/oa doctor</code> at any time. It lists what is missing, with a clickable fix.</p>
+</blockquote>
+<h1 id="features">Features</h1>
+<h2 id="arenas-and-matches">Arenas and matches</h2>
+<p><img alt="How a match runs: join, start, running, end, rebuild" src="images/04-match-flow.png" /></p>
+<ul>
+<li><strong>Lobby and countdown.</strong> The countdown starts when enough players are in. A lobby with too few players closes after a timeout you can set.</li>
+<li><strong>Lives, teams, respawn waves.</strong> Lives work in every game type. Teams need the arena's <code>team-enabled</code> flag. Respawn types are instant, delayed and wave.</li>
+<li><strong>Spectating.</strong> Players watch with <code>/oa spectate</code>.</li>
+<li><strong>Per-arena rules.</strong> Chat mode, announcements, modules (killstreak, combo, power-ups), whitelist and blacklist.</li>
+<li><strong>State is saved.</strong> Location, inventory, health, effects and more are restored when a player leaves. This also works after a crash.</li>
+<li><strong>Outcomes.</strong> Win, loss, draw, forfeit and timeout.</li>
+</ul>
+<h2 id="automatic-regeneration">Automatic regeneration</h2>
+<p>After every played match the arena is rebuilt from a snapshot. It stays closed until the rebuild is done.</p>
+<table>
+<thead>
+<tr>
+<th>Style</th>
+<th>How it rebuilds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SPHERE</code> (default)</td>
+<td>From the centre outwards</td>
+</tr>
+<tr>
+<td><code>INSTANT</code></td>
+<td>Batched placement</td>
+</tr>
+<tr>
+<td><code>RISE</code> / <code>FALL</code></td>
+<td>Bottom to top, top to bottom</td>
+</tr>
+<tr>
+<td><code>SWEEP</code></td>
+<td>A plane across the arena</td>
+</tr>
+<tr>
+<td><code>TIME_REWIND</code></td>
+<td>Undoes the changes of the match in reverse</td>
+</tr>
+<tr>
+<td><code>GALAXY</code></td>
+<td>Four spiral arms</td>
+</tr>
+<tr>
+<td><code>HOLOGRAM_SCAN</code></td>
+<td>Glass preview, then real blocks</td>
+</tr>
+<tr>
+<td><code>METEOR_SHOWER</code></td>
+<td>Random impacts</td>
+</tr>
+<tr>
+<td><code>OVERGROWTH</code></td>
+<td>A flood fill from a few seeds</td>
+</tr>
+</tbody>
+</table>
+<p>Large jobs are spread over many ticks, so the server keeps running smoothly.</p>
+<h2 id="kits-and-pvp-management">Kits and PvP management</h2>
+<ul>
+<li><strong>Personal kits</strong> with <code>/kit</code>: save, equip, rename, preview and share a kit with another player. Slots depend on permissions. An optional power cap removes overpowered enchants and banned items.</li>
+<li><strong>Preset kits</strong> for admins with <code>/oa kits</code>: ten defaults (warrior, archer, tank and more), cooldowns and permissions.</li>
+<li><strong>Server-wide PvP.</strong> Combat tag, a PvP toggle, newbie protection, respawn protection and anti kill-abuse.</li>
+</ul>
+<h1 id="game-modes">Game modes</h1>
+<p><img alt="The 16 game modes" src="images/05-modes.png" /></p>
+<p>Set a mode with <code>/oa edit &lt;arena&gt; set game-mode &lt;TYPE&gt;</code> or in the edit menu.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Goal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deathmatch, Team Deathmatch</td>
+<td>First to N kills (default 15 and 30)</td>
+</tr>
+<tr>
+<td>Classic PvP, Mace, Potion PvP, NoDebuff</td>
+<td>First to 10 kills</td>
+</tr>
+<tr>
+<td>Crystal PvP, Gladiator</td>
+<td>First to 5 kills</td>
+</tr>
+<tr>
+<td>Archer</td>
+<td>First to 12 kills</td>
+</tr>
+<tr>
+<td>Netherite OP</td>
+<td>First to 20 kills</td>
+</tr>
+<tr>
+<td>Last One Standing, Sword Duel, Axe and Shield</td>
+<td>Last player alive</td>
+</tr>
+<tr>
+<td>Sumo, Spleef</td>
+<td>Last alive, and falling out counts as a death</td>
+</tr>
+<tr>
+<td>UHC</td>
+<td>Last alive, with no natural regeneration</td>
+</tr>
+</tbody>
+</table>
+<p><strong><em>Good to know:</em></strong> kill targets are defaults. An arena can override the goal or the target.</p>
+<h1 id="ranked-and-tournaments">Ranked and tournaments</h1>
+<p><img alt="Ranked queue and a tournament bracket" src="images/06-ranked.png" /></p>
+<h2 id="ranked-queue">Ranked queue</h2>
+<p><code>/oa queue [kit]</code> joins the queue (<code>queue leave</code> and <code>queue status</code> do what they say). A matchmaking task runs every second. It pairs players by ELO. The allowed gap starts at <strong>200</strong> and grows by <strong>50 every 10 seconds</strong> of waiting, up to <strong>1000</strong>. A party leader queues the whole party as one entry. Only ranked matches change ELO (start 1000, floor 100, K = 32).</p>
+<h2 id="tournaments">Tournaments</h2>
+<p><code>/oa tournament create &lt;name&gt; &lt;arena&gt; &lt;max&gt;</code> starts a registration. It begins automatically when full, or when the creator runs <code>start</code>. Brackets are single elimination, one match at a time per arena. Prizes for 1st, 2nd and 3rd are paid through Vault. Tournaments are saved and resume after a restart. Tournament matches are not ranked.</p>
+<h2 id="betting">Betting</h2>
+<p>With Vault and an economy plugin, players can bet on a participant of a live match: <code>/oa bet place &lt;arena&gt; &lt;player&gt; &lt;amount&gt;</code>. Winners share the pool in proportion to their bets. <strong>With a draw, or if nobody bet on the winner, every bet is refunded.</strong></p>
+<h1 id="menus">Menus</h1>
+<p><img alt="The menu design: gray glass, green and red concrete, a footer" src="images/07-menus.png" /></p>
+<p><code>/oa</code> opens the main menu. Setup, editing, kits and settings are chest menus too. The design is the same everywhere: empty slots are gray glass, <strong>green concrete means on</strong>, <strong>red concrete means off</strong>, and every other button is its own item with a yellow "Click ..." line. Back, Help and Close sit in the bottom row.</p>
+<blockquote>
+<p>Every menu action has a text command twin with tab completion. A typo gets a did-you-mean with a clickable fix.</p>
+</blockquote>
+<h1 id="guides">Guides</h1>
+<p><code>/oa guide</code> opens a book with clickable topics. Players see <strong>play, kits, ranked, tournament, betting, pvp</strong>. Admins also see <strong>start, arena, regen, leaderboards, npc, doctor, config</strong>. The text is in <code>plugins/OmniArena/guides.yml</code>, so you can edit it.</p>
+<h1 id="integrations-and-placeholders">Integrations and placeholders</h1>
+<p><img alt="Optional integrations" src="images/08-integrations.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>What OmniArena does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vault</td>
+<td>Economy for bets, prizes and money rewards</td>
+</tr>
+<tr>
+<td>PlaceholderAPI</td>
+<td>The <code>omniarena</code> expansion</td>
+</tr>
+<tr>
+<td>WorldGuard</td>
+<td>Anti border-hopping while combat-tagged</td>
+</tr>
+<tr>
+<td>DecentHolograms, FancyHolograms</td>
+<td><code>/oa leaderboard</code> holograms</td>
+</tr>
+<tr>
+<td>Citizens</td>
+<td><code>/oa npc</code>: NPCs that open the menu, join, queue or spectate</td>
+</tr>
+<tr>
+<td>Multiverse-Core</td>
+<td>Loads an arena's world on demand</td>
+</tr>
+<tr>
+<td>TAB</td>
+<td><code>integrations.tab.takeover: true</code> hands the scoreboard and boss bar to TAB</td>
+</tr>
+<tr>
+<td>LibsDisguises</td>
+<td>Removes a disguise when combat starts</td>
+</tr>
+<tr>
+<td>LuckPerms</td>
+<td>Hook only. No feature uses it yet</td>
+</tr>
+</tbody>
+</table>
+<p>Every hook has a switch (<code>integrations.&lt;name&gt;</code>). A hook that fails three times in a row switches itself off, and <code>/oa doctor</code> shows its state.</p>
+<h2 id="placeholders">Placeholders</h2>
+<pre><code>%omniarena_kills%  %omniarena_wins%  %omniarena_kd%  %omniarena_elo%  %omniarena_rank%
+%omniarena_arena%  %omniarena_state%  %omniarena_alive%  %omniarena_time_left%
+%omniarena_top_&lt;kills|wins|kd|elo&gt;_&lt;1-10&gt;_&lt;name|value&gt;%
+</code></pre>
+<p>The full list is in the <a href="https://github.com/JasonPieterK/OmniArena/blob/main/DOCS.md#6-placeholders">documentation</a>. Leaderboard values come from a cache that refreshes about every 30 seconds. OmniArena has <strong>no built-in holograms</strong>. It uses placeholders and the two hologram plugins above.</p>
+<h1 id="self-healing">Self-healing</h1>
+<ul>
+<li><strong>Config repair.</strong> Missing keys are filled in, wrong values get their default, and a broken file is replaced. A backup goes to <code>backups/</code> first. Old config layouts are migrated automatically.</li>
+<li><strong>Quarantine.</strong> A corrupt data file is moved to <code>broken/</code> and the plugin continues.</li>
+<li><strong>Watchdog.</strong> Every 30 seconds by default. It frees stuck arenas, restores players whose match vanished and restarts stopped tasks.</li>
+<li><strong>Error guard.</strong> An error in one task or listener is logged once and does not stop the rest.</li>
+<li><strong><code>/oa doctor</code></strong> prints a report. <code>/oa doctor fix</code> runs every fix now.</li>
+</ul>
+<h1 id="commands">Commands</h1>
+<p>Root command: <code>/oa</code> (aliases <code>/arena</code>, <code>/omniarena</code>). <code>/oa help</code> lists everything.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/oa menu</code></td>
+<td>Main menu</td>
+</tr>
+<tr>
+<td><code>/oa join [arena]</code>, <code>/oa leave</code>, <code>/oa spectate [arena]</code></td>
+<td>Join, leave, watch (<code>/join</code>, <code>/leave</code>, <code>/spectate</code> work too)</td>
+</tr>
+<tr>
+<td><code>/oa list [arena]</code></td>
+<td>Arenas, or details of one</td>
+</tr>
+<tr>
+<td><code>/oa stats [player]</code>, <code>/oa stats top [kills/wins/kd/elo] [n]</code></td>
+<td>Stats, ELO, rank, leaderboards</td>
+</tr>
+<tr>
+<td><code>/oa queue [kit]</code></td>
+<td>Ranked queue</td>
+</tr>
+<tr>
+<td><code>/oa bet ...</code>, <code>/oa tournament ...</code></td>
+<td>Betting and tournaments (<code>/bet</code>, <code>/tournament</code>)</td>
+</tr>
+<tr>
+<td><code>/oa guide [topic]</code></td>
+<td>Guide books</td>
+</tr>
+<tr>
+<td><code>/party ...</code>, <code>/kit ...</code>, <code>/pvp</code></td>
+<td>Parties, personal kits, PvP toggle</td>
+</tr>
+<tr>
+<td><code>/oa setup &lt;arena&gt; ...</code></td>
+<td>Arena wizard (admin)</td>
+</tr>
+<tr>
+<td><code>/oa edit &lt;arena&gt; [set/get &lt;key&gt; [value]]</code></td>
+<td>Edit menu or text edit (admin)</td>
+</tr>
+<tr>
+<td><code>/oa arena tp/delete/enable/disable &lt;arena&gt;</code></td>
+<td>Arena actions (admin)</td>
+</tr>
+<tr>
+<td><code>/oa regen &lt;arena&gt;</code>, <code>/oa regen snapshot &lt;arena&gt;</code></td>
+<td>Rebuild, re-snapshot (admin)</td>
+</tr>
+<tr>
+<td><code>/oa kits</code>, <code>/oa sign</code>, <code>/oa leaderboard</code>, <code>/oa npc</code></td>
+<td>Preset kits, signs, holograms, NPCs (admin)</td>
+</tr>
+<tr>
+<td><code>/oa settings</code>, <code>/oa reload</code>, <code>/oa web</code>, <code>/oa doctor</code></td>
+<td>Settings, reload, dashboard, health (admin)</td>
+</tr>
+<tr>
+<td><code>/oa plugin start/stop/restart/version</code></td>
+<td>Lifecycle (admin)</td>
+</tr>
+</tbody>
+</table>
+<h1 id="permissions">Permissions</h1>
+<p>Players need nothing special. These nodes default to <strong>true</strong>: <code>omniarena.use</code>, <code>omniarena.kit.use</code>, <code>omniarena.queue</code>, <code>omniarena.bet</code>, <code>omniarena.spectate</code>, <code>omniarena.pvp</code>, <code>omniarena.tournament.create</code>. Admin commands need <code>omniarena.admin</code> or a narrower node such as <code>omniarena.admin.arena</code>, <code>.kit</code>, <code>.sign</code>, <code>.npc</code>, <code>.leaderboard</code>, <code>.stats</code>, <code>.reload</code> or <code>.doctor</code>. Extra kit slots: <code>omniarena.kit.slots.5</code> and <code>omniarena.kit.slots.10</code>.</p>
+<h1 id="config-highlights">Config highlights</h1>
+<p><code>plugins/OmniArena/config.yml</code> has these sections: <code>general</code>, <code>arenas</code>, <code>matches</code>, <code>regen</code>, <code>ranked</code>, <code>kits</code>, <code>rewards</code>, <code>betting</code>, <code>tournaments</code>, <code>pvp</code>, <code>visuals</code>, <code>integrations</code>, <code>web</code>, <code>health</code> and <code>advanced</code>. Every key has its default and allowed values in a comment.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arenas.countdown</code></td>
+<td><code>10</code></td>
+<td>Lobby countdown in seconds</td>
+</tr>
+<tr>
+<td><code>arenas.match-duration</code></td>
+<td><code>600</code></td>
+<td>Match length in seconds</td>
+</tr>
+<tr>
+<td><code>matches.lobby-timeout</code></td>
+<td><code>120</code></td>
+<td>Close a lobby below the minimum players after this long</td>
+</tr>
+<tr>
+<td><code>regen.style</code></td>
+<td><code>SPHERE</code></td>
+<td>Rebuild animation</td>
+</tr>
+<tr>
+<td><code>betting.min-bet</code> / <code>max-bet</code></td>
+<td><code>100</code> / <code>10000</code></td>
+<td>Bet limits</td>
+</tr>
+<tr>
+<td><code>general.startup-banner</code></td>
+<td><code>full</code></td>
+<td><code>full</code>, <code>compact</code> or <code>off</code></td>
+</tr>
+</tbody>
+</table>
+<p>Change values with <code>/oa settings</code>, in the web dashboard, or in the file and <code>/oa reload</code>.</p>
+<h2 id="web-dashboard">Web dashboard</h2>
+<p><code>/oa web</code> prints a login link. The dashboard listens on <code>127.0.0.1:8123</code> by default, so only the machine itself can open it. For remote use, put it behind an HTTPS reverse proxy. Tabs: dashboard, live matches, arenas, players, config and docs.</p>
+<h2 id="event-api">Event API</h2>
+<p>Other plugins can listen to <code>ArenaPlayerJoinEvent</code> (cancellable), <code>ArenaPlayerLeaveEvent</code>, <code>ArenaMatchStartEvent</code>, <code>ArenaMatchEndEvent</code> and <code>ArenaKillEvent</code>, and call the <code>OmniArenaAPI</code> facade.</p>
+<h1 id="supported-platforms">Supported platforms</h1>
+<p><img alt="Platform and version matrix" src="images/09-matrix.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Paper, Purpur</td>
+<td>Need a Paper-family server</td>
+</tr>
+<tr>
+<td>Spigot, Bukkit</td>
+<td>Run on Spigot, Bukkit and also on Paper</td>
+</tr>
+</tbody>
+</table>
+<p>Versions: <strong>26.3, 26.2, 26.1</strong> (Java 25) and <strong>1.21.11, 1.21.10, 1.21.9</strong> (Java 21). That makes 24 jars named <code>OmniArena-&lt;platform&gt;-&lt;mcversion&gt;.jar</code>. A paper or purpur jar on a non-Paper server disables itself with a message.</p>
+<h2 id="honest-status">Honest status</h2>
+<ul>
+<li><strong>Unit tests pass.</strong> They test pure logic only (brackets, config migration, menus layout, guide pages and more).</li>
+<li><strong>Compiled:</strong> the Paper, Spigot and Bukkit jars for all six versions.</li>
+<li><strong>Not verified:</strong> the six Purpur jars (repository unreachable at the time).</li>
+<li><strong>Never run on a live server.</strong> There are no automated tests against a real server.</li>
+<li><strong>Untested hooks:</strong> DecentHolograms, FancyHolograms, Citizens and Multiverse (reflection only).</li>
+<li><strong>Known limits:</strong> all data is YAML. Snapshots with containers are not portable between paper/purpur and spigot/bukkit jars. Blocking the elytra boost while tagged only works on paper/purpur.</li>
+</ul>
+<p>If something breaks, run <code>/oa doctor</code> and open an issue with the console log.</p>
+<h1 id="faq">FAQ</h1>
+<p><strong>Which jar do I need?</strong>
+Pick your server type and Minecraft version, for example <code>OmniArena-paper-26.2.jar</code>. If unsure, the spigot jar runs on Spigot, Bukkit and Paper.</p>
+<p><strong>Do I need Vault?</strong>
+Only for bets, tournament prizes and money rewards. Everything else works without it.</p>
+<p><strong>Is the arena rebuilt by itself?</strong>
+Yes. Take the snapshot once with <code>/oa setup &lt;arena&gt; region</code>. After that every played match is followed by an automatic rebuild.</p>
+<p><strong>Can I turn off the animated startup banner?</strong>
+Yes: <code>general.startup-banner: off</code>. Panels and plain consoles get a static banner anyway.</p>
+<p><strong>Can I change the guide books?</strong>
+Yes. Edit <code>plugins/OmniArena/guides.yml</code>, then run <code>/oa reload</code>.</p>
+<p><strong>Does it use a database?</strong>
+No. All data is YAML.</p>
+<p><strong>My old config uses the old layout.</strong>
+It is migrated automatically, and a backup goes to <code>backups/</code>.</p>
+<h1 id="links">Links</h1>
+<ul>
+<li><strong>Documentation:</strong> <a href="https://github.com/JasonPieterK/OmniArena/blob/main/DOCS.md">DOCS.md</a></li>
+<li><strong>Source and issues:</strong> <a href="https://github.com/JasonPieterK/OmniArena">GitHub</a></li>
+<li><strong>In game:</strong> <code>/oa guide</code></li>
+</ul>
+<p><img alt="" src="images/10-divider.png" /></p></div></body></html>
