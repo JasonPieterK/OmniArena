@@ -26,7 +26,7 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   common code: add a method to `PlatformAdapter` and implement it in both `PlatformImpl` classes
   (e.g. `openBook` for the guide books). Code stays at Java 21 level. All 24 profile combinations compile (checked with `mvn test-compile`, 0 errors; no jars built); the unit tests run on paper/mc-26.2. Nothing has run on a live server.
 - `target/` and `dist/` are git-ignored.
-- Tests: 79 `@Test` methods (`grep -r "@Test" src/test | wc -l`): regen enum, bracket logic, config schema and
+- Tests: 92 `@Test` methods (`grep -r "@Test" src/test | wc -l`): regen enum, bracket logic, config schema and
   migration, YAML repair and backups, error tracking, integration helpers, menu layout, did-you-mean, guide paginator and
   bundled guide books.
 
