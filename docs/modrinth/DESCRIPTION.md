@@ -2,7 +2,7 @@
 
 **OmniArena is a PvP arena plugin that sets up in five minutes and looks after itself.** Players join from a menu, a command or a sign and fight in 16 game types. Admins build an arena with a short wizard, and the plugin rebuilds it after every match.
 
-> **Please read the honest status first.** Version 1.0.0 has passing unit tests (they cover pure logic only), and the Paper, Spigot and Bukkit jars compile for all six Minecraft versions. The six Purpur jars could not be verified, because the Purpur repository was unreachable when they were built. **Nobody has run OmniArena on a live server yet.** The links to DecentHolograms, FancyHolograms, Citizens and Multiverse use reflection and are untested against the real plugins. Please try it on a copy of your server first. Details: [Honest status](#honest-status).
+> **Please read the honest status first.** Version 1.0.0 has passing unit tests (they cover pure logic only), but only the **Paper 26.2** jar has been compiled for 1.0; the other 23 jars (Purpur, Spigot, Bukkit and the other Minecraft versions) use the same code but have not been compiled yet. **Nobody has run OmniArena on a live server yet.** The links to DecentHolograms, FancyHolograms, Citizens and Multiverse use reflection and are untested against the real plugins. Please try it on a copy of your server first. Details: [Honest status](#honest-status).
 
 ![](https://raw.githubusercontent.com/JasonPieterK/OmniArena/main/docs/modrinth/images/10-divider.png)
 
@@ -230,7 +230,7 @@ Versions: **26.3, 26.2, 26.1** (Java 25) and **1.21.11, 1.21.10, 1.21.9** (Java 
 ## Honest status
 
 - **Unit tests pass.** They test pure logic only (brackets, config migration, menus layout, guide pages and more).
-- **Compiled:** the Paper, Spigot and Bukkit jars for all six versions.
+- **Compiled:** only the Paper 26.2 jar so far. The other 23 jars are not compiled yet for 1.0.
 - **Not verified:** the six Purpur jars (repository unreachable at the time).
 - **Never run on a live server.** There are no automated tests against a real server.
 - **Untested hooks:** DecentHolograms, FancyHolograms, Citizens and Multiverse (reflection only).

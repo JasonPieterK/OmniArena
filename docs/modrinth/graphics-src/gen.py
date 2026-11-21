@@ -211,14 +211,14 @@ cir = lambda ok, col: (f'<svg viewBox="0 0 100 100" width="58" height="58"><circ
 mh = '<div class="c h" style="background:#111;color:#F4EFE6">Minecraft</div>' + "".join(f'<div class="c h" style="background:{b};color:{f}">{n}</div>' for n, b, f, _ in plats)
 mr = ""
 for v, j in vers:
-    mr += f'<div class="c v"><span>{v}</span><small>Java {j}</small></div>' + "".join(f'<div class="c">{cir(ok, b if b != K else K)}</div>' for n, b, f, ok in plats)
+    mr += f'<div class="c v"><span>{v}</span><small>Java {j}</small></div>' + "".join(f'<div class="c">{cir(n == "Paper" and v == "26.2", b)}</div>' for n, b, f, ok in plats)
 page("09-matrix.html", """
 .m{display:grid;grid-template-columns:330px repeat(4,1fr)}
 .c{height:92px;border-right:12px solid #111;border-bottom:12px solid #111;display:flex;align-items:center;justify-content:center;font-size:28px;text-transform:uppercase;text-align:center;line-height:1.1}
 .c:nth-child(5n){border-right:0}.c.h{height:100px}
 .c.v{justify-content:flex-start;gap:20px;font-size:44px;padding-left:34px}.c.v small{white-space:nowrap;font-size:17px;background:#111;color:#F4EFE6;padding:4px 8px}
 """, head("Platforms and versions", "24 jars: 4 server types times 6 versions", "24", R) + f'<div class="m">{mh}{mr}</div>'
- + f'<div class="note" style="border-top:0">File name: <span style="color:#F2C230;text-transform:none">OmniArena-paper-26.2.jar</span><br>Solid circle: compiled. Dashed circle: Purpur not verified yet (its repository was unreachable). Not run on a live server yet.</div>')
+ + f'<div class="note" style="border-top:0">File name: <span style="color:#F2C230;text-transform:none">OmniArena-paper-26.2.jar</span><br>Solid circle: compiled and unit tested for 1.0. Dashed circle: built from the same code, not compiled yet for 1.0. Not run on a live server yet.</div>')
 
 # ---------- 10 divider ----------
 page("10-divider.html", """

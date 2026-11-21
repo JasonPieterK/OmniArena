@@ -9,7 +9,7 @@ blockquote{border-left:6px solid #D6352B;margin:12px 0;padding:2px 14px;backgrou
 a{color:#7fb0ff}</style></head><body><div class="page"><p><img alt="OmniArena: PvP arenas, zero hassle. Ranked, tournaments, 4 server types." src="images/01-hero.png" /></p>
 <p><strong>OmniArena is a PvP arena plugin that sets up in five minutes and looks after itself.</strong> Players join from a menu, a command or a sign and fight in 16 game types. Admins build an arena with a short wizard, and the plugin rebuilds it after every match.</p>
 <blockquote>
-<p><strong>Please read the honest status first.</strong> Version 1.0.0 has passing unit tests (they cover pure logic only), and the Paper, Spigot and Bukkit jars compile for all six Minecraft versions. The six Purpur jars could not be verified, because the Purpur repository was unreachable when they were built. <strong>Nobody has run OmniArena on a live server yet.</strong> The links to DecentHolograms, FancyHolograms, Citizens and Multiverse use reflection and are untested against the real plugins. Please try it on a copy of your server first. Details: <a href="#honest-status">Honest status</a>.</p>
+<p><strong>Please read the honest status first.</strong> Version 1.0.0 has passing unit tests (they cover pure logic only), but only the <strong>Paper 26.2</strong> jar has been compiled for 1.0; the other 23 jars (Purpur, Spigot, Bukkit and the other Minecraft versions) use the same code but have not been compiled yet. <strong>Nobody has run OmniArena on a live server yet.</strong> The links to DecentHolograms, FancyHolograms, Citizens and Multiverse use reflection and are untested against the real plugins. Please try it on a copy of your server first. Details: <a href="#honest-status">Honest status</a>.</p>
 </blockquote>
 <p><img alt="" src="images/10-divider.png" /></p>
 <h1 id="summary">Summary</h1>
@@ -383,7 +383,7 @@ a{color:#7fb0ff}</style></head><body><div class="page"><p><img alt="OmniArena: P
 <h2 id="honest-status">Honest status</h2>
 <ul>
 <li><strong>Unit tests pass.</strong> They test pure logic only (brackets, config migration, menus layout, guide pages and more).</li>
-<li><strong>Compiled:</strong> the Paper, Spigot and Bukkit jars for all six versions.</li>
+<li><strong>Compiled:</strong> only the Paper 26.2 jar so far. The other 23 jars are not compiled yet for 1.0.</li>
 <li><strong>Not verified:</strong> the six Purpur jars (repository unreachable at the time).</li>
 <li><strong>Never run on a live server.</strong> There are no automated tests against a real server.</li>
 <li><strong>Untested hooks:</strong> DecentHolograms, FancyHolograms, Citizens and Multiverse (reflection only).</li>

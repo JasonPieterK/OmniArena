@@ -1036,6 +1036,6 @@ the spigot or bukkit jar there. Unit tests (`mvn -q -Ppaper,mc-26.2 test`) cover
   block while tagged exists only on paper and purpur.
 - **LuckPerms** has a hook object but no shipped feature uses it.
 - **Guide books** need a client that can open written books; very long edited topics are capped at 100 pages.
-- **Builds.** All paper, spigot and bukkit jars compile; the six Purpur jars could not be verified because the Purpur
-  repository was unreachable. There are no automated tests against a live server.
+- **Builds.** Only the paper/26.2 jar has been compiled for 1.0; the other 23 jars (Purpur, Spigot, Bukkit and the
+  other Minecraft versions) use the same code but are not compiled yet. There are no automated tests against a live server.
 - **Web UI icons** load from a CDN without an integrity hash; if it is unreachable the buttons keep their text labels.

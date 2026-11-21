@@ -30,9 +30,8 @@ scripts/build-all.sh                 # whole 24-jar matrix into dist/ (JAVA25_HO
 - `target/` and `dist/` are git-ignored build output; never edit them.
 - Repositories needed: PaperMC, Spigot snapshots, PurpurMC, EssentialsX, PlaceholderAPI, EngineHub,
   Sonatype, JitPack, Vault. Outbound network may be restricted in sandboxes; builds may need a
-  pre-populated `~/.m2` (`mvn -o`). Verification status: compilation was verified for all 18 paper, spigot and
-  bukkit combinations (and the unit tests on paper/mc-26.2); the 6 purpur jars could not be
-  verified because repo.purpurmc.org was unreachable. No live-server runtime tests exist.
+  pre-populated `~/.m2` (`mvn -o`). Verification status: Only the paper/mc-26.2 jar was compiled (and unit tested) after the 1.0 QoL rework; the other 23 profiles were not compiled since
+  (spigot-api is not in the offline `~/.m2`; Purpur's repo was unreachable earlier). No live-server runtime tests exist.
 
 ### The 24-jar matrix
 

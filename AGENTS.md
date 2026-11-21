@@ -24,8 +24,8 @@ scripts/build-all.sh                    # all 24 jars into dist/ (JAVA25_HOME, J
   `PlatformImpl` per jar is in `src/paper/java` (paper, purpur) or `src/spigot/java` (spigot, bukkit,
   with shaded + relocated Adventure and `adventure-platform-bukkit`). Never call Paper-only API from
   common code: add a method to `PlatformAdapter` and implement it in both `PlatformImpl` classes
-  (e.g. `openBook` for the guide books). Code stays at Java 21 level. Compilation is verified for all 18
-  paper/spigot/bukkit combinations; Purpur (`purpur-api`) could not be verified because repo.purpurmc.org was unreachable.
+  (e.g. `openBook` for the guide books). Code stays at Java 21 level. Only the paper/mc-26.2 jar was compiled (and unit tested) after the 1.0 QoL rework; the other 23 profiles
+  (spigot/bukkit/purpur and the other versions) were not compiled since; Purpur's repo was also unreachable earlier.
 - `target/` and `dist/` are git-ignored.
 - Tests: 79 `@Test` methods (`grep -r "@Test" src/test | wc -l`): regen enum, bracket logic, config schema and
   migration, YAML repair and backups, error tracking, integration helpers, menu layout, did-you-mean, guide paginator and
