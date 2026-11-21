@@ -22,7 +22,7 @@
         <maven.compiler.release>25</maven.compiler.release>
         <api.version>26.2</api.version>
         <paper.api.version>26.2.build.135-stable</paper.api.version>
-        <purpur.api.version>26.2-R0.1-SNAPSHOT</purpur.api.version>
+        <purpur.api.version>26.2.build.2633-stable</purpur.api.version>
         <spigot.api.version>26.2-R0.1-SNAPSHOT</spigot.api.version>
 
         <!-- Adventure is only shaded on spigot/bukkit; on paper/purpur the relocation below is an inert no-op. -->
@@ -402,7 +402,7 @@
                 <maven.compiler.release>25</maven.compiler.release>
                 <api.version>26.3</api.version>
                 <paper.api.version>26.3.build.253-stable</paper.api.version>
-                <purpur.api.version>26.3-R0.1-SNAPSHOT</purpur.api.version>
+                <purpur.api.version>26.3.build.2660-stable</purpur.api.version>
                 <spigot.api.version>26.3-R0.1-SNAPSHOT</spigot.api.version>
             </properties>
         </profile>
@@ -415,7 +415,7 @@
                 <maven.compiler.release>25</maven.compiler.release>
                 <api.version>26.2</api.version>
                 <paper.api.version>26.2.build.135-stable</paper.api.version>
-                <purpur.api.version>26.2-R0.1-SNAPSHOT</purpur.api.version>
+                <purpur.api.version>26.2.build.2633-stable</purpur.api.version>
                 <spigot.api.version>26.2-R0.1-SNAPSHOT</spigot.api.version>
             </properties>
         </profile>
@@ -427,7 +427,7 @@
                 <maven.compiler.release>25</maven.compiler.release>
                 <api.version>26.1</api.version>
                 <paper.api.version>26.1.2.build.74-stable</paper.api.version>
-                <purpur.api.version>26.1.2-R0.1-SNAPSHOT</purpur.api.version>
+                <purpur.api.version>26.1.2.build.2592-stable</purpur.api.version>
                 <spigot.api.version>26.1-R0.1-SNAPSHOT</spigot.api.version>
             </properties>
         </profile>
